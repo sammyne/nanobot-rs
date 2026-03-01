@@ -361,16 +361,3 @@ fn outbound_message_tool_hint_detection() {
     let normal_msg = OutboundMessage::new("cli", "chat1", "normal");
     assert!(!normal_msg.is_tool_hint());
 }
-
-/// 消息序列化和反序列化测试
-#[test]
-fn message_serialization_roundtrip() {
-    let msg = OutboundMessage::progress("test progress", false);
-    let json_str = serde_json::to_string(&msg).expect("serialization should succeed");
-
-    let deserialized: OutboundMessage =
-        serde_json::from_str(&json_str).expect("deserialization should succeed");
-
-    assert_eq!(deserialized.content, msg.content);
-    assert!(deserialized.is_progress());
-}

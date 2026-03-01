@@ -1,7 +1,7 @@
-//! 配置管理库
+//! 配置管理 crate
 //!
-//! 负责加载、保存和验证 nanobot 的配置文件。
+//! 提供统一的配置加载、验证和管理功能。
 
-pub mod config;
+mod schema;
 
-pub use config::*;
+pub use schema::*;

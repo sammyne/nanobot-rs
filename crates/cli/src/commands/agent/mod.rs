@@ -4,7 +4,7 @@ use anyhow::Result;
 use clap::Args;
 use nanobot_agent::{AgentLoop, InboundMessage, OutboundMessage};
 use nanobot_config::Config;
-use nanobot_provider::{OpenAIProvider, Provider};
+use nanobot_provider::{OpenAILike, Provider};
 use std::io::{self, Write};
 use std::sync::Arc;
 use tracing::{debug, error, info};
@@ -43,7 +43,7 @@ impl AgentCmd {
         );
 
         // 初始化 LLM Provider
-        let provider = Arc::new(OpenAIProvider::from_config(&config)?);
+        let provider = Arc::new(OpenAILike::from_config(&config)?);
         debug!("LLM Provider 初始化成功");
 
         if let Some(msg) = &self.message {

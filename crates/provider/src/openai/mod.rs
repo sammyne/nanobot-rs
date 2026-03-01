@@ -1,7 +1,6 @@
-//! LLM 提供者抽象层
-//!
-//! 提供统一的 LLM 提供者接口，支持 OpenAI 和兼容 OpenAI 的服务商。
+//! OpenAI 提供者实现
 
+use crate::base::{Message, Provider, ProviderError};
 use anyhow::Result;
 use async_openai::{
     Client,
@@ -13,67 +12,10 @@ use async_openai::{
 };
 use nanobot_config::{Config as NanobotConfig, ProviderConfig};
 use std::time::Duration;
-use thiserror::Error;
 use tracing::{debug, info, warn};
 
-/// 提供者相关错误
-#[derive(Error, Debug)]
-pub enum ProviderError {
-    #[error("LLM API 调用失败: {0}")]
-    Api(String),
-
-    #[error("请求超时")]
-    Timeout,
-
-    #[error("配置错误: {0}")]
-    Config(String),
-}
-
-/// 聊天消息
-#[derive(Debug, Clone)]
-pub struct Message {
-    /// 角色（user/assistant/system）
-    pub role: String,
-
-    /// 消息内容
-    pub content: String,
-}
-
-impl Message {
-    /// 创建用户消息
-    pub fn user(content: impl Into<String>) -> Self {
-        Self {
-            role: "user".to_string(),
-            content: content.into(),
-        }
-    }
-
-    /// 创建助手消息
-    pub fn assistant(content: impl Into<String>) -> Self {
-        Self {
-            role: "assistant".to_string(),
-            content: content.into(),
-        }
-    }
-
-    /// 创建系统消息
-    pub fn system(content: impl Into<String>) -> Self {
-        Self {
-            role: "system".to_string(),
-            content: content.into(),
-        }
-    }
-}
-
-/// LLM 提供者 trait
-#[async_trait::async_trait]
-pub trait Provider: Send + Sync {
-    /// 发送聊天请求
-    async fn chat(&self, messages: &[Message]) -> Result<String>;
-}
-
 /// OpenAI 提供者
-pub struct OpenAIProvider {
+pub struct OpenAILike {
     /// 客户端
     client: Client<OpenAIConfig>,
 
@@ -84,7 +26,7 @@ pub struct OpenAIProvider {
     timeout: u64,
 }
 
-impl OpenAIProvider {
+impl OpenAILike {
     /// 创建新的 OpenAI 提供者
     pub fn new(config: &ProviderConfig, model: &str) -> Result<Self> {
         Self::new_with_timeout(config, model, 120)
@@ -162,7 +104,7 @@ impl OpenAIProvider {
 }
 
 #[async_trait::async_trait]
-impl Provider for OpenAIProvider {
+impl Provider for OpenAILike {
     async fn chat(&self, messages: &[Message]) -> Result<String> {
         debug!("发送聊天请求, 消息数量: {}", messages.len());
 
