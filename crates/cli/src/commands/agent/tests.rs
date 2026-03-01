@@ -3,23 +3,23 @@
 use super::*;
 
 #[test]
-fn agent_args_default() {
-    let args = AgentArgs {
+fn agent_cmd_default() {
+    let cmd = AgentCmd {
         message: None,
         session: "cli:direct".to_string(),
     };
-    assert!(args.message.is_none());
-    assert_eq!(args.session, "cli:direct");
+    assert!(cmd.message.is_none());
+    assert_eq!(cmd.session, "cli:direct");
 }
 
 #[test]
-fn agent_args_with_message() {
-    let args = AgentArgs {
+fn agent_cmd_with_message() {
+    let cmd = AgentCmd {
         message: Some("Hello".to_string()),
         session: "telegram:12345".to_string(),
     };
-    assert_eq!(args.message, Some("Hello".to_string()));
-    assert_eq!(args.session, "telegram:12345");
+    assert_eq!(cmd.message, Some("Hello".to_string()));
+    assert_eq!(cmd.session, "telegram:12345");
 }
 
 #[test]

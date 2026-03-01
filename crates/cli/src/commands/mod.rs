@@ -3,5 +3,5 @@
 pub mod agent;
 pub mod onboard;
 
-pub use agent::AgentArgs;
-pub use onboard::OnboardArgs;
+pub use agent::AgentCmd;
+pub use onboard::OnboardCmd;

@@ -3,7 +3,7 @@
 //! 极简复现 HKUDS/nanobot 的 onboard 和 agent 命令
 
 use clap::{Parser, Subcommand};
-use nanobot_cli::{AgentArgs, OnboardArgs, init_logging};
+use nanobot_cli::{AgentCmd, OnboardCmd, init_logging};
 use std::process::ExitCode;
 
 /// Nanobot - AI Agent 命令行工具
@@ -20,10 +20,10 @@ struct Cli {
 #[derive(Subcommand, Debug)]
 enum Commands {
     /// 配置 LLM 提供者
-    Onboard(OnboardArgs),
+    Onboard(OnboardCmd),
 
     /// 启动 AI Agent 交互式对话
-    Agent(AgentArgs),
+    Agent(AgentCmd),
 }
 
 #[tokio::main]
@@ -34,8 +34,8 @@ async fn main() -> ExitCode {
     let cli = Cli::parse();
 
     let result = match cli.command {
-        Commands::Onboard(args) => nanobot_cli::commands::onboard::run(args),
-        Commands::Agent(args) => nanobot_cli::commands::agent::run(args).await,
+        Commands::Onboard(cmd) => cmd.run(),
+        Commands::Agent(cmd) => cmd.run().await,
     };
 
     match result {

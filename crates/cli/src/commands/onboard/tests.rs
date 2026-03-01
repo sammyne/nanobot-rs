@@ -3,8 +3,8 @@
 use super::*;
 
 #[test]
-fn onboard_args_default() {
-    let _args = OnboardArgs {};
-    // 验证 OnboardArgs 可以被创建
+fn onboard_cmd_default() {
+    let _cmd = OnboardCmd {};
+    // 验证 OnboardCmd 可以被创建
     assert!(true);
 }

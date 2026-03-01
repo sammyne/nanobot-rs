@@ -5,5 +5,5 @@
 pub mod commands;
 pub mod logging;
 
-pub use commands::{AgentArgs, OnboardArgs};
+pub use commands::{AgentCmd, OnboardCmd};
 pub use logging::init as init_logging;
