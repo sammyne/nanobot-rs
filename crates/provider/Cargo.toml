@@ -1,0 +1,14 @@
+[package]
+name = "nanobot_provider"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+nanobot_config.workspace = true
+
+async-openai = "0.28"
+async-trait = "0.1"
+tokio.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true

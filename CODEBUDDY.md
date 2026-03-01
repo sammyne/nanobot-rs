@@ -1,8 +1,8 @@
-# Rust 库开发指南
+# nanobot-rs 开发指南
 
 ## Rust 版本要求
 
-本项目要求 **Rust >= 1.92**。
+本项目要求 **Rust >= 1.93**。
 
 检查您的 Rust 版本：
 ```bash
@@ -23,6 +23,189 @@ rustup update
 ├── crates/
 │   ├── *       # 子库或者可执行文件 crates
 ```
+
+## 工作空间规范
+
+本项目采用 Cargo 工作空间（Workspace）管理多个 crate。以下是必须遵循的规范：
+
+### 成员 crate 位置
+
+所有成员 crate 都必须放在 `crates/` 文件夹下。
+
+```
+crates/
+├── cli/        # 命令行工具
+├── config/     # 配置库
+└── core/       # 核心库
+```
+
+### 成员 crate 命名
+
+成员 crate 的文件夹名称**不需要**带项目前缀。
+
+- ✅ 正确：`crates/cli/`（crate 名称为 `cli`）
+- ❌ 错误：`crates/nanobot-cli/`（不应包含项目前缀）
+
+在 `Cargo.toml` 中的声明：
+
+```toml
+[workspace]
+members = [
+    "crates/cli",
+    "crates/config",
+    "crates/core",
+]
+```
+
+### 共用依赖管理
+
+成员 crate 共用的依赖必须声明在工作空间的 `[workspace.dependencies]` 小节，并且所有成员 crate 的对应依赖都需要指向工作空间的版本。
+
+#### 依赖声明规范
+
+遵循以下两条核心规则：
+
+1. **单一配置**：使用简化的点号语法
+2. **多个配置**：使用 TOML 表语法
+
+**单一配置示例（点号语法）：**
+
+```toml
+# 仅版本号
+thiserror = "1.0"
+
+# 引用工作空间依赖
+thiserror.workspace = true
+
+# 仅指定 path
+nanobot_config.path = "crates/config"
+```
+
+**多个配置示例（表语法）：**
+
+```toml
+# 版本 + features
+[workspace.dependencies.serde]
+version = "1.0"
+features = ["derive"]
+
+# 版本 + features
+[workspace.dependencies.tokio]
+version = "1.0"
+features = ["full"]
+
+# 版本 + features + optional
+[dependencies.reqwest]
+version = "0.11"
+features = ["json"]
+optional = true
+```
+
+**完整示例：**
+
+```toml
+# === 工作空间根 Cargo.toml ===
+
+[workspace.dependencies]
+# 单一配置（点号语法）
+thiserror = "1.0"
+anyhow = "1.0"
+nanobot_config.path = "crates/config"
+
+# 多个配置（表语法）
+[workspace.dependencies.serde]
+version = "1.0"
+features = ["derive"]
+
+[workspace.dependencies.tokio]
+version = "1.0"
+features = ["rt-multi-thread", "macros"]
+
+# === 成员 crate 的 Cargo.toml ===
+
+[dependencies]
+# 引用工作空间依赖（单一配置，点号语法）
+thiserror.workspace = true
+anyhow.workspace = true
+serde.workspace = true
+
+# crate 特有依赖
+clap = "4.0"
+```
+
+✅ **推荐：**
+
+```toml
+# 单一配置：点号语法
+thiserror.workspace = true
+nanobot_config.path = "crates/config"
+
+# 多个配置：表语法
+[workspace.dependencies.tokio]
+version = "1.0"
+features = ["full"]
+```
+
+❌ **避免：**
+
+```toml
+# 单一配置不应使用花括号
+thiserror = { workspace = true }
+
+# 单一配置不应使用表语法
+[workspace.dependencies.thiserror]
+version = "1.0"
+
+# 多个配置不应使用花括号（可读性差）
+serde = { version = "1.0", features = ["derive"] }
+```
+
+**工作空间根 `Cargo.toml`：**
+
+```toml
+[workspace]
+members = [
+    "crates/cli",
+    "crates/config",
+    "crates/core",
+]
+
+[workspace.dependencies]
+thiserror = "1.0"
+anyhow = "1.0"
+
+[workspace.dependencies.serde]
+version = "1.0"
+features = ["derive"]
+
+[workspace.dependencies.tokio]
+version = "1.0"
+features = ["full"]
+```
+
+**成员 crate 的 `Cargo.toml`：**
+
+```toml
+[package]
+name = "cli"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+thiserror.workspace = true
+anyhow.workspace = true
+serde.workspace = true
+
+# crate 特有的依赖可以直接声明
+clap = "4.0"
+```
+
+### 工作空间规范的优势
+
+1. **统一版本管理**：共用依赖只需在一个地方声明版本，避免版本不一致
+2. **简化依赖更新**：更新依赖只需修改工作空间的 `Cargo.toml`
+3. **清晰的命名空间**：crate 名称简洁明了，避免冗余前缀
+4. **更好的代码组织**：所有成员 crate 集中在 `crates/` 目录下
 
 ## 错误处理
 
@@ -84,7 +267,7 @@ pub enum LibraryError {
 
     /// 解析错误
     #[error("解析输入失败: {message}")]
-    ParseError { message: String, line: usize },
+    Parse { message: String, line: usize },
 
     /// 提供的配置无效
     #[error("配置无效: {0}")]
@@ -96,9 +279,11 @@ pub enum LibraryError {
 
     /// 网络连接失败
     #[error("网络错误: {0}")]
-    NetworkError(String),
+    Network(String),
 }
 ```
+
+每个错误枚举值都不要带 `Error` 前缀或后缀。
 
 ### 在库代码中使用错误（thiserror）
 
