@@ -7,12 +7,19 @@ use nanobot_provider::{Message, OpenAIProvider, Provider};
 use std::io::{self, BufRead, Write};
 use tracing::{debug, error, info};
 
+/// 退出命令集合
+const EXIT_COMMANDS: &[&str] = &["exit", "quit", "/exit", "/quit", ":q"];
+
 /// Agent 命令参数
 #[derive(Args, Debug)]
 pub struct AgentArgs {
-    /// 系统提示词
+    /// 发送给 agent 的消息（不提供则进入交互模式）
     #[arg(short, long)]
-    pub system: Option<String>,
+    pub message: Option<String>,
+
+    /// 会话 ID（格式: channel:chat_id）
+    #[arg(short, long, default_value = "cli:direct")]
+    pub session: String,
 }
 
 /// 执行 agent 命令
@@ -40,18 +47,55 @@ pub async fn run(args: AgentArgs) -> Result<()> {
     let mut messages: Vec<Message> = Vec::new();
 
     // 添加系统提示词
-    if let Some(system) = args.system {
-        messages.push(Message::system(system));
+    messages.push(Message::system("你是一个有帮助的 AI 助手。"));
+
+    if let Some(msg) = args.message {
+        // 单次消息模式
+        run_single_message(&provider, &mut messages, &msg).await?;
     } else {
-        messages.push(Message::system("你是一个有帮助的 AI 助手。"));
+        // 交互式模式
+        run_interactive(&provider, &mut messages, &config.agents.defaults.model).await?;
     }
 
+    Ok(())
+}
+
+/// 单次消息模式
+async fn run_single_message(
+    provider: &OpenAIProvider,
+    messages: &mut Vec<Message>,
+    input: &str,
+) -> Result<()> {
+    debug!("单次消息模式");
+
+    messages.push(Message::user(input));
+
+    match provider.chat(messages).await {
+        Ok(response) => {
+            println!("{}", response);
+        }
+        Err(e) => {
+            error!("LLM 调用失败: {}", e);
+            return Err(e);
+        }
+    }
+
+    Ok(())
+}
+
+/// 交互式模式
+async fn run_interactive(
+    provider: &OpenAIProvider,
+    messages: &mut Vec<Message>,
+    model: &str,
+) -> Result<()> {
+    debug!("交互式模式");
+
     // 打印欢迎信息
-    println!("Nanobot Agent - 交互式 AI 助手");
-    println!("模型: {}", config.agents.defaults.model);
+    println!("🤖 Nanobot Agent - 交互式 AI 助手");
+    println!("模型: {}", model);
     println!("输入 'exit' 或 'quit' 退出\n");
 
-    // REPL 循环
     let stdin = io::stdin();
     let mut stdout = io::stdout();
 
@@ -65,7 +109,7 @@ pub async fn run(args: AgentArgs) -> Result<()> {
         let input = input.trim();
 
         // 检查退出命令
-        if input == "exit" || input == "quit" {
+        if is_exit_command(input) {
             println!("再见！");
             break;
         }
@@ -99,6 +143,11 @@ pub async fn run(args: AgentArgs) -> Result<()> {
     }
 
     Ok(())
+}
+
+/// 检查是否为退出命令
+fn is_exit_command(input: &str) -> bool {
+    EXIT_COMMANDS.contains(&input.to_lowercase().as_str())
 }
 
 #[cfg(test)]
