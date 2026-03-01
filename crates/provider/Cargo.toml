@@ -1,14 +1,18 @@
 [package]
 name = "nanobot-provider"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
 
 [dependencies]
-nanobot-config.workspace = true
-
+nanobot-config = { path = "../config" }
+nanobot-tools = { path = "../tools" }
 async-openai = "0.28"
+serde_json = "1.0"
+thiserror = "1.0"
+anyhow = "1.0"
 async-trait = "0.1"
-tokio.workspace = true
-anyhow.workspace = true
-thiserror.workspace = true
-tracing.workspace = true
+tokio = { version = "1", features = ["time"] }
+tracing = "0.1"
+
+[dev-dependencies]
+tokio-test = "0.4"

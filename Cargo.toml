@@ -7,22 +7,30 @@ resolver = "3"
 anyhow = "1"
 thiserror = "2"
 tracing = "0.1"
+serde_json = "1"
 nanobot-config.path = "crates/config"
 nanobot-provider.path = "crates/provider"
 nanobot-agent.path = "crates/agent"
+nanobot-tools.path = "crates/tools"
+
 [workspace.dependencies.tokio]
 version = "1"
 features = ["rt-multi-thread", "macros", "sync"]
+
 [workspace.dependencies.serde]
 version = "1"
 features = ["derive"]
+
 [workspace.dependencies.clap]
 version = "4"
 features = ["derive"]
+
 [workspace.dependencies.tracing-subscriber]
 version = "0.3"
 features = ["env-filter"]
+
 [workspace.dependencies.dialoguer]
 version = "0.11"
+
 [workspace.dependencies.dirs]
 version = "6"

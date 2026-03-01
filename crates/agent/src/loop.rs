@@ -10,13 +10,25 @@ use crate::bus::{InboundMessage, OutboundMessage};
 use anyhow::Result;
 use nanobot_config::AgentDefaults;
 use nanobot_provider::{Message, Provider};
+use nanobot_tools::ToolRegistry;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{RwLock, mpsc};
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 
 /// 会话键（channel:chat_id）
 type SessionKey = String;
+
+/// ReAct 运行结果
+#[derive(Debug, Clone)]
+pub struct ReActResult {
+    /// 最终响应内容
+    pub content: String,
+    /// 使用的工具名称列表
+    pub tools_used: Vec<String>,
+    /// 完成时的完整消息历史
+    pub messages: Vec<Message>,
+}
 
 /// Agent 循环处理引擎
 ///
@@ -25,9 +37,9 @@ type SessionKey = String;
 /// 消息流向：
 /// - CLI -> AgentLoop: CLI 通过 inbound_tx 发送，AgentLoop 通过 inbound_rx 接收
 /// - AgentLoop -> CLI: AgentLoop 通过 outbound_tx 发送，CLI 通过 outbound_rx 接收
-pub struct AgentLoop {
+pub struct AgentLoop<P: Provider> {
     /// LLM 提供者实例
-    provider: Arc<dyn Provider>,
+    provider: P,
 
     /// Agent 配置
     config: AgentDefaults,
@@ -40,34 +52,15 @@ pub struct AgentLoop {
 
     /// 会话历史（channel:chat_id -> messages）
     sessions: Arc<RwLock<HashMap<SessionKey, Vec<Message>>>>,
+
+    /// 工具注册表
+    tool_registry: ToolRegistry,
 }
 
-impl AgentLoop {
-    /// 创建新的 AgentLoop 实例（单次消息模式，无通道）
-    ///
-    /// 适用于 `process_direct` 等不需要后台循环的场景。
-    ///
-    /// # Arguments
-    /// * `provider` - LLM 提供者实例
-    /// * `config` - Agent 配置
-    pub fn new_direct(provider: Arc<dyn Provider>, config: AgentDefaults) -> Self {
-        info!(
-            "初始化 AgentLoop (单次模式): model={}, max_tool_iterations={}",
-            config.model, config.max_tool_iterations
-        );
-
-        Self {
-            provider,
-            config,
-            inbound_rx: mpsc::channel(1).1, // 创建一个虚拟的接收端，不会使用
-            outbound_tx: mpsc::channel(1).0, // 创建一个虚拟的发送端，不会使用
-            sessions: Arc::new(RwLock::new(HashMap::new())),
-        }
-    }
-
+impl<P: Provider + 'static> AgentLoop<P> {
     /// 创建新的 AgentLoop 实例（交互式模式，需要通道）
     ///
-    /// 适用于需要启动后台消息循环的场景。
+    /// tool_registry 会根据 config 中的 workspace 参数自动构造。
     ///
     /// # Arguments
     /// * `provider` - LLM 提供者实例
@@ -75,7 +68,7 @@ impl AgentLoop {
     /// * `inbound_rx` - 入站消息接收端（CLI -> AgentLoop）
     /// * `outbound_tx` - 出站消息发送端（AgentLoop -> CLI）
     pub fn new(
-        provider: Arc<dyn Provider>,
+        mut provider: P,
         config: AgentDefaults,
         inbound_rx: mpsc::Receiver<InboundMessage>,
         outbound_tx: mpsc::Sender<OutboundMessage>,
@@ -85,13 +78,45 @@ impl AgentLoop {
             config.model, config.max_tool_iterations
         );
 
+        // 基于 config 构造 tool_registry
+        let tool_registry = ToolRegistry::new(&config.workspace, None);
+
+        // 从 tool_registry 导出工具列表并绑定到 provider
+        let definitions = tool_registry.get_definitions();
+        provider.bind_tools(definitions);
+
         Self {
             provider,
             config,
             inbound_rx,
             outbound_tx,
             sessions: Arc::new(RwLock::new(HashMap::new())),
+            tool_registry,
         }
+    }
+
+    /// 创建新的 AgentLoop 实例（单次消息模式，无通道）
+    ///
+    /// 复用 new 函数的逻辑，创建虚拟通道。
+    ///
+    /// # Arguments
+    /// * `provider` - LLM 提供者实例
+    /// * `config` - Agent 配置
+    pub fn new_direct(
+        provider: P,
+        config: AgentDefaults,
+    ) -> Self {
+        info!(
+            "初始化 AgentLoop (单次模式): model={}, max_tool_iterations={}",
+            config.model, config.max_tool_iterations
+        );
+
+        // 创建虚拟通道
+        let (_inbound_tx, inbound_rx) = mpsc::channel(1);
+        let (outbound_tx, _outbound_rx) = mpsc::channel(1);
+
+        // 复用 new 函数的逻辑
+        Self::new(provider, config, inbound_rx, outbound_tx)
     }
 
     /// 获取会话键
@@ -139,15 +164,128 @@ impl AgentLoop {
         sessions.insert(key, trimmed);
     }
 
-    /// 调用 LLM 并返回响应
-    async fn call_llm(&self, messages: &[Message]) -> Result<String> {
+    /// 调用 LLM 并返回响应消息
+    async fn call_llm(&self, messages: &[Message]) -> Result<Message> {
         debug!("调用 LLM: 消息数量={}", messages.len());
 
         let response = self.provider.chat(messages).await?;
 
-        info!("收到 LLM 响应, 长度: {} 字符", response.len());
+        info!("收到 LLM 响应, 角色={}, 内容长度={} 字符", response.role(), response.content().len());
 
         Ok(response)
+    }
+
+    /// ReAct 推理-行动循环
+    ///
+    /// 参考 Python 版 `_run_agent_loop` 实现：
+    /// 1. 循环调用 LLM，直到没有工具调用或达到最大迭代次数
+    /// 2. 如果响应包含工具调用，执行工具并将结果添加回消息历史
+    /// 3. 返回最终的内容、使用的工具列表和完整消息历史
+    ///
+    /// # Arguments
+    /// * `initial_messages` - 初始消息列表
+    ///
+    /// # Returns
+    /// ReActResult 包含最终结果、工具使用列表和消息历史
+    pub async fn re_act(&self, mut messages: Vec<Message>) -> Result<ReActResult> {
+        let max_iterations = self.config.max_tool_iterations as usize;
+        let mut iteration = 0;
+        let mut tools_used: Vec<String> = Vec::new();
+
+        info!("启动 ReAct 循环: max_iterations={}, 可用工具={:?}",
+            max_iterations, self.tool_registry.tool_names()
+        );
+
+        while iteration < max_iterations {
+            iteration += 1;
+            debug!("ReAct 迭代 #{}", iteration);
+
+            // 调用 LLM
+            let response = self.call_llm(&messages).await?;
+
+            // 检查是否有工具调用
+            let tool_calls = response.tool_calls();
+            if !tool_calls.is_empty() {
+                // 提取文本内容
+                let content = response.content().to_string();
+
+                // 记录工具调用
+                let tool_hints: Vec<String> = tool_calls.iter().map(|tc| {
+                    let first_arg = tc.arguments.chars().take(40).collect::<String>();
+                    if tc.arguments.len() > 40 {
+                        format!("{}({}...)", tc.name, first_arg)
+                    } else {
+                        format!("{}({})", tc.name, tc.arguments)
+                    }
+                }).collect();
+                debug!("工具调用: {}", tool_hints.join(", "));
+
+                // 将助手消息（带工具调用）添加到历史
+                messages.push(Message::assistant_with_tools(&content, tool_calls.to_vec()));
+
+                // 执行每个工具调用
+                for tool_call in tool_calls {
+                    tools_used.push(tool_call.name.clone());
+                    info!("执行工具 {}: {}", tool_call.name, tool_call.arguments);
+
+                    // 解析参数
+                    let args = match serde_json::from_str::<serde_json::Value>(&tool_call.arguments) {
+                        Ok(v) => v,
+                        Err(e) => {
+                            error!("解析工具 {} 参数失败: {}, 参数内容: {}",
+                                tool_call.name, e, tool_call.arguments
+                            );
+                            serde_json::Value::String(tool_call.arguments.clone())
+                        }
+                    };
+
+                    // 执行工具
+                    let tool_result = self.tool_registry.execute(&tool_call.name, args).await;
+
+                    // 转换结果为字符串
+                    let result_content = match tool_result {
+                        Ok(output) => format!("Tool Call Result:\n{}", output),
+                        Err(e) => {
+                            error!("工具 {} 执行失败: {}", tool_call.name, e);
+                            format!("Tool Call Error: {}", e)
+                        }
+                    };
+
+                    // 添加工具结果消息
+                    messages.push(Message::tool(&tool_call.id, result_content));
+                }
+            } else {
+                // 没有工具调用，返回最终结果
+                let final_content = response.content().to_string();
+                // 将助手消息添加到历史
+                messages.push(Message::assistant(&final_content));
+
+                info!("ReAct 循环完成: 迭代次数={}, 最终内容长度={} 字符",
+                    iteration, final_content.len()
+                );
+
+                return Ok(ReActResult {
+                    content: final_content,
+                    tools_used,
+                    messages,
+                });
+            }
+        }
+
+        // 达到最大迭代次数
+        warn!("ReAct 循环达到最大迭代次数: {}", max_iterations);
+        let warning_msg = format!(
+            "I reached the maximum number of tool call iterations ({}) without completing the task. You can try breaking the task into smaller steps.",
+            max_iterations
+        );
+
+        messages.push(Message::assistant(&warning_msg));
+
+        Ok(ReActResult {
+            content: warning_msg,
+            tools_used,
+            messages,
+        })
     }
 
     /// 直接处理消息（单次调用模式）
@@ -174,17 +312,19 @@ impl AgentLoop {
         // 添加用户消息
         messages.push(Message::user(content));
 
-        // 调用 LLM
-        let response = self.call_llm(&messages).await?;
+        // 执行 ReAct 循环（支持工具调用）
+        let result = self.re_act(messages).await?;
 
-        // 添加助手回复到历史
-        messages.push(Message::assistant(&response));
-        self.update_session(&channel, &chat_id, &messages).await;
+        // 更新会话历史
+        self.update_session(&channel, &chat_id, &result.messages).await;
 
-        Ok(response)
-    }
+        // 如果使用了工具，记录相关信息
+        if !result.tools_used.is_empty() {
+            info!("已使用工具: {:?}", result.tools_used);
+        }
 
-    /// 启动后台消息处理循环
+        Ok(result.content)
+    }    /// 启动后台消息处理循环
     ///
     /// 这是交互式模式的核心方法。从入站通道接收消息，
     /// 处理后发送给出站通道。
@@ -241,17 +381,16 @@ impl AgentLoop {
         let mut messages = self.get_or_create_session(&channel, &chat_id).await;
 
         // 添加用户消息
-        messages.push(Message::user(&content));
+        messages.push(Message::user(content));
 
-        // 调用 LLM
-        match self.call_llm(&messages).await {
-            Ok(response) => {
-                // 添加助手回复到历史
-                messages.push(Message::assistant(&response));
-                self.update_session(&channel, &chat_id, &messages).await;
+        // 执行 ReAct 循环（支持工具调用）
+        match self.re_act(messages).await {
+            Ok(result) => {
+                // 更新会话历史
+                self.update_session(&channel, &chat_id, &result.messages).await;
 
                 // 发送出站消息
-                let outbound = OutboundMessage::new(&channel, &chat_id, &response);
+                let outbound = OutboundMessage::new(&channel, &chat_id, &result.content);
                 if let Err(e) = outbound_tx.send(outbound).await {
                     error!("发送出站消息失败: {}", e);
                 }

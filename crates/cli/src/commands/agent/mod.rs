@@ -2,13 +2,11 @@
 
 use anyhow::Result;
 use clap::Args;
-use nanobot_agent::{AgentLoop, InboundMessage, OutboundMessage};
+use nanobot_agent::{AgentLoop, bus::{InboundMessage, OutboundMessage}};
 use nanobot_config::Config;
-use nanobot_provider::{OpenAILike, Provider};
+use nanobot_provider::OpenAILike;
 use std::io::{self, Write};
-use std::sync::Arc;
 use tracing::{debug, error, info};
-
 /// 退出命令集合
 const EXIT_COMMANDS: &[&str] = &["exit", "quit", "/exit", "/quit", ":q"];
 
@@ -43,15 +41,15 @@ impl AgentCmd {
         );
 
         // 初始化 LLM Provider
-        let provider = Arc::new(OpenAILike::from_config(&config)?);
+        let provider = OpenAILike::from_config(&config)?;
         debug!("LLM Provider 初始化成功");
 
         if let Some(msg) = &self.message {
             // 单次消息模式
-            self.run_once(provider.clone(), &config, msg).await?;
+            self.run_once(provider, &config, msg).await?;
         } else {
             // 交互式模式 - 使用 MessageBus 和 AgentLoop
-            self.run_interactive(provider.clone(), &config).await?;
+            self.run_interactive(provider, &config).await?;
         }
 
         Ok(())
@@ -60,7 +58,7 @@ impl AgentCmd {
     /// 单次消息模式
     async fn run_once(
         &self,
-        provider: Arc<dyn Provider>,
+        provider: OpenAILike,
         config: &Config,
         input: &str,
     ) -> Result<()> {
@@ -88,7 +86,7 @@ impl AgentCmd {
     /// - 使用 Tokio mpsc 通道分离发送端和接收端，避免锁竞争
     /// - CLI 持有 inbound_tx（发送用户输入）和 outbound_rx（接收助手回复）
     /// - AgentLoop 持有 inbound_rx（接收用户输入）和 outbound_tx（发送助手回复）
-    async fn run_interactive(&self, provider: Arc<dyn Provider>, config: &Config) -> Result<()> {
+    async fn run_interactive(&self, provider: OpenAILike, config: &Config) -> Result<()> {
         debug!("交互式模式（使用 mpsc 通道）");
 
         // 解析 session_id
@@ -100,6 +98,7 @@ impl AgentCmd {
         // AgentLoop 持有: inbound_rx, outbound_tx
         let (inbound_tx, inbound_rx) = tokio::sync::mpsc::channel::<InboundMessage>(100);
         let (outbound_tx, mut outbound_rx) = tokio::sync::mpsc::channel::<OutboundMessage>(100);
+
         // 创建 AgentLoop（传递通道）
         let agent_loop = AgentLoop::new(
             provider,

@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 nanobot-config.workspace = true
 nanobot-provider.workspace = true
+nanobot-tools.workspace = true
 tokio.workspace = true
 anyhow.workspace = true
 serde.workspace = true

@@ -4,4 +4,4 @@
 
 mod schema;
 
-pub use schema::*;
+pub use schema::{AgentDefaults, Config, ConfigError, ProviderConfig};

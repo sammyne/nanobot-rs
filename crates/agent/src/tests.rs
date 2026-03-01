@@ -6,25 +6,33 @@ use super::*;
 use async_trait::async_trait;
 use nanobot_config::AgentDefaults;
 use nanobot_provider::{Message, Provider};
+use nanobot_tools::ToolDefinition;
 
 /// Mock Provider 用于测试
 struct MockProvider {
     /// 预设响应
     response: String,
+    /// 绑定的工具列表
+    bound_tools: Vec<ToolDefinition>,
 }
 
 impl MockProvider {
     fn new(response: impl Into<String>) -> Self {
         Self {
             response: response.into(),
+            bound_tools: Vec::new(),
         }
     }
 }
 
 #[async_trait]
 impl Provider for MockProvider {
-    async fn chat(&self, _messages: &[Message]) -> anyhow::Result<String> {
-        Ok(self.response.clone())
+    async fn chat(&self, _messages: &[Message]) -> anyhow::Result<Message> {
+        Ok(Message::assistant(&self.response))
+    }
+
+    fn bind_tools(&mut self, tools: Vec<ToolDefinition>) {
+        self.bound_tools = tools;
     }
 }
 
@@ -67,7 +75,7 @@ async fn process_direct_returns_expected_response() {
     ];
 
     for case in test_vector {
-        let provider = std::sync::Arc::new(MockProvider::new(case.expected_response));
+        let provider = MockProvider::new(case.expected_response);
         let config = test_config();
         let agent = AgentLoop::new_direct(provider, config);
 
@@ -87,7 +95,7 @@ async fn process_direct_returns_expected_response() {
 /// 验证 process_direct 能正确处理空消息输入
 #[tokio::test]
 async fn process_direct_handles_empty_message() {
-    let provider = std::sync::Arc::new(MockProvider::new("OK"));
+    let provider = MockProvider::new("OK");
     let config = test_config();
     let agent = AgentLoop::new_direct(provider, config);
 
@@ -102,7 +110,7 @@ async fn process_direct_handles_empty_message() {
 /// 验证 config 方法返回正确的配置引用
 #[test]
 fn config_returns_correct_reference() {
-    let provider = std::sync::Arc::new(MockProvider::new("test"));
+    let provider = MockProvider::new("test");
     let config = test_config();
     let agent = AgentLoop::new_direct(provider, config.clone());
 
@@ -126,7 +134,7 @@ fn config_returns_correct_reference() {
 /// AgentDefaults 构造测试用例结构
 struct DefaultsCase {
     name: &'static str,
-    agent: AgentLoop,
+    agent: AgentLoop<MockProvider>,
     expect_model: &'static str,
     expect_max_tokens: usize,
 }
@@ -156,7 +164,7 @@ fn agent_loop_uses_custom_config_values() {
         DefaultsCase {
             name: "自定义配置 1",
             agent: AgentLoop::new_direct(
-                std::sync::Arc::new(MockProvider::new("test")),
+                MockProvider::new("test"),
                 custom_defaults1,
             ),
             expect_model: "custom-model-1",
@@ -165,7 +173,7 @@ fn agent_loop_uses_custom_config_values() {
         DefaultsCase {
             name: "自定义配置 2",
             agent: AgentLoop::new_direct(
-                std::sync::Arc::new(MockProvider::new("test")),
+                MockProvider::new("test"),
                 custom_defaults2,
             ),
             expect_model: "custom-model-2",
