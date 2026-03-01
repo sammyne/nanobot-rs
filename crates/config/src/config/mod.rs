@@ -54,7 +54,11 @@ pub struct ProviderConfig {
     pub api_base: Option<String>,
 
     /// 自定义请求头（例如 AiHubMix 的 APP-Code）
-    #[serde(rename = "extraHeaders", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "extraHeaders",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub extra_headers: Option<std::collections::HashMap<String, String>>,
 }
 
@@ -271,9 +275,7 @@ impl Config {
 
         // 验证 workspace
         if defaults.workspace.is_empty() {
-            return Err(ConfigError::Validation(
-                "workspace 不能为空".to_string(),
-            ));
+            return Err(ConfigError::Validation("workspace 不能为空".to_string()));
         }
 
         // 验证 model
@@ -283,9 +285,7 @@ impl Config {
 
         // 验证 max_tokens
         if defaults.max_tokens == 0 {
-            return Err(ConfigError::Validation(
-                "max_tokens 必须大于 0".to_string(),
-            ));
+            return Err(ConfigError::Validation("max_tokens 必须大于 0".to_string()));
         }
 
         // 验证 providers.custom
@@ -316,7 +316,9 @@ impl Config {
 
     /// 脱敏的 API Key（用于日志显示）
     pub fn masked_api_key(&self) -> String {
-        let key = self.providers.custom
+        let key = self
+            .providers
+            .custom
             .as_ref()
             .map(|c| c.api_key.as_str())
             .unwrap_or("");

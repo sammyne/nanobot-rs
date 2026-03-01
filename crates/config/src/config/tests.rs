@@ -114,12 +114,18 @@ fn load_hkuds_config() {
 
     // 验证可以反序列化为 HKUDS 格式
     let config: Config = serde_json::from_str(hkuds_json).unwrap();
-    assert_eq!(config.providers.custom.as_ref().unwrap().api_key, "ms-9b01b6f2-1336-4f0d-ac2b-7922f1d66119");
+    assert_eq!(
+        config.providers.custom.as_ref().unwrap().api_key,
+        "ms-9b01b6f2-1336-4f0d-ac2b-7922f1d66119"
+    );
     assert_eq!(config.agents.defaults.model, "MiniMax/MiniMax-M2.5");
 
     // 验证 provider() 方法
     let provider = config.provider();
-    assert_eq!(provider.api_base, Some("https://api-inference.modelscope.cn/v1".to_string()));
+    assert_eq!(
+        provider.api_base,
+        Some("https://api-inference.modelscope.cn/v1".to_string())
+    );
     assert_eq!(provider.api_key, "ms-9b01b6f2-1336-4f0d-ac2b-7922f1d66119");
 }
 
@@ -153,10 +159,7 @@ fn load_partial_config_fill_defaults() {
     let config: Config = serde_json::from_str(partial_json).unwrap();
 
     // api_base 应该自动填充为 None
-    assert_eq!(
-        config.providers.custom.as_ref().unwrap().api_base,
-        None
-    );
+    assert_eq!(config.providers.custom.as_ref().unwrap().api_base, None);
 
     // agents.defaults 应该使用默认值
     assert_eq!(config.agents.defaults.model, "anthropic/claude-opus-4-5");

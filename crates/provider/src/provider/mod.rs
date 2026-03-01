@@ -92,7 +92,10 @@ impl OpenAIProvider {
 
     /// 创建新的 OpenAI 提供者，指定超时时间
     pub fn new_with_timeout(config: &ProviderConfig, model: &str, timeout: u64) -> Result<Self> {
-        let api_base = config.api_base.as_deref().unwrap_or("https://api.openai.com/v1");
+        let api_base = config
+            .api_base
+            .as_deref()
+            .unwrap_or("https://api.openai.com/v1");
 
         info!(
             "初始化 OpenAI 提供者: model={}, base_url={}",

@@ -12,7 +12,7 @@ nanobot_provider.path = "crates/provider"
 nanobot_agent.path = "crates/agent"
 [workspace.dependencies.tokio]
 version = "1"
-features = ["rt-multi-thread", "macros"]
+features = ["rt-multi-thread", "macros", "sync"]
 [workspace.dependencies.serde]
 version = "1"
 features = ["derive"]

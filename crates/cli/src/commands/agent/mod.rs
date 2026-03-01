@@ -2,10 +2,10 @@
 
 use anyhow::Result;
 use clap::Args;
-use nanobot_agent::AgentLoop;
+use nanobot_agent::{AgentLoop, InboundMessage, OutboundMessage};
 use nanobot_config::Config;
-use nanobot_provider::{Message, OpenAIProvider, Provider};
-use std::io::{self, BufRead, Write};
+use nanobot_provider::{OpenAIProvider, Provider};
+use std::io::{self, Write};
 use std::sync::Arc;
 use tracing::{debug, error, info};
 
@@ -46,18 +46,12 @@ impl AgentCmd {
         let provider = Arc::new(OpenAIProvider::from_config(&config)?);
         debug!("LLM Provider 初始化成功");
 
-        // 初始化对话历史
-        let mut messages: Vec<Message> = Vec::new();
-
-        // 添加系统提示词
-        messages.push(Message::system("你是一个有帮助的 AI 助手。"));
-
         if let Some(msg) = &self.message {
             // 单次消息模式
             self.run_once(provider.clone(), &config, msg).await?;
         } else {
-            // 交互式模式
-            self.run_interactive(provider.clone(), &mut messages, &config.agents.defaults.model).await?;
+            // 交互式模式 - 使用 MessageBus 和 AgentLoop
+            self.run_interactive(provider.clone(), &config).await?;
         }
 
         Ok(())
@@ -72,10 +66,10 @@ impl AgentCmd {
     ) -> Result<()> {
         debug!("单次消息模式");
 
-        // 创建 AgentLoop 实例
-        let agent = AgentLoop::new(provider, config.agents.defaults.clone());
+        // 创建 AgentLoop 实例（简单模式，直接调用）
+        let agent = AgentLoop::new_direct(provider, config.agents.defaults.clone());
 
-        match agent.process_direct(input).await {
+        match agent.process_direct(input, Some(&self.session)).await {
             Ok(response) => {
                 println!("{}", response);
             }
@@ -88,20 +82,46 @@ impl AgentCmd {
         Ok(())
     }
 
-    /// 交互式模式
-    async fn run_interactive(
-        &self,
-        provider: Arc<dyn Provider>,
-        messages: &mut Vec<Message>,
-        model: &str,
-    ) -> Result<()> {
-        debug!("交互式模式");
+    /// 交互式模式 - 使用 mpsc 通道
+    ///
+    /// 设计说明：
+    /// - 使用 Tokio mpsc 通道分离发送端和接收端，避免锁竞争
+    /// - CLI 持有 inbound_tx（发送用户输入）和 outbound_rx（接收助手回复）
+    /// - AgentLoop 持有 inbound_rx（接收用户输入）和 outbound_tx（发送助手回复）
+    async fn run_interactive(&self, provider: Arc<dyn Provider>, config: &Config) -> Result<()> {
+        debug!("交互式模式（使用 mpsc 通道）");
+
+        // 解析 session_id
+        let (channel, chat_id) = Self::parse_session_id(&self.session);
+        let session_key = format!("{}:{}", channel, chat_id);
+
+        // 创建消息通道对
+        // CLI 持有: inbound_tx, outbound_rx
+        // AgentLoop 持有: inbound_rx, outbound_tx
+        let (inbound_tx, inbound_rx) = tokio::sync::mpsc::channel::<InboundMessage>(100);
+        let (outbound_tx, mut outbound_rx) = tokio::sync::mpsc::channel::<OutboundMessage>(100);
+        // 创建 AgentLoop（传递通道）
+        let agent_loop = AgentLoop::new(
+            provider,
+            config.agents.defaults.clone(),
+            inbound_rx,
+            outbound_tx,
+        );
 
         // 打印欢迎信息
         println!("🤖 Nanobot Agent - 交互式 AI 助手");
-        println!("模型: {}", model);
+        println!("模型: {}", config.agents.defaults.model);
+        println!("会话: {}", session_key);
         println!("输入 'exit' 或 'quit' 退出\n");
 
+        // 启动 AgentLoop 后台任务
+        let agent_task = tokio::spawn(async move {
+            if let Err(e) = agent_loop.run().await {
+                error!("AgentLoop 运行失败: {}", e);
+            }
+        });
+
+        // 主循环：读取用户输入，发送消息，并等待响应
         let stdin = io::stdin();
         let mut stdout = io::stdout();
 
@@ -111,7 +131,7 @@ impl AgentCmd {
             stdout.flush()?;
 
             let mut input = String::new();
-            stdin.lock().read_line(&mut input)?;
+            stdin.read_line(&mut input)?;
             let input = input.trim();
 
             // 检查退出命令
@@ -125,30 +145,53 @@ impl AgentCmd {
                 continue;
             }
 
-            // 添加用户消息到历史
-            messages.push(Message::user(input));
+            // 发送入站消息到 AgentLoop
+            let inbound_msg = InboundMessage::new(&channel, "user", &chat_id, input);
+            if let Err(e) = inbound_tx.send(inbound_msg).await {
+                error!("发送消息失败: {}", e);
+                eprintln!("\n❌ 错误: 无法发送消息\n");
+                continue;
+            }
 
-            // 调用 LLM
-            debug!("发送请求到 LLM, 消息数量: {}", messages.len());
+            // 立即显示 "thinking" 提示
+            println!("  ↦ nanobot is thinking...");
 
-            match provider.chat(&messages).await {
-                Ok(response) => {
-                    println!("\n助手: {}\n", response);
-
-                    // 添加助手回复到历史
-                    messages.push(Message::assistant(response));
-                }
-                Err(e) => {
-                    error!("LLM 调用失败: {}", e);
-                    eprintln!("\n错误: {}\n", e);
-
-                    // 移除失败的用户消息
-                    messages.pop();
+            // 等待 AgentLoop 的响应
+            loop {
+                match outbound_rx.recv().await {
+                    Some(msg) => {
+                        if msg.is_progress() {
+                            println!("  ↦ {}\n", msg.content);
+                        } else {
+                            println!("\n🤖 助手: {}\n", msg.content);
+                            // 接收到完整响应，跳出内层循环
+                            break;
+                        }
+                    }
+                    None => {
+                        // 通道已关闭，退出
+                        eprintln!("\n⚠️  连接已断开\n");
+                        return Ok(());
+                    }
                 }
             }
         }
 
+        // 等待后台任务完成（通过关闭 inbound_tx 触发退出）
+        drop(inbound_tx);
+        agent_task.abort();
+
         Ok(())
+    }
+
+    /// 解析 session_id 为 (channel, chat_id)
+    fn parse_session_id(session_id: &str) -> (String, String) {
+        let parts: Vec<&str> = session_id.splitn(2, ':').collect();
+        if parts.len() == 2 {
+            (parts[0].to_string(), parts[1].to_string())
+        } else {
+            ("cli".to_string(), session_id.to_string())
+        }
     }
 }
 
