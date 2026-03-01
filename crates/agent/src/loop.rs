@@ -135,8 +135,7 @@ impl<P: Provider + 'static> AgentLoop<P> {
         drop(sessions);
 
         // 创建新的会话，添加系统提示词
-        let mut new_messages = Vec::new();
-        new_messages.push(Message::system("你是一个有帮助的 AI 助手。"));
+        let new_messages = vec![Message::system("你是一个有帮助的 AI 助手。")];
 
         let mut sessions = self.sessions.write().await;
         sessions.insert(key.clone(), new_messages.clone());
@@ -191,7 +190,7 @@ impl<P: Provider + 'static> AgentLoop<P> {
     /// # Returns
     /// ReActResult 包含最终结果、工具使用列表和消息历史
     pub async fn re_act(&self, mut messages: Vec<Message>) -> Result<ReActResult> {
-        let max_iterations = self.config.max_tool_iterations as usize;
+        let max_iterations = self.config.max_tool_iterations;
         let mut iteration = 0;
         let mut tools_used: Vec<String> = Vec::new();
 

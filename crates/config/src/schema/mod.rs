@@ -46,7 +46,7 @@ pub const CONFIG_FILE_NAME: &str = "config.json";
 pub const CONFIG_DIR_NAME: &str = ".nanobot";
 
 /// LLM 提供者配置
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ProviderConfig {
     /// API Key
     #[serde(rename = "apiKey", default)]
@@ -61,16 +61,6 @@ pub struct ProviderConfig {
     pub extra_headers: Option<std::collections::HashMap<String, String>>,
 }
 
-impl Default for ProviderConfig {
-    fn default() -> Self {
-        Self {
-            api_key: String::new(),
-            api_base: None,
-            extra_headers: None,
-        }
-    }
-}
-
 /// 应用配置（兼容 HKUDS 版本）
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Config {
@@ -82,31 +72,17 @@ pub struct Config {
 }
 
 /// Providers 配置段
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ProvidersSection {
     #[serde(default)]
     pub custom: Option<ProviderConfig>,
 }
 
-impl Default for ProvidersSection {
-    fn default() -> Self {
-        Self { custom: None }
-    }
-}
-
 /// Agents 配置段
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AgentsSection {
     #[serde(default)]
     pub defaults: AgentDefaults,
-}
-
-impl Default for AgentsSection {
-    fn default() -> Self {
-        Self {
-            defaults: AgentDefaults::default(),
-        }
-    }
 }
 
 /// Agent 默认配置
@@ -286,14 +262,14 @@ impl Config {
         // 验证 providers.custom
         if let Some(custom) = &self.providers.custom {
             // api_base 可以是 None（使用默认值）或有效 URL
-            if let Some(api_base) = &custom.api_base {
-                if !api_base.is_empty() {
-                    if !api_base.starts_with("http://") && !api_base.starts_with("https://") {
-                        return Err(ConfigError::Validation(
-                            "api_base 必须以 http:// 或 https:// 开头".to_string(),
-                        ));
-                    }
-                }
+            if let Some(api_base) = &custom.api_base
+                && !api_base.is_empty()
+                && !api_base.starts_with("http://")
+                && !api_base.starts_with("https://")
+            {
+                return Err(ConfigError::Validation(
+                    "api_base 必须以 http:// 或 https:// 开头".to_string(),
+                ));
             }
 
             // api_key 可以是 None（某些 OAuth 提供者不需要）

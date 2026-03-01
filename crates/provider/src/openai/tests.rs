@@ -172,6 +172,7 @@ struct OpenAINewCase {
     name: &'static str,
     provider_config: ProviderConfig,
     model: &'static str,
+    #[allow(dead_code)]
     expected_success: bool,
 }
 
@@ -286,6 +287,7 @@ fn convert_messages_with_tool() {
 // ============ 工具绑定测试 ============
 
 /// 测试用例结构体：用于工具绑定测试
+#[allow(dead_code)]
 struct ToolBindingCase {
     name: &'static str,
     tools: Vec<ToolDefinition>,
@@ -344,7 +346,7 @@ fn bind_tools_ok() {
             api_base: None,
             extra_headers: None,
         };
-        let openai = OpenAILike::new(&config, "gpt-4").unwrap();
+        let _openai = OpenAILike::new(&config, "gpt-4").unwrap();
 
         // 验证 chat 方法可以接受工具列表
         // 注意：由于 bind_tools 已被移除，现在工具直接通过 chat 方法参数传递

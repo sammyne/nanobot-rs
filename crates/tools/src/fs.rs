@@ -270,9 +270,9 @@ impl Tool for EditFileTool {
         match matches.len() {
             0 => {
                 // 无匹配，返回错误和上下文
-                Err(ToolError::execution(format!(
-                    "未找到匹配的文本。请确保 old_text 与文件内容完全匹配。"
-                )))
+                Err(ToolError::execution(
+                    "未找到匹配的文本。请确保 old_text 与文件内容完全匹配。".to_string(),
+                ))
             }
             1 => {
                 // 唯一匹配，执行替换

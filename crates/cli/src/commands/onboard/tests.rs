@@ -6,5 +6,4 @@ use super::*;
 fn onboard_cmd_default() {
     let _cmd = OnboardCmd {};
     // 验证 OnboardCmd 可以被创建
-    assert!(true);
 }
