@@ -3,18 +3,18 @@
 use std::time::Duration;
 
 use anyhow::Result;
+use async_openai::Client;
 use async_openai::config::OpenAIConfig;
 use async_openai::types::{
     ChatCompletionMessageToolCall, ChatCompletionRequestAssistantMessageArgs, ChatCompletionRequestMessage,
     ChatCompletionRequestSystemMessageArgs, ChatCompletionRequestToolMessageArgs, ChatCompletionRequestUserMessageArgs,
     ChatCompletionTool, ChatCompletionToolType, CreateChatCompletionRequestArgs, FunctionCall, FunctionObject,
 };
-use async_openai::Client;
 use nanobot_config::{Config as NanobotConfig, ProviderConfig};
 use nanobot_tools::ToolDefinition;
 use tracing::{debug, info};
 
-use crate::{Message, Provider, ProviderError};
+use crate::{Message, Provider, ProviderError, ToolCall};
 
 /// OpenAI 提供者
 pub struct OpenAILike {
@@ -65,60 +65,44 @@ impl OpenAILike {
         let model = &config.agents.defaults.model;
         Self::new(&provider_config, model)
     }
+}
 
-    /// 转换消息为 OpenAI 格式
-    fn convert_messages(&self, messages: &[Message]) -> Result<Vec<ChatCompletionRequestMessage>> {
-        let mut result = Vec::new();
+/// 将内部 Message 类型转换为 OpenAI 的请求消息格式
+impl TryFrom<&Message> for ChatCompletionRequestMessage {
+    type Error = anyhow::Error;
 
-        for msg in messages {
-            let chat_msg = match msg {
-                Message::System { content } => ChatCompletionRequestMessage::System(
-                    ChatCompletionRequestSystemMessageArgs::default()
-                        .content(content.as_str())
-                        .build()?,
-                ),
-                Message::User { content } => ChatCompletionRequestMessage::User(
-                    ChatCompletionRequestUserMessageArgs::default()
-                        .content(content.as_str())
-                        .build()?,
-                ),
-                Message::Assistant { content, tool_calls } => {
-                    let mut assistant_msg = ChatCompletionRequestAssistantMessageArgs::default()
-                        .content(content.as_str())
-                        .build()?;
+    fn try_from(msg: &Message) -> Result<Self, Self::Error> {
+        let chat_msg = match msg {
+            Message::System { content } => ChatCompletionRequestMessage::System(
+                ChatCompletionRequestSystemMessageArgs::default()
+                    .content(content.as_str())
+                    .build()?,
+            ),
+            Message::User { content } => ChatCompletionRequestMessage::User(
+                ChatCompletionRequestUserMessageArgs::default()
+                    .content(content.as_str())
+                    .build()?,
+            ),
+            Message::Assistant { content, tool_calls } => {
+                let mut assistant_msg = ChatCompletionRequestAssistantMessageArgs::default()
+                    .content(content.as_str())
+                    .build()?;
 
-                    // 如果有工具调用，添加到消息中
-                    if !tool_calls.is_empty() {
-                        let openai_tool_calls: Vec<ChatCompletionMessageToolCall> = tool_calls
-                            .iter()
-                            .map(|tc| {
-                                let arguments = tc.parse_arguments().unwrap_or_default();
-                                ChatCompletionMessageToolCall {
-                                    id: tc.id.clone(),
-                                    r#type: ChatCompletionToolType::Function,
-                                    function: FunctionCall {
-                                        name: tc.name.clone(),
-                                        arguments: serde_json::to_string(&arguments).unwrap_or_default(),
-                                    },
-                                }
-                            })
-                            .collect();
-                        assistant_msg.tool_calls = Some(openai_tool_calls);
-                    }
-
-                    ChatCompletionRequestMessage::Assistant(assistant_msg)
+                // 如果有工具调用，添加到消息中
+                if !tool_calls.is_empty() {
+                    assistant_msg.tool_calls = Some(tool_calls.iter().map(Into::into).collect());
                 }
-                Message::Tool { tool_call_id, content } => ChatCompletionRequestMessage::Tool(
-                    ChatCompletionRequestToolMessageArgs::default()
-                        .content(content.as_str())
-                        .tool_call_id(tool_call_id)
-                        .build()?,
-                ),
-            };
-            result.push(chat_msg);
-        }
 
-        Ok(result)
+                ChatCompletionRequestMessage::Assistant(assistant_msg)
+            }
+            Message::Tool { tool_call_id, content } => ChatCompletionRequestMessage::Tool(
+                ChatCompletionRequestToolMessageArgs::default()
+                    .content(content.as_str())
+                    .tool_call_id(tool_call_id)
+                    .build()?,
+            ),
+        };
+        Ok(chat_msg)
     }
 }
 
@@ -141,7 +125,8 @@ impl Provider for OpenAILike {
         );
 
         // 转换消息格式
-        let chat_messages = self.convert_messages(messages)?;
+        let chat_messages: Vec<ChatCompletionRequestMessage> =
+            messages.iter().map(TryInto::try_into).collect::<Result<_>>()?;
 
         // 构建请求（带工具支持）
         let request = if !chat_tools.is_empty() {
@@ -163,38 +148,30 @@ impl Provider for OpenAILike {
             .map_err(|_| ProviderError::Timeout)?
             .map_err(|e| ProviderError::Api(e.to_string()))?;
 
-        // 获取第一个选择
+        // 消耗 choices，取出第一个 ChatChoice，避免后续拷贝
         let choice = response
             .choices
-            .first()
+            .into_iter()
+            .next()
             .ok_or_else(|| ProviderError::Api("响应中没有选择".to_string()))?;
 
-        // 提取回复内容
-        let content = choice.message.content.clone().unwrap_or_default();
+        // 提取回复内容（转移所有权，避免 clone）
+        let content = choice.message.content.unwrap_or_default();
 
         // 检查是否有工具调用
-        if let Some(tool_calls) = &choice.message.tool_calls {
-            if !tool_calls.is_empty() {
-                let converted_tool_calls: Vec<ToolCall> = tool_calls
-                    .iter()
-                    .map(|tc| {
-                        ToolCall::new(
-                            tc.id.clone(),
-                            tc.function.name.clone(),
-                            serde_json::from_str(&tc.function.arguments).unwrap_or_default(),
-                        )
-                    })
-                    .collect();
+        if let Some(tool_calls) = choice.message.tool_calls
+            && !tool_calls.is_empty()
+        {
+            let converted_tool_calls: Vec<ToolCall> = tool_calls.into_iter().map(Into::into).collect();
 
-                info!(
-                    "收到 LLM 响应(带工具调用): {} 个工具调用, 内容长度: {}",
-                    converted_tool_calls.len(),
-                    content.len()
-                );
+            info!(
+                "收到 LLM 响应(带工具调用): {} 个工具调用, 内容长度: {}",
+                converted_tool_calls.len(),
+                content.len()
+            );
 
-                // 构造包含工具调用的响应
-                return Ok(Message::assistant_with_tools(content, converted_tool_calls));
-            }
+            // 构造包含工具调用的响应
+            return Ok(Message::assistant_with_tools(content, converted_tool_calls));
         }
 
         info!("收到 LLM 响应, 长度: {}", content.len());
@@ -222,3 +199,29 @@ impl Provider for OpenAILike {
 
 #[cfg(test)]
 mod tests;
+
+/// 将 OpenAI 的工具调用格式转换为内部 ToolCall 类型
+impl From<ChatCompletionMessageToolCall> for ToolCall {
+    fn from(tc: ChatCompletionMessageToolCall) -> Self {
+        Self::new(
+            tc.id,
+            tc.function.name,
+            serde_json::from_str(&tc.function.arguments).unwrap_or_default(),
+        )
+    }
+}
+
+/// 将内部 ToolCall 类型转换为 OpenAI 的工具调用格式
+impl From<&ToolCall> for ChatCompletionMessageToolCall {
+    fn from(tc: &ToolCall) -> Self {
+        let arguments = tc.parse_arguments().unwrap_or_default();
+        Self {
+            id: tc.id.clone(),
+            r#type: ChatCompletionToolType::Function,
+            function: FunctionCall {
+                name: tc.name.clone(),
+                arguments: serde_json::to_string(&arguments).unwrap_or_default(),
+            },
+        }
+    }
+}
