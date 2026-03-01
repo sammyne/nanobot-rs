@@ -2,12 +2,15 @@
 //!
 //! 负责加载、保存和验证 nanobot 的配置文件。
 
-use anyhow::Result;
-use serde::{Deserialize, Serialize};
 use std::fs;
-use std::io::{self, Write};
+use std::io::{
+    Write, {self},
+};
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
+
+use anyhow::Result;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::{debug, info};
 
@@ -54,11 +57,7 @@ pub struct ProviderConfig {
     pub api_base: Option<String>,
 
     /// 自定义请求头（例如 AiHubMix 的 APP-Code）
-    #[serde(
-        rename = "extraHeaders",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(rename = "extraHeaders", default, skip_serializing_if = "Option::is_none")]
     pub extra_headers: Option<std::collections::HashMap<String, String>>,
 }
 
@@ -179,9 +178,7 @@ impl Config {
     /// 创建新配置
     pub fn new(provider: ProviderConfig) -> Self {
         Self {
-            providers: ProvidersSection {
-                custom: Some(provider),
-            },
+            providers: ProvidersSection { custom: Some(provider) },
             agents: AgentsSection::default(),
         }
     }
@@ -197,15 +194,13 @@ impl Config {
 
     /// 获取配置文件路径
     pub fn config_path() -> Result<PathBuf, ConfigError> {
-        let home = dirs::home_dir()
-            .ok_or_else(|| ConfigError::NotFound("无法获取用户主目录".to_string()))?;
+        let home = dirs::home_dir().ok_or_else(|| ConfigError::NotFound("无法获取用户主目录".to_string()))?;
         Ok(home.join(CONFIG_DIR_NAME).join(CONFIG_FILE_NAME))
     }
 
     /// 获取配置目录路径
     pub fn config_dir() -> Result<PathBuf, ConfigError> {
-        let home = dirs::home_dir()
-            .ok_or_else(|| ConfigError::NotFound("无法获取用户主目录".to_string()))?;
+        let home = dirs::home_dir().ok_or_else(|| ConfigError::NotFound("无法获取用户主目录".to_string()))?;
         Ok(home.join(CONFIG_DIR_NAME))
     }
 
@@ -222,8 +217,8 @@ impl Config {
         debug!("从 {:?} 加载配置", path);
 
         let content = fs::read_to_string(&path)?;
-        let config: Config = serde_json::from_str(&content)
-            .map_err(|e| ConfigError::Parse(format!("配置文件格式错误: {}", e)))?;
+        let config: Config =
+            serde_json::from_str(&content).map_err(|e| ConfigError::Parse(format!("配置文件格式错误: {}", e)))?;
 
         config.validate()?;
         info!("配置加载成功");
@@ -304,9 +299,7 @@ impl Config {
             // api_key 可以是 None（某些 OAuth 提供者不需要）
             // 如果不是空字符串，验证长度
             if !custom.api_key.is_empty() && custom.api_key.len() < 3 {
-                return Err(ConfigError::Validation(
-                    "api_key 长度不能少于 3 个字符".to_string(),
-                ));
+                return Err(ConfigError::Validation("api_key 长度不能少于 3 个字符".to_string()));
             }
         }
 
@@ -316,12 +309,7 @@ impl Config {
 
     /// 脱敏的 API Key（用于日志显示）
     pub fn masked_api_key(&self) -> String {
-        let key = self
-            .providers
-            .custom
-            .as_ref()
-            .map(|c| c.api_key.as_str())
-            .unwrap_or("");
+        let key = self.providers.custom.as_ref().map(|c| c.api_key.as_str()).unwrap_or("");
 
         if key.len() <= 8 {
             return "*".repeat(key.len());

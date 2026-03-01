@@ -2,9 +2,10 @@
 //!
 //! 极简复现 HKUDS/nanobot 的 onboard 和 agent 命令
 
+use std::process::ExitCode;
+
 use clap::{Parser, Subcommand};
 use nanobot_cli::{AgentCmd, OnboardCmd, init_logging};
-use std::process::ExitCode;
 
 /// Nanobot - AI Agent 命令行工具
 #[derive(Parser, Debug)]

@@ -1,0 +1,10 @@
+# Rust 格式化配置
+
+# 行宽设置为 120
+max_width = 120
+
+# 导入分组：标准库、第三方库、本 crate 分组隔开
+group_imports = "StdExternalCrate"
+
+# 最后一级必须嵌套（如 use std::collections::{HashMap, HashSet};）
+imports_granularity = "Module"

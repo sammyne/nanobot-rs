@@ -90,10 +90,7 @@ impl Message {
     }
 
     /// 创建带工具调用的助手消息
-    pub fn assistant_with_tools(
-        content: impl Into<String>,
-        tool_calls: Vec<ToolCall>,
-    ) -> Self {
+    pub fn assistant_with_tools(content: impl Into<String>, tool_calls: Vec<ToolCall>) -> Self {
         Self::Assistant {
             content: content.into(),
             tool_calls,
@@ -136,7 +133,7 @@ impl Message {
     }
 
     /// 获取工具调用列表
-    /// 
+    ///
     /// 对于非 Assistant 消息返回空切片
     pub fn tool_calls(&self) -> &[ToolCall] {
         match self {

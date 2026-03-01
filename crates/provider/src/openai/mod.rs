@@ -1,22 +1,20 @@
 //! OpenAI 提供者实现
 
-use crate::{Message, Provider, ProviderError};
+use std::time::Duration;
+
 use anyhow::Result;
-use async_openai::{
-    Client,
-    config::OpenAIConfig,
-    types::{
-        ChatCompletionMessageToolCall, ChatCompletionRequestAssistantMessageArgs,
-        ChatCompletionRequestMessage, ChatCompletionRequestSystemMessageArgs,
-        ChatCompletionRequestToolMessageArgs, ChatCompletionRequestUserMessageArgs,
-        ChatCompletionTool, ChatCompletionToolType, CreateChatCompletionRequestArgs,
-        FunctionCall, FunctionObject,
-    },
+use async_openai::config::OpenAIConfig;
+use async_openai::types::{
+    ChatCompletionMessageToolCall, ChatCompletionRequestAssistantMessageArgs, ChatCompletionRequestMessage,
+    ChatCompletionRequestSystemMessageArgs, ChatCompletionRequestToolMessageArgs, ChatCompletionRequestUserMessageArgs,
+    ChatCompletionTool, ChatCompletionToolType, CreateChatCompletionRequestArgs, FunctionCall, FunctionObject,
 };
+use async_openai::Client;
 use nanobot_config::{Config as NanobotConfig, ProviderConfig};
 use nanobot_tools::ToolDefinition;
-use std::time::Duration;
 use tracing::{debug, info};
+
+use crate::{Message, Provider, ProviderError};
 
 /// OpenAI 提供者
 pub struct OpenAILike {
@@ -41,15 +39,9 @@ impl OpenAILike {
 
     /// 创建新的 OpenAI 提供者，指定超时时间
     pub fn new_with_timeout(config: &ProviderConfig, model: &str, timeout: u64) -> Result<Self> {
-        let api_base = config
-            .api_base
-            .as_deref()
-            .unwrap_or("https://api.openai.com/v1");
+        let api_base = config.api_base.as_deref().unwrap_or("https://api.openai.com/v1");
 
-        info!(
-            "初始化 OpenAI 提供者: model={}, base_url={}",
-            model, api_base
-        );
+        info!("初始化 OpenAI 提供者: model={}, base_url={}", model, api_base);
 
         // 创建自定义配置
         let openai_config = OpenAIConfig::new()
@@ -116,14 +108,12 @@ impl OpenAILike {
 
                     ChatCompletionRequestMessage::Assistant(assistant_msg)
                 }
-                Message::Tool { tool_call_id, content } => {
-                    ChatCompletionRequestMessage::Tool(
-                        ChatCompletionRequestToolMessageArgs::default()
-                            .content(content.as_str())
-                            .tool_call_id(tool_call_id)
-                            .build()?,
-                    )
-                }
+                Message::Tool { tool_call_id, content } => ChatCompletionRequestMessage::Tool(
+                    ChatCompletionRequestToolMessageArgs::default()
+                        .content(content.as_str())
+                        .tool_call_id(tool_call_id)
+                        .build()?,
+                ),
             };
             result.push(chat_msg);
         }
@@ -168,13 +158,10 @@ impl Provider for OpenAILike {
         };
 
         // 发送请求（带超时）
-        let response = tokio::time::timeout(
-            Duration::from_secs(self.timeout),
-            self.client.chat().create(request),
-        )
-        .await
-        .map_err(|_| ProviderError::Timeout)?
-        .map_err(|e| ProviderError::Api(e.to_string()))?;
+        let response = tokio::time::timeout(Duration::from_secs(self.timeout), self.client.chat().create(request))
+            .await
+            .map_err(|_| ProviderError::Timeout)?
+            .map_err(|e| ProviderError::Api(e.to_string()))?;
 
         // 获取第一个选择
         let choice = response

@@ -2,12 +2,13 @@
 //!
 //! 测试工具功能，使用临时目录进行文件系统测试。
 
+use serde_json::json;
+use tempfile::TempDir;
+
 use crate::core::Tool;
 use crate::fs::{EditFileTool, ListDirTool, ReadFileTool, WriteFileTool};
 use crate::registry::ToolRegistry;
 use crate::shell::ShellTool;
-use serde_json::json;
-use tempfile::TempDir;
 
 /// 准备临时工作环境
 fn setup() -> TempDir {
@@ -81,13 +82,9 @@ async fn read_file_success() {
 
     // 创建测试文件
     let test_path = temp_dir.path().join("test.txt");
-    tokio::fs::write(&test_path, test_content)
-        .await
-        .unwrap();
+    tokio::fs::write(&test_path, test_content).await.unwrap();
 
-    let result = tool
-        .execute(json!({"path": "test.txt"}))
-        .await;
+    let result = tool.execute(json!({"path": "test.txt"})).await;
 
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), test_content);
@@ -99,9 +96,7 @@ async fn read_file_not_found() {
     let temp_dir = setup();
     let tool = ReadFileTool::new(temp_dir.path().to_str().unwrap(), None::<&str>);
 
-    let result = tool
-        .execute(json!({"path": "nonexistent.txt"}))
-        .await;
+    let result = tool.execute(json!({"path": "nonexistent.txt"})).await;
 
     assert!(result.is_err());
 }
@@ -113,9 +108,7 @@ async fn read_file_is_directory() {
     let tool = ReadFileTool::new(temp_dir.path().to_str().unwrap(), None::<&str>);
 
     // 创建一个目录
-    tokio::fs::create_dir(temp_dir.path().join("subdir"))
-        .await
-        .unwrap();
+    tokio::fs::create_dir(temp_dir.path().join("subdir")).await.unwrap();
 
     let result = tool.execute(json!({"path": "subdir"})).await;
 
@@ -133,12 +126,10 @@ async fn write_file_success() {
     let content = "Test content for writing.";
 
     let result = tool
-        .execute(
-            json!({
-                "path": "output.txt",
-                "content": content
-            }),
-        )
+        .execute(json!({
+            "path": "output.txt",
+            "content": content
+        }))
         .await;
 
     assert!(result.is_ok());
@@ -157,12 +148,10 @@ async fn write_file_create_parent_dirs() {
     let tool = WriteFileTool::new(temp_dir.path().to_str().unwrap(), None::<&str>);
 
     let result = tool
-        .execute(
-            json!({
-                "path": "deep/nested/path/file.txt",
-                "content": "nested content"
-            }),
-        )
+        .execute(json!({
+            "path": "deep/nested/path/file.txt",
+            "content": "nested content"
+        }))
         .await;
 
     assert!(result.is_ok());
@@ -185,13 +174,11 @@ async fn edit_file_success() {
         .unwrap();
 
     let result = tool
-        .execute(
-            json!({
-                "path": "edit.txt",
-                "old_text": "line2",
-                "new_text": "modified_line2"
-            }),
-        )
+        .execute(json!({
+            "path": "edit.txt",
+            "old_text": "line2",
+            "new_text": "modified_line2"
+        }))
         .await;
 
     assert!(result.is_ok());
@@ -213,13 +200,11 @@ async fn edit_file_no_match() {
         .unwrap();
 
     let result = tool
-        .execute(
-            json!({
-                "path": "edit.txt",
-                "old_text": "nonexistent",
-                "new_text": "replacement"
-            }),
-        )
+        .execute(json!({
+            "path": "edit.txt",
+            "old_text": "nonexistent",
+            "new_text": "replacement"
+        }))
         .await;
 
     assert!(result.is_err());
@@ -237,13 +222,11 @@ async fn edit_file_multiple_matches() {
         .unwrap();
 
     let result = tool
-        .execute(
-            json!({
-                "path": "edit.txt",
-                "old_text": "abc",
-                "new_text": "xyz"
-            }),
-        )
+        .execute(json!({
+            "path": "edit.txt",
+            "old_text": "abc",
+            "new_text": "xyz"
+        }))
         .await;
 
     assert!(result.is_err());
@@ -259,12 +242,8 @@ async fn list_dir_success() {
     let tool = ListDirTool::new(temp_dir.path().to_str().unwrap(), None::<&str>);
 
     // 创建测试文件和目录
-    tokio::fs::write(temp_dir.path().join("file1.txt"), "")
-        .await
-        .unwrap();
-    tokio::fs::create_dir(temp_dir.path().join("subdir"))
-        .await
-        .unwrap();
+    tokio::fs::write(temp_dir.path().join("file1.txt"), "").await.unwrap();
+    tokio::fs::create_dir(temp_dir.path().join("subdir")).await.unwrap();
 
     let result = tool.execute(json!({"path": "."})).await;
 
@@ -293,9 +272,7 @@ async fn shell_echo_success() {
     let temp_dir = setup();
     let tool = ShellTool::new(temp_dir.path().to_str().unwrap());
 
-    let result = tool
-        .execute(json!({"command": "echo hello"}))
-        .await;
+    let result = tool.execute(json!({"command": "echo hello"})).await;
 
     assert!(result.is_ok());
     let output = result.unwrap();
@@ -308,9 +285,7 @@ async fn shell_dangerous_command_blocked() {
     let temp_dir = setup();
     let tool = ShellTool::new(temp_dir.path().to_str().unwrap());
 
-    let result = tool
-        .execute(json!({"command": "rm -rf /"}))
-        .await;
+    let result = tool.execute(json!({"command": "rm -rf /"})).await;
 
     assert!(result.is_err());
     assert!(result.unwrap_err().to_string().contains("拒绝"));
@@ -323,12 +298,10 @@ async fn shell_timeout() {
     let tool = ShellTool::new(temp_dir.path().to_str().unwrap()).with_timeout(1);
 
     let result = tool
-        .execute(
-            json!({
-                "command": "sleep 10",
-                "timeout_ms": 100
-            }),
-        )
+        .execute(json!({
+            "command": "sleep 10",
+            "timeout_ms": 100
+        }))
         .await;
 
     assert!(result.is_err());

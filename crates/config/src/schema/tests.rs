@@ -196,10 +196,7 @@ fn load_config_with_all_fields_present() {
     let config: Config = serde_json::from_str(full_json).unwrap();
 
     // 验证使用的是提供的值而非默认值
-    assert_eq!(
-        config.providers.custom.as_ref().unwrap().api_key,
-        "sk-custom-key"
-    );
+    assert_eq!(config.providers.custom.as_ref().unwrap().api_key, "sk-custom-key");
     assert_eq!(
         config.providers.custom.as_ref().unwrap().api_base,
         Some("https://custom.api.com/v1".to_string())

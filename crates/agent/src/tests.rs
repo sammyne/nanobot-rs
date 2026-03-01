@@ -2,11 +2,12 @@
 //!
 //! 按照表驱动测试规范编写的单元测试
 
-use super::*;
 use async_trait::async_trait;
 use nanobot_config::AgentDefaults;
 use nanobot_provider::{Message, Provider};
 use nanobot_tools::ToolDefinition;
+
+use super::*;
 
 /// Mock Provider 用于测试
 struct MockProvider {
@@ -84,11 +85,7 @@ async fn process_direct_returns_expected_response() {
             .await
             .unwrap_or_else(|e| panic!("case[{}]: process_direct failed: {}", case.name, e));
 
-        assert_eq!(
-            result, case.expected_response,
-            "case[{}]: response mismatch",
-            case.name
-        );
+        assert_eq!(result, case.expected_response, "case[{}]: response mismatch", case.name);
     }
 }
 
@@ -121,10 +118,7 @@ fn config_returns_correct_reference() {
         returned_config.max_tool_iterations, config.max_tool_iterations,
         "max_tool_iterations should match"
     );
-    assert_eq!(
-        returned_config.max_tokens, config.max_tokens,
-        "max_tokens should match"
-    );
+    assert_eq!(returned_config.max_tokens, config.max_tokens, "max_tokens should match");
     assert_eq!(
         returned_config.temperature, config.temperature,
         "temperature should match"
@@ -163,19 +157,13 @@ fn agent_loop_uses_custom_config_values() {
     let test_vector = [
         DefaultsCase {
             name: "自定义配置 1",
-            agent: AgentLoop::new_direct(
-                MockProvider::new("test"),
-                custom_defaults1,
-            ),
+            agent: AgentLoop::new_direct(MockProvider::new("test"), custom_defaults1),
             expect_model: "custom-model-1",
             expect_max_tokens: 2048,
         },
         DefaultsCase {
             name: "自定义配置 2",
-            agent: AgentLoop::new_direct(
-                MockProvider::new("test"),
-                custom_defaults2,
-            ),
+            agent: AgentLoop::new_direct(MockProvider::new("test"), custom_defaults2),
             expect_model: "custom-model-2",
             expect_max_tokens: 4096,
         },
@@ -183,11 +171,7 @@ fn agent_loop_uses_custom_config_values() {
 
     for case in test_vector {
         let cfg = case.agent.config();
-        assert_eq!(
-            cfg.model, case.expect_model,
-            "case[{}]: model mismatch",
-            case.name
-        );
+        assert_eq!(cfg.model, case.expect_model, "case[{}]: model mismatch", case.name);
         assert_eq!(
             cfg.max_tokens, case.expect_max_tokens,
             "case[{}]: max_tokens mismatch",
@@ -197,7 +181,9 @@ fn agent_loop_uses_custom_config_values() {
 }
 
 /// 从 bus 模块引入测试类型
-use crate::bus::{InboundMessage, OutboundMessage};
+use crate::bus::InboundMessage;
+/// 从 bus 模块引入测试类型
+use crate::bus::OutboundMessage;
 
 /// 入站消息测试用例结构
 struct InboundCase {
@@ -243,11 +229,7 @@ fn inbound_message_from_session_id_parsing() {
         match (result, case.expect) {
             (Some((ch, sender, id)), Some((exp_ch, exp_sender, exp_id))) => {
                 assert_eq!(ch, exp_ch, "case[{}]: channel mismatch", case.name);
-                assert_eq!(
-                    sender, exp_sender,
-                    "case[{}]: sender_id mismatch",
-                    case.name
-                );
+                assert_eq!(sender, exp_sender, "case[{}]: sender_id mismatch", case.name);
                 assert_eq!(id, exp_id, "case[{}]: chat_id mismatch", case.name);
             }
             (None, None) => {}
@@ -317,11 +299,7 @@ fn outbound_message_progress_construct() {
             "case[{}]: is_tool_hint() mismatch",
             case.name
         );
-        assert_eq!(
-            msg.content, case.content,
-            "case[{}]: content mismatch",
-            case.name
-        );
+        assert_eq!(msg.content, case.content, "case[{}]: content mismatch", case.name);
     }
 }
 

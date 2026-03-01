@@ -1,11 +1,15 @@
 //! Agent 命令 - 启动 AI Agent 交互式对话
 
+use std::io::{
+    Write, {self},
+};
+
 use anyhow::Result;
 use clap::Args;
-use nanobot_agent::{AgentLoop, bus::{InboundMessage, OutboundMessage}};
+use nanobot_agent::AgentLoop;
+use nanobot_agent::bus::{InboundMessage, OutboundMessage};
 use nanobot_config::Config;
 use nanobot_provider::OpenAILike;
-use std::io::{self, Write};
 use tracing::{debug, error, info};
 /// 退出命令集合
 const EXIT_COMMANDS: &[&str] = &["exit", "quit", "/exit", "/quit", ":q"];
@@ -28,9 +32,8 @@ impl AgentCmd {
         info!("启动 agent 命令");
 
         // 加载配置
-        let config = Config::load().map_err(|e| {
-            anyhow::anyhow!("加载配置失败: {}。请先运行 'nanobot onboard' 进行配置。", e)
-        })?;
+        let config = Config::load()
+            .map_err(|e| anyhow::anyhow!("加载配置失败: {}。请先运行 'nanobot onboard' 进行配置。", e))?;
 
         let provider_config = config.provider();
 
@@ -56,12 +59,7 @@ impl AgentCmd {
     }
 
     /// 单次消息模式
-    async fn run_once(
-        &self,
-        provider: OpenAILike,
-        config: &Config,
-        input: &str,
-    ) -> Result<()> {
+    async fn run_once(&self, provider: OpenAILike, config: &Config, input: &str) -> Result<()> {
         debug!("单次消息模式");
 
         // 创建 AgentLoop 实例（简单模式，直接调用）
@@ -100,12 +98,7 @@ impl AgentCmd {
         let (outbound_tx, mut outbound_rx) = tokio::sync::mpsc::channel::<OutboundMessage>(100);
 
         // 创建 AgentLoop（传递通道）
-        let agent_loop = AgentLoop::new(
-            provider,
-            config.agents.defaults.clone(),
-            inbound_rx,
-            outbound_tx,
-        );
+        let agent_loop = AgentLoop::new(provider, config.agents.defaults.clone(), inbound_rx, outbound_tx);
 
         // 打印欢迎信息
         println!("🤖 Nanobot Agent - 交互式 AI 助手");

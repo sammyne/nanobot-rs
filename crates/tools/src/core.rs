@@ -26,10 +26,7 @@ pub enum ToolError {
 
     /// 权限拒绝
     #[error("权限被拒绝: 路径 {path} 超出允许范围 {allowed:?}")]
-    PermissionDenied {
-        path: String,
-        allowed: Option<String>,
-    },
+    PermissionDenied { path: String, allowed: Option<String> },
 
     /// 超时
     #[error("工具执行超时: 限制 {limit}s, 实际执行 {elapsed:?}")]
@@ -132,8 +129,5 @@ pub fn bool_param(params: &serde_json::Value, name: &str) -> bool {
 
 /// Helper: 获取数值参数
 pub fn u64_param(params: &serde_json::Value, name: &str, default: u64) -> u64 {
-    params
-        .get(name)
-        .and_then(|v| v.as_u64())
-        .unwrap_or(default)
+    params.get(name).and_then(|v| v.as_u64()).unwrap_or(default)
 }

@@ -2,21 +2,19 @@
 //!
 //! 提供 read_file, write_file, edit_file, list_dir 等文件操作。
 
-use crate::core::{bool_param, require_param, Tool, ToolError, ToolResult};
+use std::path::{Path, PathBuf};
+
 use async_trait::async_trait;
 use schemars::schema::SchemaObject;
-use std::path::{Path, PathBuf};
 use tokio::fs;
 use tracing::{debug, info};
+
+use crate::core::{Tool, ToolError, ToolResult, bool_param, require_param};
 
 /// 解析并验证路径
 ///
 /// 将路径解析为绝对路径，并检查是否在允许目录内
-fn resolve_path(
-    path: &str,
-    workspace: &str,
-    allowed_dir: Option<&str>,
-) -> Result<PathBuf, ToolError> {
+fn resolve_path(path: &str, workspace: &str, allowed_dir: Option<&str>) -> Result<PathBuf, ToolError> {
     let path_obj = Path::new(path);
 
     // 解析为绝对路径
@@ -27,9 +25,7 @@ fn resolve_path(
     };
 
     // 规范化路径
-    let canonical = absolute
-        .canonicalize()
-        .unwrap_or_else(|_| absolute.clone());
+    let canonical = absolute.canonicalize().unwrap_or_else(|_| absolute.clone());
 
     // 检查允许目录限制
     if let Some(allowed) = allowed_dir {

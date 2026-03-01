@@ -2,15 +2,17 @@
 //!
 //! 提供安全的 Shell 命令执行功能。
 
-use crate::core::{optional_param, require_param, u64_param, Tool, ToolError, ToolResult};
-use async_trait::async_trait;
-use schemars::schema::SchemaObject;
 use std::path::PathBuf;
 use std::process::Stdio;
 use std::time::Duration;
+
+use async_trait::async_trait;
+use schemars::schema::SchemaObject;
 use tokio::process::Command;
 use tokio::time::timeout;
 use tracing::{debug, info};
+
+use crate::core::{Tool, ToolError, ToolResult, optional_param, require_param, u64_param};
 
 /// Shell 执行结果
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
@@ -121,9 +123,7 @@ impl Tool for ShellTool {
         Self::check_safety(&command)?;
 
         // 解析工作目录
-        let working_dir = cwd.map(PathBuf::from).unwrap_or_else(|| {
-            PathBuf::from(&self.workspace)
-        });
+        let working_dir = cwd.map(PathBuf::from).unwrap_or_else(|| PathBuf::from(&self.workspace));
 
         // 执行命令
         let child = Command::new("sh")
@@ -135,16 +135,13 @@ impl Tool for ShellTool {
             .spawn()
             .map_err(|e| ToolError::execution(format!("命令启动失败: {}", e)))?;
 
-        let output = timeout(
-            Duration::from_millis(timeout_ms),
-            child.wait_with_output(),
-        )
-        .await
-        .map_err(|_| ToolError::Timeout {
-            limit: timeout_ms / 1000,
-            elapsed: Duration::from_millis(timeout_ms),
-        })?
-        .map_err(|e| ToolError::execution(format!("命令等待失败: {}", e)))?;
+        let output = timeout(Duration::from_millis(timeout_ms), child.wait_with_output())
+            .await
+            .map_err(|_| ToolError::Timeout {
+                limit: timeout_ms / 1000,
+                elapsed: Duration::from_millis(timeout_ms),
+            })?
+            .map_err(|e| ToolError::execution(format!("命令等待失败: {}", e)))?;
 
         let stdout = String::from_utf8_lossy(&output.stdout).to_string();
         let stderr = String::from_utf8_lossy(&output.stderr).to_string();
@@ -166,7 +163,6 @@ impl Tool for ShellTool {
             stderr,
         };
 
-        Ok(serde_json::to_string_pretty(&result)
-            .unwrap_or_else(|_| "结果序列化失败".to_string()))
+        Ok(serde_json::to_string_pretty(&result).unwrap_or_else(|_| "结果序列化失败".to_string()))
     }
 }

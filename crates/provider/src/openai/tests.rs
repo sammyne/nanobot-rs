@@ -1,8 +1,9 @@
-use super::*;
-use crate::{ProviderResponse, ToolCall};
 use nanobot_config::ProviderConfig;
 use nanobot_tools::ToolDefinition;
 use serde_json::json;
+
+use super::*;
+use crate::{ProviderResponse, ToolCall};
 
 /// 测试用例结构体：用于消息创建测试
 struct MessageCreationCase {

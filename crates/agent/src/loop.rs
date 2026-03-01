@@ -6,15 +6,17 @@
 //! 3. 调用 LLM
 //! 4. 返回响应（通过出站消息发送端）
 
-use crate::bus::{InboundMessage, OutboundMessage};
+use std::collections::HashMap;
+use std::sync::Arc;
+
 use anyhow::Result;
 use nanobot_config::AgentDefaults;
 use nanobot_provider::{Message, Provider};
 use nanobot_tools::ToolRegistry;
-use std::collections::HashMap;
-use std::sync::Arc;
 use tokio::sync::{RwLock, mpsc};
 use tracing::{debug, error, info, warn};
+
+use crate::bus::{InboundMessage, OutboundMessage};
 
 /// 会话键（channel:chat_id）
 type SessionKey = String;
@@ -102,10 +104,7 @@ impl<P: Provider + 'static> AgentLoop<P> {
     /// # Arguments
     /// * `provider` - LLM 提供者实例
     /// * `config` - Agent 配置
-    pub fn new_direct(
-        provider: P,
-        config: AgentDefaults,
-    ) -> Self {
+    pub fn new_direct(provider: P, config: AgentDefaults) -> Self {
         info!(
             "初始化 AgentLoop (单次模式): model={}, max_tool_iterations={}",
             config.model, config.max_tool_iterations
@@ -170,7 +169,11 @@ impl<P: Provider + 'static> AgentLoop<P> {
 
         let response = self.provider.chat(messages).await?;
 
-        info!("收到 LLM 响应, 角色={}, 内容长度={} 字符", response.role(), response.content().len());
+        info!(
+            "收到 LLM 响应, 角色={}, 内容长度={} 字符",
+            response.role(),
+            response.content().len()
+        );
 
         Ok(response)
     }
@@ -192,8 +195,10 @@ impl<P: Provider + 'static> AgentLoop<P> {
         let mut iteration = 0;
         let mut tools_used: Vec<String> = Vec::new();
 
-        info!("启动 ReAct 循环: max_iterations={}, 可用工具={:?}",
-            max_iterations, self.tool_registry.tool_names()
+        info!(
+            "启动 ReAct 循环: max_iterations={}, 可用工具={:?}",
+            max_iterations,
+            self.tool_registry.tool_names()
         );
 
         while iteration < max_iterations {
@@ -210,14 +215,17 @@ impl<P: Provider + 'static> AgentLoop<P> {
                 let content = response.content().to_string();
 
                 // 记录工具调用
-                let tool_hints: Vec<String> = tool_calls.iter().map(|tc| {
-                    let first_arg = tc.arguments.chars().take(40).collect::<String>();
-                    if tc.arguments.len() > 40 {
-                        format!("{}({}...)", tc.name, first_arg)
-                    } else {
-                        format!("{}({})", tc.name, tc.arguments)
-                    }
-                }).collect();
+                let tool_hints: Vec<String> = tool_calls
+                    .iter()
+                    .map(|tc| {
+                        let first_arg = tc.arguments.chars().take(40).collect::<String>();
+                        if tc.arguments.len() > 40 {
+                            format!("{}({}...)", tc.name, first_arg)
+                        } else {
+                            format!("{}({})", tc.name, tc.arguments)
+                        }
+                    })
+                    .collect();
                 debug!("工具调用: {}", tool_hints.join(", "));
 
                 // 将助手消息（带工具调用）添加到历史
@@ -232,7 +240,8 @@ impl<P: Provider + 'static> AgentLoop<P> {
                     let args = match serde_json::from_str::<serde_json::Value>(&tool_call.arguments) {
                         Ok(v) => v,
                         Err(e) => {
-                            error!("解析工具 {} 参数失败: {}, 参数内容: {}",
+                            error!(
+                                "解析工具 {} 参数失败: {}, 参数内容: {}",
                                 tool_call.name, e, tool_call.arguments
                             );
                             serde_json::Value::String(tool_call.arguments.clone())
@@ -260,8 +269,10 @@ impl<P: Provider + 'static> AgentLoop<P> {
                 // 将助手消息添加到历史
                 messages.push(Message::assistant(&final_content));
 
-                info!("ReAct 循环完成: 迭代次数={}, 最终内容长度={} 字符",
-                    iteration, final_content.len()
+                info!(
+                    "ReAct 循环完成: 迭代次数={}, 最终内容长度={} 字符",
+                    iteration,
+                    final_content.len()
                 );
 
                 return Ok(ReActResult {
@@ -324,7 +335,8 @@ impl<P: Provider + 'static> AgentLoop<P> {
         }
 
         Ok(result.content)
-    }    /// 启动后台消息处理循环
+    }
+    /// 启动后台消息处理循环
     ///
     /// 这是交互式模式的核心方法。从入站通道接收消息，
     /// 处理后发送给出站通道。
@@ -341,10 +353,7 @@ impl<P: Provider + 'static> AgentLoop<P> {
             // 消费入站消息
             match self.inbound_rx.recv().await {
                 Some(msg) => {
-                    debug!(
-                        "收到入站消息: channel={}, chat_id={}",
-                        msg.channel, msg.chat_id
-                    );
+                    debug!("收到入站消息: channel={}, chat_id={}", msg.channel, msg.chat_id);
 
                     // 处理消息
                     if let Err(e) = self.handle_message(msg, &outbound_tx).await {
@@ -364,11 +373,7 @@ impl<P: Provider + 'static> AgentLoop<P> {
     }
 
     /// 处理入站消息并发送响应
-    async fn handle_message(
-        &self,
-        inbound: InboundMessage,
-        outbound_tx: &mpsc::Sender<OutboundMessage>,
-    ) -> Result<()> {
+    async fn handle_message(&self, inbound: InboundMessage, outbound_tx: &mpsc::Sender<OutboundMessage>) -> Result<()> {
         let InboundMessage {
             channel,
             sender_id: _,

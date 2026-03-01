@@ -2,8 +2,9 @@
 //!
 //! 提供异步消息队列，用于在 AgentLoop 和 CLI 之间路由消息。
 
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+
+use serde::{Deserialize, Serialize};
 
 /// 入站消息（用户发送到Agent）
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -39,10 +40,7 @@ impl InboundMessage {
     }
 
     /// 解析session_id为(channel, chat_id)
-    pub fn from_session_id(
-        session_id: &str,
-        content: impl Into<String>,
-    ) -> Option<(String, String, String)> {
+    pub fn from_session_id(session_id: &str, content: impl Into<String>) -> Option<(String, String, String)> {
         let parts: Vec<&str> = session_id.split(':').collect();
         if parts.len() >= 2 {
             let channel = parts[0].to_string();
@@ -71,11 +69,7 @@ pub struct OutboundMessage {
 
 impl OutboundMessage {
     /// 创建新的出站消息
-    pub fn new(
-        channel: impl Into<String>,
-        chat_id: impl Into<String>,
-        content: impl Into<String>,
-    ) -> Self {
+    pub fn new(channel: impl Into<String>, chat_id: impl Into<String>, content: impl Into<String>) -> Self {
         Self {
             channel: channel.into(),
             chat_id: chat_id.into(),
