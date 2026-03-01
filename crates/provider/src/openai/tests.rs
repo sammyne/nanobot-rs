@@ -225,65 +225,149 @@ fn openai_new_with_timeout() {
     assert!(result.is_ok());
 }
 
-// ============ 消息转换测试 ============
+// ============ TryFrom<&Message> for ChatCompletionRequestMessage 测试 ============
 
-#[test]
-fn convert_messages_ok() {
-    let config = ProviderConfig {
-        api_key: "test".to_string(),
-        api_base: None,
-        extra_headers: None,
-    };
-    let openai = OpenAILike::new(&config, "gpt-4").unwrap();
+/// 测试用例结构体：用于 TryFrom<&Message> 转换测试
+struct TryFromCase {
+    name: &'static str,
+    message: Message,
+    expected_role: &'static str,
+}
 
-    let messages = vec![
-        Message::system("你是一个助手"),
-        Message::user("Hello"),
-        Message::assistant("Hi there"),
-    ];
-
-    let result = openai.convert_messages(&messages);
-    assert!(result.is_ok());
-
-    let converted = result.unwrap();
-    assert_eq!(converted.len(), 3);
+/// 辅助函数：提取消息角色
+fn get_message_role(msg: &ChatCompletionRequestMessage) -> &'static str {
+    match msg {
+        ChatCompletionRequestMessage::System(_) => "system",
+        ChatCompletionRequestMessage::User(_) => "user",
+        ChatCompletionRequestMessage::Assistant(_) => "assistant",
+        ChatCompletionRequestMessage::Tool(_) => "tool",
+        _ => "unknown",
+    }
 }
 
 #[test]
-fn convert_messages_empty() {
-    let config = ProviderConfig {
-        api_key: "test".to_string(),
-        api_base: None,
-        extra_headers: None,
-    };
-    let openai = OpenAILike::new(&config, "gpt-4").unwrap();
+fn try_from_message_basic() {
+    let test_vector = vec![
+        TryFromCase {
+            name: "系统消息",
+            message: Message::system("你是一个助手"),
+            expected_role: "system",
+        },
+        TryFromCase {
+            name: "用户消息",
+            message: Message::user("Hello"),
+            expected_role: "user",
+        },
+        TryFromCase {
+            name: "助手消息",
+            message: Message::assistant("Hi there"),
+            expected_role: "assistant",
+        },
+        TryFromCase {
+            name: "工具消息",
+            message: Message::tool("call_1", "工具结果"),
+            expected_role: "tool",
+        },
+    ];
 
+    for case in test_vector {
+        let result: Result<ChatCompletionRequestMessage, _> = (&case.message).try_into();
+        assert!(result.is_ok(), "测试用例 {} 转换失败", case.name);
+
+        let msg = result.unwrap();
+        assert_eq!(
+            get_message_role(&msg),
+            case.expected_role,
+            "测试用例 {} 角色不匹配",
+            case.name
+        );
+    }
+}
+
+/// 测试助手消息带工具调用的转换
+struct TryFromToolCallsCase {
+    name: &'static str,
+    tool_calls: Vec<ToolCall>,
+    expected_tool_call_count: usize,
+}
+
+#[test]
+fn try_from_message_with_tool_calls() {
+    let test_vector = vec![
+        TryFromToolCallsCase {
+            name: "无工具调用",
+            tool_calls: vec![],
+            expected_tool_call_count: 0,
+        },
+        TryFromToolCallsCase {
+            name: "单个工具调用",
+            tool_calls: vec![ToolCall::new("call_1", "search", json!({"query": "rust"}))],
+            expected_tool_call_count: 1,
+        },
+        TryFromToolCallsCase {
+            name: "多个工具调用",
+            tool_calls: vec![
+                ToolCall::new("call_1", "search", json!({"q": "rust"})),
+                ToolCall::new("call_2", "calc", json!({"a": 1})),
+            ],
+            expected_tool_call_count: 2,
+        },
+    ];
+
+    for case in test_vector {
+        let msg = Message::assistant_with_tools("助手回复", case.tool_calls);
+        let result: Result<ChatCompletionRequestMessage, _> = (&msg).try_into();
+        assert!(result.is_ok(), "测试用例 {} 转换失败", case.name);
+
+        let chat_msg = result.unwrap();
+        // 验证是 Assistant 消息
+        assert_eq!(
+            get_message_role(&chat_msg),
+            "assistant",
+            "测试用例 {} 角色不匹配",
+            case.name
+        );
+
+        // 检查工具调用数量
+        if let ChatCompletionRequestMessage::Assistant(assistant) = chat_msg {
+            let tool_calls_len = assistant.tool_calls.map(|tc| tc.len()).unwrap_or(0);
+            assert_eq!(
+                tool_calls_len, case.expected_tool_call_count,
+                "测试用例 {} 工具调用数量不匹配",
+                case.name
+            );
+        } else {
+            panic!("测试用例 {} 期望 Assistant 消息", case.name);
+        }
+    }
+}
+
+#[test]
+fn try_from_message_empty_messages() {
+    // 验证空消息列表的批量转换
     let messages: Vec<Message> = vec![];
-    let result = openai.convert_messages(&messages);
+    let result: Result<Vec<ChatCompletionRequestMessage>> = messages.iter().map(TryInto::try_into).collect();
 
     assert!(result.is_ok());
     assert!(result.unwrap().is_empty());
 }
 
 #[test]
-fn convert_messages_with_tool() {
-    let config = ProviderConfig {
-        api_key: "test".to_string(),
-        api_base: None,
-        extra_headers: None,
-    };
-    let openai = OpenAILike::new(&config, "gpt-4").unwrap();
+fn try_from_message_batch_conversion() {
+    // 验证多消息批量转换
+    let messages = [
+        Message::system("系统提示"),
+        Message::user("用户问题"),
+        Message::assistant("助手回答"),
+        Message::tool("call_1", "工具结果"),
+    ];
 
-    // Tool 消息必须通过 Message::tool 构造，自动包含 tool_call_id
-    let tool_msg = Message::tool("call_1", "结果");
-
-    let messages = vec![tool_msg];
-    let result = openai.convert_messages(&messages);
+    let result: Result<Vec<ChatCompletionRequestMessage>> = messages.iter().map(TryInto::try_into).collect();
 
     assert!(result.is_ok());
-    assert_eq!(result.unwrap().len(), 1);
+    let converted = result.unwrap();
+    assert_eq!(converted.len(), 4);
 }
-
 // ============ 工具绑定测试 ============
 
 /// 测试用例结构体：用于工具绑定测试
