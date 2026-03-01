@@ -901,6 +901,7 @@ name = "nanobot_agent"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "nanobot_config",
  "nanobot_provider",
  "thiserror 2.0.18",

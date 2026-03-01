@@ -2,9 +2,11 @@
 
 use anyhow::Result;
 use clap::Args;
+use nanobot_agent::AgentLoop;
 use nanobot_config::Config;
 use nanobot_provider::{Message, OpenAIProvider, Provider};
 use std::io::{self, BufRead, Write};
+use std::sync::Arc;
 use tracing::{debug, error, info};
 
 /// 退出命令集合
@@ -41,7 +43,7 @@ impl AgentCmd {
         );
 
         // 初始化 LLM Provider
-        let provider = OpenAIProvider::from_config(&config)?;
+        let provider = Arc::new(OpenAIProvider::from_config(&config)?);
         debug!("LLM Provider 初始化成功");
 
         // 初始化对话历史
@@ -52,32 +54,33 @@ impl AgentCmd {
 
         if let Some(msg) = &self.message {
             // 单次消息模式
-            self.run_single_message(&provider, &mut messages, msg).await?;
+            self.run_once(provider.clone(), &config, msg).await?;
         } else {
             // 交互式模式
-            self.run_interactive(&provider, &mut messages, &config.agents.defaults.model).await?;
+            self.run_interactive(provider.clone(), &mut messages, &config.agents.defaults.model).await?;
         }
 
         Ok(())
     }
 
     /// 单次消息模式
-    async fn run_single_message(
+    async fn run_once(
         &self,
-        provider: &OpenAIProvider,
-        messages: &mut Vec<Message>,
+        provider: Arc<dyn Provider>,
+        config: &Config,
         input: &str,
     ) -> Result<()> {
         debug!("单次消息模式");
 
-        messages.push(Message::user(input));
+        // 创建 AgentLoop 实例
+        let agent = AgentLoop::new(provider, config.agents.defaults.clone());
 
-        match provider.chat(messages).await {
+        match agent.process_direct(input).await {
             Ok(response) => {
                 println!("{}", response);
             }
             Err(e) => {
-                error!("LLM 调用失败: {}", e);
+                error!("Agent 处理失败: {}", e);
                 return Err(e);
             }
         }
@@ -88,7 +91,7 @@ impl AgentCmd {
     /// 交互式模式
     async fn run_interactive(
         &self,
-        provider: &OpenAIProvider,
+        provider: Arc<dyn Provider>,
         messages: &mut Vec<Message>,
         model: &str,
     ) -> Result<()> {
