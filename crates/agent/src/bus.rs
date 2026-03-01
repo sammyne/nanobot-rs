@@ -109,9 +109,6 @@ impl OutboundMessage {
 
     /// 检查是否为工具提示
     pub fn is_tool_hint(&self) -> bool {
-        self.metadata
-            .get("_tool_hint")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false)
+        self.metadata.get("_tool_hint").and_then(|v| v.as_bool()).unwrap_or(false)
     }
 }

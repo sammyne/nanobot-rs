@@ -78,7 +78,7 @@ thiserror = "1.0"
 thiserror.workspace = true
 
 # 仅指定 path
-nanobot_config.path = "crates/config"
+nanobot-config.path = "crates/config"
 ```
 
 **多个配置示例（表语法）：**
@@ -110,7 +110,7 @@ optional = true
 # 单一配置（点号语法）
 thiserror = "1.0"
 anyhow = "1.0"
-nanobot_config.path = "crates/config"
+nanobot-config.path = "crates/config"
 
 # 多个配置（表语法）
 [workspace.dependencies.serde]
@@ -138,7 +138,7 @@ clap = "4.0"
 ```toml
 # 单一配置：点号语法
 thiserror.workspace = true
-nanobot_config.path = "crates/config"
+nanobot-config.path = "crates/config"
 
 # 多个配置：表语法
 [workspace.dependencies.tokio]

@@ -1,10 +1,10 @@
 [package]
-name = "nanobot_provider"
+name = "nanobot-provider"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-nanobot_config.workspace = true
+nanobot-config.workspace = true
 
 async-openai = "0.28"
 async-trait = "0.1"

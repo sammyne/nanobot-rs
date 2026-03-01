@@ -7,9 +7,9 @@ resolver = "3"
 anyhow = "1"
 thiserror = "2"
 tracing = "0.1"
-nanobot_config.path = "crates/config"
-nanobot_provider.path = "crates/provider"
-nanobot_agent.path = "crates/agent"
+nanobot-config.path = "crates/config"
+nanobot-provider.path = "crates/provider"
+nanobot-agent.path = "crates/agent"
 [workspace.dependencies.tokio]
 version = "1"
 features = ["rt-multi-thread", "macros", "sync"]

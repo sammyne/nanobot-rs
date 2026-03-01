@@ -897,13 +897,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "nanobot_agent"
+name = "nanobot-agent"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "nanobot_config",
- "nanobot_provider",
+ "nanobot-config",
+ "nanobot-provider",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
@@ -912,23 +912,23 @@ dependencies = [
 ]
 
 [[package]]
-name = "nanobot_cli"
+name = "nanobot-cli"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
  "dialoguer",
  "dirs",
- "nanobot_agent",
- "nanobot_config",
- "nanobot_provider",
+ "nanobot-agent",
+ "nanobot-config",
+ "nanobot-provider",
  "tokio",
  "tracing",
  "tracing-subscriber",
 ]
 
 [[package]]
-name = "nanobot_config"
+name = "nanobot-config"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -940,13 +940,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "nanobot_provider"
+name = "nanobot-provider"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-openai",
  "async-trait",
- "nanobot_config",
+ "nanobot-config",
  "thiserror 2.0.18",
  "tokio",
  "tracing",

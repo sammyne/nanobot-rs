@@ -1,12 +1,12 @@
 [package]
-name = "nanobot_cli"
+name = "nanobot-cli"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-nanobot_config.workspace = true
-nanobot_provider.workspace = true
-nanobot_agent.workspace = true
+nanobot-config.workspace = true
+nanobot-provider.workspace = true
+nanobot-agent.workspace = true
 clap.workspace = true
 tokio.workspace = true
 anyhow.workspace = true
