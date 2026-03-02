@@ -3,10 +3,15 @@
 //! This module contains unit tests for `InboundMessage` and `OutboundMessage`,
 //! including serialization, construction, and metadata handling.
 
+//! Tests for the `bus` module.
+//!
+//! This module contains unit tests for `InboundMessage` and `OutboundMessage`,
+//! including serialization, construction, and metadata handling.
+
 use super::*;
 
 #[tokio::test]
-async fn message_basic() {
+async fn test_message_basic() {
     // Test inbound message
     let (inbound_tx, mut inbound_rx) = tokio::sync::mpsc::channel(1);
     let inbound = InboundMessage::new("cli", "user", "chat1", "Hello");
@@ -26,7 +31,7 @@ async fn message_basic() {
 }
 
 #[tokio::test]
-async fn progress_message() {
+async fn test_progress_message() {
     let progress = OutboundMessage::progress("thinking...", false);
     assert!(progress.is_progress());
     assert!(!progress.is_tool_hint());
@@ -37,7 +42,7 @@ async fn progress_message() {
 }
 
 #[test]
-fn parse_session_id() {
+fn test_parse_session_id() {
     let result = InboundMessage::from_session_id("cli:direct", "hello");
     assert!(result.is_some());
     let (channel, sender_id, chat_id) = result.unwrap();

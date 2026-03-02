@@ -2,6 +2,8 @@
 //!
 //! 按照表驱动测试规范编写的单元测试
 
+use std::path::PathBuf;
+
 use async_trait::async_trait;
 use nanobot_config::AgentDefaults;
 use nanobot_provider::{Message, Provider};
@@ -40,7 +42,7 @@ impl Provider for MockProvider {
 /// 创建测试用 AgentDefaults
 fn test_config() -> AgentDefaults {
     AgentDefaults {
-        workspace: "/tmp/test".to_string(),
+        workspace: PathBuf::from("/tmp/test"),
         model: "test-model".to_string(),
         max_tokens: 1024,
         temperature: 0.5,
@@ -137,7 +139,7 @@ struct DefaultsCase {
 #[test]
 fn agent_loop_uses_custom_config_values() {
     let custom_defaults1 = AgentDefaults {
-        workspace: "/tmp/test1".to_string(),
+        workspace: PathBuf::from("/tmp/test1"),
         model: "custom-model-1".to_string(),
         max_tokens: 2048,
         temperature: 0.7,
@@ -146,7 +148,7 @@ fn agent_loop_uses_custom_config_values() {
     };
 
     let custom_defaults2 = AgentDefaults {
-        workspace: "/tmp/test2".to_string(),
+        workspace: PathBuf::from("/tmp/test2"),
         model: "custom-model-2".to_string(),
         max_tokens: 4096,
         temperature: 0.3,
