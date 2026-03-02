@@ -418,7 +418,7 @@ pub mod hello;
 在 `tests/` 目录中创建文件：
 
 ```rust
-// tests/integration_test.rs
+// tests/integration.rs
 use my_library::process_data;
 
 #[test]
@@ -426,6 +426,8 @@ fn public_api() {
     assert_eq!(process_data("test").unwrap(), "TEST");
 }
 ```
+
+> 集成测试的文件名除去拓展名称后，禁止帯 `_test` 后缀。推荐 `tests/hello.rs`，禁止 `tests/hello_test.rs`。
 
 ### 测试组织最佳实践
 

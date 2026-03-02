@@ -11,6 +11,7 @@ pub use r#loop::AgentLoop;
 // Re-export 依赖 crate 的类型，方便使用
 pub use nanobot_config::AgentDefaults;
 pub use nanobot_provider::{Message, Provider};
+pub use nanobot_session::{Session, SessionManager};
 
 #[cfg(test)]
 mod tests;
