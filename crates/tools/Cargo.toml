@@ -4,22 +4,17 @@ version = "0.1.0"
 edition = "2024"
 authors = ["nanobot contributors"]
 description = "AI Agent tools implementation for file system and shell operations"
-license = "MIT"
-
 [dependencies]
 async-trait.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+tokio = { workspace = true, features = ["rt", "macros", "process", "fs", "time"] }
 tracing.workspace = true
 anyhow.workspace = true
 schemars.workspace = true
 tokio-util.workspace = true
 walkdir.workspace = true
-
-[dependencies.tokio]
-workspace = true
-features = ["rt", "macros", "process", "fs", "time"]
 
 [dev-dependencies]
 tempfile.workspace = true

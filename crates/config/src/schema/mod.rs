@@ -2,17 +2,21 @@
 //!
 //! 负责加载、保存和验证 nanobot 的配置文件。
 
-use std::fs;
 use std::io::{
     Write, {self},
 };
 use std::os::unix::fs::PermissionsExt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
+use std::{env, fs};
 
 use anyhow::Result;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use thiserror::Error;
 use tracing::{debug, info};
+
+/// 用户主目录路径，获取失败时直接 panic
+pub static HOME: LazyLock<PathBuf> = LazyLock::new(|| env::home_dir().expect("无法获取用户主目录"));
 
 /// 配置相关错误
 #[derive(Error, Debug)]
@@ -89,8 +93,12 @@ pub struct AgentsSection {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentDefaults {
     /// 工作目录路径
-    #[serde(rename = "workspace", default = "default_workspace")]
-    pub workspace: String,
+    #[serde(
+        rename = "workspace",
+        default = "default_workspace",
+        deserialize_with = "deserialize_path_with_tilde"
+    )]
+    pub workspace: PathBuf,
 
     /// 模型名称
     #[serde(rename = "model", default = "default_model")]
@@ -113,8 +121,8 @@ pub struct AgentDefaults {
     pub memory_window: usize,
 }
 
-fn default_workspace() -> String {
-    "~/.nanobot/workspace".to_string()
+fn default_workspace() -> PathBuf {
+    HOME.join(CONFIG_DIR_NAME).join("workspace")
 }
 
 fn default_model() -> String {
@@ -135,6 +143,29 @@ fn default_max_tool_iterations() -> usize {
 
 fn default_memory_window() -> usize {
     100
+}
+
+/// 反序列化路径，将 ~ 替换为用户主目录
+fn deserialize_path_with_tilde<'de, D>(deserializer: D) -> Result<PathBuf, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let path: PathBuf = Deserialize::deserialize(deserializer)?;
+    Ok(expand_tilde(&path))
+}
+
+/// 将路径中的 ~ 替换为用户主目录
+fn expand_tilde(path: &Path) -> PathBuf {
+    if let Some(first) = path.iter().next()
+        && first == "~"
+    {
+        let mut new_path = HOME.clone();
+        for component in path.iter().skip(1) {
+            new_path.push(component);
+        }
+        return new_path;
+    }
+    path.to_path_buf()
 }
 
 impl Default for AgentDefaults {
@@ -170,14 +201,12 @@ impl Config {
 
     /// 获取配置文件路径
     pub fn config_path() -> Result<PathBuf, ConfigError> {
-        let home = dirs::home_dir().ok_or_else(|| ConfigError::NotFound("无法获取用户主目录".to_string()))?;
-        Ok(home.join(CONFIG_DIR_NAME).join(CONFIG_FILE_NAME))
+        Ok(HOME.join(CONFIG_DIR_NAME).join(CONFIG_FILE_NAME))
     }
 
     /// 获取配置目录路径
     pub fn config_dir() -> Result<PathBuf, ConfigError> {
-        let home = dirs::home_dir().ok_or_else(|| ConfigError::NotFound("无法获取用户主目录".to_string()))?;
-        Ok(home.join(CONFIG_DIR_NAME))
+        Ok(HOME.join(CONFIG_DIR_NAME))
     }
 
     /// 从文件加载配置
@@ -245,7 +274,7 @@ impl Config {
         let defaults = &self.agents.defaults;
 
         // 验证 workspace
-        if defaults.workspace.is_empty() {
+        if defaults.workspace.as_os_str().is_empty() {
             return Err(ConfigError::Validation("workspace 不能为空".to_string()));
         }
 

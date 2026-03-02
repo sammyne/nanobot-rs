@@ -78,14 +78,15 @@ impl<P: Provider + 'static> AgentLoop<P> {
         );
 
         // 基于 config 构造 tool_registry
-        let tool_registry = ToolRegistry::new(&config.workspace, None);
+        let workspace_str = config.workspace.to_string_lossy();
+        let tool_registry = ToolRegistry::new(&workspace_str, None);
 
         // 从 tool_registry 导出工具列表并绑定到 provider
         let definitions = tool_registry.get_definitions();
         provider.bind_tools(definitions);
 
         // Initialize SessionManager
-        let sessions = Arc::new(SessionManager::new(config.workspace.clone().into()));
+        let sessions = Arc::new(SessionManager::new(config.workspace.clone()));
 
         Self {
             provider,

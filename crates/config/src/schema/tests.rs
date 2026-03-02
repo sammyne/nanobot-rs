@@ -14,7 +14,7 @@ fn default_config() {
 #[test]
 fn validate_empty_workspace() {
     let mut config = Config::default();
-    config.agents.defaults.workspace = String::new();
+    config.agents.defaults.workspace = PathBuf::new();
     assert!(config.validate().is_err());
 }
 
@@ -209,7 +209,7 @@ fn load_config_with_all_fields_present() {
             headers
         })
     );
-    assert_eq!(config.agents.defaults.workspace, "/tmp/workspace");
+    assert_eq!(config.agents.defaults.workspace, PathBuf::from("/tmp/workspace"));
     assert_eq!(config.agents.defaults.model, "custom-model");
     assert_eq!(config.agents.defaults.max_tokens, 4096);
     assert_eq!(config.agents.defaults.temperature, 0.5);
@@ -228,8 +228,8 @@ fn load_empty_config_fill_all_defaults() {
     // providers.custom 应该为 None（因为它是 Option 类型且有 default）
     assert!(config.providers.custom.is_none());
 
-    // agents.defaults 应该自动填充默认值
-    assert_eq!(config.agents.defaults.workspace, "~/.nanobot/workspace");
+    // agents.defaults 应该自动填充默认值（~ 会被替换为 HOME）
+    assert_eq!(config.agents.defaults.workspace, HOME.join(".nanobot/workspace"));
     assert_eq!(config.agents.defaults.model, "anthropic/claude-opus-4-5");
     assert_eq!(config.agents.defaults.max_tokens, 8192);
     assert_eq!(config.agents.defaults.temperature, 0.1);
@@ -275,7 +275,7 @@ fn agent_defaults_full_config() {
 
     let config: Config = serde_json::from_str(json).unwrap();
 
-    assert_eq!(config.agents.defaults.workspace, "/custom/workspace");
+    assert_eq!(config.agents.defaults.workspace, PathBuf::from("/custom/workspace"));
     assert_eq!(config.agents.defaults.model, "gpt-4");
     assert_eq!(config.agents.defaults.max_tokens, 16000);
     assert_eq!(config.agents.defaults.temperature, 0.8);
