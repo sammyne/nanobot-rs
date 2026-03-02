@@ -6,20 +6,17 @@
 //! 3. 调用 LLM
 //! 4. 返回响应（通过出站消息发送端）
 
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use anyhow::Result;
 use nanobot_config::AgentDefaults;
 use nanobot_provider::{Message, Provider};
+use nanobot_session::SessionManager;
 use nanobot_tools::ToolRegistry;
-use tokio::sync::{RwLock, mpsc};
+use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
 
 use crate::bus::{InboundMessage, OutboundMessage};
-
-/// 会话键（channel:chat_id）
-type SessionKey = String;
 
 /// ReAct 运行结果
 #[derive(Debug, Clone)]
@@ -52,8 +49,8 @@ pub struct AgentLoop<P: Provider> {
     /// 出站消息发送端（向 CLI 发送）
     outbound_tx: mpsc::Sender<OutboundMessage>,
 
-    /// 会话历史（channel:chat_id -> messages）
-    sessions: Arc<RwLock<HashMap<SessionKey, Vec<Message>>>>,
+    /// 会话管理器
+    sessions: Arc<SessionManager>,
 
     /// 工具注册表
     tool_registry: ToolRegistry,
@@ -87,12 +84,15 @@ impl<P: Provider + 'static> AgentLoop<P> {
         let definitions = tool_registry.get_definitions();
         provider.bind_tools(definitions);
 
+        // Initialize SessionManager
+        let sessions = Arc::new(SessionManager::new(config.workspace.clone().into()));
+
         Self {
             provider,
             config,
             inbound_rx,
             outbound_tx,
-            sessions: Arc::new(RwLock::new(HashMap::new())),
+            sessions,
             tool_registry,
         }
     }
@@ -119,47 +119,46 @@ impl<P: Provider + 'static> AgentLoop<P> {
     }
 
     /// 获取会话键
-    fn session_key(channel: &str, chat_id: &str) -> SessionKey {
+    fn session_key(channel: &str, chat_id: &str) -> String {
         format!("{}:{}", channel, chat_id)
     }
 
-    /// 获取或创建会话历史
-    async fn get_or_create_session(&self, channel: &str, chat_id: &str) -> Vec<Message> {
+    /// 获取或创建会话（与 Python 版本一致，返回 Session 对象）
+    fn get_or_create_session(&self, channel: &str, chat_id: &str) -> nanobot_session::Session {
         let key = Self::session_key(channel, chat_id);
-        let sessions = self.sessions.read().await;
-
-        if let Some(messages) = sessions.get(&key) {
-            return messages.clone();
-        }
-
-        drop(sessions);
-
-        // 创建新的会话，添加系统提示词
-        let new_messages = vec![Message::system("你是一个有帮助的 AI 助手。")];
-
-        let mut sessions = self.sessions.write().await;
-        sessions.insert(key.clone(), new_messages.clone());
-
-        new_messages
+        self.sessions.get_or_create(&key)
     }
 
-    /// 更新会话历史
-    async fn update_session(&self, channel: &str, chat_id: &str, messages: &[Message]) {
-        let key = Self::session_key(channel, chat_id);
-        let mut sessions = self.sessions.write().await;
+    /// 工具结果最大字符数（与 Python 版本一致）
+    const TOOL_RESULT_MAX_CHARS: usize = 500;
 
-        // 限制历史长度（保持最后memory_window条消息）
-        let max_history = self.config.memory_window;
-        let trimmed = if messages.len() > max_history && max_history > 1 {
-            let mut result = vec![messages[0].clone()]; // 保留系统消息
-            let start_idx = messages.len().saturating_sub(max_history - 1);
-            result.extend_from_slice(&messages[start_idx..]);
-            result
-        } else {
-            messages.to_vec()
-        };
-
-        sessions.insert(key, trimmed);
+    /// 保存本回合的消息到 session（增量追加，与 Python 版本的 _save_turn 一致）
+    ///
+    /// # Arguments
+    /// * `session` - 会话对象
+    /// * `messages` - 所有消息列表
+    /// * `skip` - 跳过的消息数量（已存在于历史中的消息）
+    fn save_turn(&self, session: &mut nanobot_session::Session, messages: &[Message], skip: usize) {
+        // 只追加新消息
+        for msg in messages.iter().skip(skip) {
+            let msg_to_save = match msg {
+                Message::Tool { content, tool_call_id } => {
+                    // 截断过长的工具结果
+                    let truncated = if content.len() > Self::TOOL_RESULT_MAX_CHARS {
+                        format!("{}\n... (truncated)", &content[..Self::TOOL_RESULT_MAX_CHARS])
+                    } else {
+                        content.clone()
+                    };
+                    Message::Tool {
+                        content: truncated,
+                        tool_call_id: tool_call_id.clone(),
+                    }
+                }
+                other => other.clone(),
+            };
+            session.add_message(msg_to_save);
+        }
+        session.touch();
     }
 
     /// 调用 LLM 并返回响应消息
@@ -316,8 +315,18 @@ impl<P: Provider + 'static> AgentLoop<P> {
             ("cli".to_string(), "direct".to_string())
         };
 
-        // 获取或创建会话历史
-        let mut messages = self.get_or_create_session(&channel, &chat_id).await;
+        // 获取或创建会话
+        let mut session = self.get_or_create_session(&channel, &chat_id);
+
+        // 构建完整消息列表（系统消息 + 历史 + 新消息）
+        let mut messages = Vec::new();
+
+        // 系统消息必须放在第一条（因为系统消息不保存到 session，每次都需要添加）
+        messages.push(Message::system("你是一个有帮助的 AI 助手。"));
+
+        // 获取历史消息用于 LLM 输出
+        session.get_history(self.config.memory_window, &mut messages);
+        let skip = messages.len(); // 跳过已存在的消息（系统消息 + 历史消息）
 
         // 添加用户消息
         messages.push(Message::user(content));
@@ -325,8 +334,12 @@ impl<P: Provider + 'static> AgentLoop<P> {
         // 执行 ReAct 循环（支持工具调用）
         let result = self.re_act(messages).await?;
 
-        // 更新会话历史
-        self.update_session(&channel, &chat_id, &result.messages).await;
+        // 保存本回合消息（增量追加，跳过已存在的消息）
+        self.save_turn(&mut session, &result.messages, skip);
+        // 持久化会话
+        if let Err(e) = self.sessions.save(&session) {
+            error!("Failed to save session: {}", e);
+        }
 
         // 如果使用了工具，记录相关信息
         if !result.tools_used.is_empty() {
@@ -381,8 +394,18 @@ impl<P: Provider + 'static> AgentLoop<P> {
             ..
         } = inbound;
 
-        // 获取或创建会话历史
-        let mut messages = self.get_or_create_session(&channel, &chat_id).await;
+        // 获取或创建会话
+        let mut session = self.get_or_create_session(&channel, &chat_id);
+
+        // 构建完整消息列表（系统消息 + 历史 + 新消息）
+        let mut messages = Vec::new();
+
+        // 系统消息必须放在第一条（因为系统消息不保存到 session，每次都需要添加）
+        messages.push(Message::system("你是一个有帮助的 AI 助手。"));
+
+        // 获取历史消息用于 LLM 输出
+        session.get_history(self.config.memory_window, &mut messages);
+        let skip = messages.len(); // 跳过已存在的消息（系统消息 + 历史消息）
 
         // 添加用户消息
         messages.push(Message::user(content));
@@ -390,8 +413,12 @@ impl<P: Provider + 'static> AgentLoop<P> {
         // 执行 ReAct 循环（支持工具调用）
         match self.re_act(messages).await {
             Ok(result) => {
-                // 更新会话历史
-                self.update_session(&channel, &chat_id, &result.messages).await;
+                // 保存本回合消息（增量追加，跳过已存在的消息）
+                self.save_turn(&mut session, &result.messages, skip);
+                // 持久化会话
+                if let Err(e) = self.sessions.save(&session) {
+                    error!("Failed to save session: {}", e);
+                }
 
                 // 发送出站消息
                 let outbound = OutboundMessage::new(&channel, &chat_id, &result.content);

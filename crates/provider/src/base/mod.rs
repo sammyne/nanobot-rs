@@ -2,6 +2,7 @@
 
 use anyhow::Result;
 use nanobot_tools::ToolDefinition;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 /// 提供者相关错误
@@ -18,7 +19,7 @@ pub enum ProviderError {
 }
 
 /// 工具调用请求
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolCall {
     /// 调用 ID
     pub id: String,
@@ -45,7 +46,8 @@ impl ToolCall {
 }
 
 /// 聊天消息枚举
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "role", rename_all = "lowercase")]
 pub enum Message {
     /// 系统消息
     System {
