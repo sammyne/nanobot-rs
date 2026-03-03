@@ -342,7 +342,7 @@ impl<P: Provider + 'static> AgentLoop<P> {
             .try_consolidate(
                 &session.messages,
                 session.last_consolidated,
-                &mut self.provider as &mut dyn Provider,
+                self.provider.clone(),
                 false, // archive_all
                 self.config.memory_window,
             )

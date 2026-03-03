@@ -186,7 +186,7 @@ impl ProviderResponse {
 
 /// LLM 提供者 trait
 #[async_trait::async_trait]
-pub trait Provider: Send + Sync {
+pub trait Provider: Send + Sync + Clone {
     /// 发送聊天请求
     async fn chat(&self, messages: &[Message]) -> Result<Message>;
 

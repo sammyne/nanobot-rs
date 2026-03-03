@@ -12,6 +12,7 @@ use nanobot_tools::ToolDefinition;
 use super::*;
 
 /// Mock Provider 用于测试
+#[derive(Clone)]
 struct MockProvider {
     /// 预设响应
     response: String,
