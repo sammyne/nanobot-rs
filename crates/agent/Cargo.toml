@@ -8,6 +8,7 @@ nanobot-config.workspace = true
 nanobot-provider.workspace = true
 nanobot-tools.workspace = true
 nanobot-session.workspace = true
+nanobot-memory.workspace = true
 tokio.workspace = true
 anyhow.workspace = true
 serde.workspace = true

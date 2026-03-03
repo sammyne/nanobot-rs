@@ -10,6 +10,7 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use nanobot_config::AgentDefaults;
+use nanobot_memory::MemoryStore;
 use nanobot_provider::{Message, Provider};
 use nanobot_session::SessionManager;
 use nanobot_tools::ToolRegistry;
@@ -54,6 +55,9 @@ pub struct AgentLoop<P: Provider> {
 
     /// 工具注册表
     tool_registry: ToolRegistry,
+
+    /// 记忆存储
+    memory_store: MemoryStore,
 }
 
 impl<P: Provider + 'static> AgentLoop<P> {
@@ -88,6 +92,9 @@ impl<P: Provider + 'static> AgentLoop<P> {
         // Initialize SessionManager
         let sessions = Arc::new(SessionManager::new(config.workspace.clone()));
 
+        // Initialize MemoryStore
+        let memory_store = MemoryStore::new(config.workspace.clone()).expect("Failed to initialize MemoryStore");
+
         Self {
             provider,
             config,
@@ -95,6 +102,7 @@ impl<P: Provider + 'static> AgentLoop<P> {
             outbound_tx,
             sessions,
             tool_registry,
+            memory_store,
         }
     }
 
@@ -301,7 +309,7 @@ impl<P: Provider + 'static> AgentLoop<P> {
     /// 直接处理消息（单次调用模式）
     ///
     /// 参考 Python 版 `process_direct` 函数实现。
-    pub async fn process_direct(&self, content: &str, session_key: Option<&str>) -> Result<String> {
+    pub async fn process_direct(&mut self, content: &str, session_key: Option<&str>) -> Result<String> {
         info!("直接处理消息: {}", content);
 
         // 解析会话标识
@@ -319,11 +327,18 @@ impl<P: Provider + 'static> AgentLoop<P> {
         // 获取或创建会话
         let mut session = self.get_or_create_session(&channel, &chat_id);
 
-        // 构建完整消息列表（系统消息 + 历史 + 新消息）
+        // 构建完整消息列表（系统消息 + 长期记忆 + 历史 + 新消息）
         let mut messages = Vec::new();
 
-        // 系统消息必须放在第一条（因为系统消息不保存到 session，每次都需要添加）
-        messages.push(Message::system("你是一个有帮助的 AI 助手。"));
+        // 构建系统消息（包含长期记忆）
+        let mut system_content = String::from("你是一个有帮助的 AI 助手。");
+        if let Ok(memory_context) = self.memory_store.get_memory_context()
+            && !memory_context.is_empty()
+        {
+            system_content.push_str("\n\n# Memory\n");
+            system_content.push_str(&memory_context);
+        }
+        messages.push(Message::system(&system_content));
 
         // 获取历史消息用于 LLM 输出
         session.get_history(self.config.memory_window, &mut messages);
@@ -342,12 +357,50 @@ impl<P: Provider + 'static> AgentLoop<P> {
             error!("Failed to save session: {}", e);
         }
 
+        // 记忆整合（在消息处理完成后）
+        if let Err(e) = self.try_consolidate(&mut session).await {
+            error!("Memory consolidation failed: {}", e);
+        }
+
         // 如果使用了工具，记录相关信息
         if !result.tools_used.is_empty() {
             info!("已使用工具: {:?}", result.tools_used);
         }
 
         Ok(result.content)
+    }
+
+    /// 尝试执行记忆整合
+    ///
+    /// 检查是否需要整合，如果需要则调用 LLM 进行记忆压缩。
+    /// 整合失败不影响正常消息处理流程。
+    async fn try_consolidate(&mut self, session: &mut nanobot_session::Session) -> Result<()> {
+        match self
+            .memory_store
+            .try_consolidate(
+                &session.messages,
+                session.last_consolidated,
+                &mut self.provider as &mut dyn Provider,
+                false, // archive_all
+                self.config.memory_window,
+            )
+            .await
+        {
+            Ok(new_last_consolidated) => {
+                if new_last_consolidated != session.last_consolidated {
+                    session.last_consolidated = new_last_consolidated;
+                    // 持久化更新后的会话
+                    if let Err(e) = self.sessions.save(session) {
+                        error!("Failed to save session after consolidation: {}", e);
+                    }
+                }
+            }
+            Err(e) => {
+                error!("Memory consolidation error: {}", e);
+            }
+        }
+
+        Ok(())
     }
     /// 启动后台消息处理循环
     ///
@@ -386,7 +439,11 @@ impl<P: Provider + 'static> AgentLoop<P> {
     }
 
     /// 处理入站消息并发送响应
-    async fn handle_message(&self, inbound: InboundMessage, outbound_tx: &mpsc::Sender<OutboundMessage>) -> Result<()> {
+    async fn handle_message(
+        &mut self,
+        inbound: InboundMessage,
+        outbound_tx: &mpsc::Sender<OutboundMessage>,
+    ) -> Result<()> {
         let InboundMessage {
             channel,
             sender_id: _,
@@ -398,11 +455,18 @@ impl<P: Provider + 'static> AgentLoop<P> {
         // 获取或创建会话
         let mut session = self.get_or_create_session(&channel, &chat_id);
 
-        // 构建完整消息列表（系统消息 + 历史 + 新消息）
+        // 构建完整消息列表（系统消息 + 长期记忆 + 历史 + 新消息）
         let mut messages = Vec::new();
 
-        // 系统消息必须放在第一条（因为系统消息不保存到 session，每次都需要添加）
-        messages.push(Message::system("你是一个有帮助的 AI 助手。"));
+        // 构建系统消息（包含长期记忆）
+        let mut system_content = String::from("你是一个有帮助的 AI 助手。");
+        if let Ok(memory_context) = self.memory_store.get_memory_context()
+            && !memory_context.is_empty()
+        {
+            system_content.push_str("\n\n# Memory\n");
+            system_content.push_str(&memory_context);
+        }
+        messages.push(Message::system(&system_content));
 
         // 获取历史消息用于 LLM 输出
         session.get_history(self.config.memory_window, &mut messages);
@@ -419,6 +483,11 @@ impl<P: Provider + 'static> AgentLoop<P> {
                 // 持久化会话
                 if let Err(e) = self.sessions.save(&session) {
                     error!("Failed to save session: {}", e);
+                }
+
+                // 记忆整合（在消息处理完成后）
+                if let Err(e) = self.try_consolidate(&mut session).await {
+                    error!("Memory consolidation failed: {}", e);
                 }
 
                 // 发送出站消息

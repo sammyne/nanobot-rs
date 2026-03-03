@@ -63,7 +63,7 @@ impl AgentCmd {
         debug!("单次消息模式");
 
         // 创建 AgentLoop 实例（简单模式，直接调用）
-        let agent = AgentLoop::new_direct(provider, config.agents.defaults.clone());
+        let mut agent = AgentLoop::new_direct(provider, config.agents.defaults.clone());
 
         match agent.process_direct(input, Some(&self.session)).await {
             Ok(response) => {

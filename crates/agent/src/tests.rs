@@ -80,7 +80,7 @@ async fn process_direct_returns_expected_response() {
     for case in test_vector {
         let provider = MockProvider::new(case.expected_response);
         let config = test_config();
-        let agent = AgentLoop::new_direct(provider, config);
+        let mut agent = AgentLoop::new_direct(provider, config);
 
         let result = agent
             .process_direct(case.input, case.session_id)
@@ -96,7 +96,7 @@ async fn process_direct_returns_expected_response() {
 async fn process_direct_handles_empty_message() {
     let provider = MockProvider::new("OK");
     let config = test_config();
-    let agent = AgentLoop::new_direct(provider, config);
+    let mut agent = AgentLoop::new_direct(provider, config);
 
     let result = agent
         .process_direct("", None::<&str>)
