@@ -421,9 +421,10 @@ impl<P: Provider + 'static> AgentLoop<P> {
                 Some(msg) => {
                     debug!("收到入站消息: channel={}, chat_id={}", msg.channel, msg.chat_id);
 
-                    // 处理消息
-                    if let Err(e) = self.handle_message(msg, &outbound_tx).await {
-                        error!("处理消息失败: {}", e);
+                    // 处理消息并发送响应
+                    let outbound = self.process_message(msg).await;
+                    if let Err(e) = outbound_tx.send(outbound).await {
+                        error!("发送出站消息失败: {}", e);
                     }
                 }
                 None => {
@@ -438,12 +439,10 @@ impl<P: Provider + 'static> AgentLoop<P> {
         Ok(())
     }
 
-    /// 处理入站消息并发送响应
-    async fn handle_message(
-        &mut self,
-        inbound: InboundMessage,
-        outbound_tx: &mpsc::Sender<OutboundMessage>,
-    ) -> Result<()> {
+    /// 处理入站消息并返回待发送的响应
+    ///
+    /// 注意：此方法总是返回 OutboundMessage，错误会被转换为错误消息内容
+    async fn process_message(&mut self, inbound: InboundMessage) -> OutboundMessage {
         let InboundMessage {
             channel,
             sender_id: _,
@@ -490,25 +489,14 @@ impl<P: Provider + 'static> AgentLoop<P> {
                     error!("Memory consolidation failed: {}", e);
                 }
 
-                // 发送出站消息
-                let outbound = OutboundMessage::new(&channel, &chat_id, &result.content);
-                if let Err(e) = outbound_tx.send(outbound).await {
-                    error!("发送出站消息失败: {}", e);
-                }
+                OutboundMessage::new(&channel, &chat_id, &result.content)
             }
             Err(e) => {
                 error!("处理消息失败: {}", e);
-
-                // 发送错误消息
                 let error_msg = format!("处理失败: {}", e);
-                let outbound = OutboundMessage::new(&channel, &chat_id, &error_msg);
-                if let Err(e) = outbound_tx.send(outbound).await {
-                    error!("发送错误消息失败: {}", e);
-                }
+                OutboundMessage::new(&channel, &chat_id, &error_msg)
             }
         }
-
-        Ok(())
     }
 
     /// 获取配置
