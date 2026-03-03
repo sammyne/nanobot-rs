@@ -971,6 +971,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "nanobot-config",
+ "nanobot-memory",
  "nanobot-provider",
  "nanobot-session",
  "nanobot-tools",
@@ -1006,6 +1007,22 @@ dependencies = [
  "serde_json",
  "tempfile",
  "thiserror 2.0.18",
+ "tracing",
+]
+
+[[package]]
+name = "nanobot-memory"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "nanobot-provider",
+ "nanobot-tools",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
  "tracing",
 ]
 
