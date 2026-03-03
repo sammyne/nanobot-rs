@@ -309,6 +309,7 @@ impl<P: Provider + 'static> AgentLoop<P> {
     /// 直接处理消息（单次调用模式）
     ///
     /// 参考 Python 版 `process_direct` 函数实现。
+    /// 通过构造 InboundMessage 复用 process_message 方法。
     pub async fn process_direct(&mut self, content: &str, session_key: Option<&str>) -> Result<String> {
         info!("直接处理消息: {}", content);
 
@@ -324,50 +325,11 @@ impl<P: Provider + 'static> AgentLoop<P> {
             ("cli".to_string(), "direct".to_string())
         };
 
-        // 获取或创建会话
-        let mut session = self.get_or_create_session(&channel, &chat_id);
+        // 构造入站消息并复用 process_message
+        let inbound = InboundMessage::new(&channel, "user", &chat_id, content);
+        let outbound = self.process_message(inbound).await;
 
-        // 构建完整消息列表（系统消息 + 长期记忆 + 历史 + 新消息）
-        let mut messages = Vec::new();
-
-        // 构建系统消息（包含长期记忆）
-        let mut system_content = String::from("你是一个有帮助的 AI 助手。");
-        if let Ok(memory_context) = self.memory_store.get_memory_context()
-            && !memory_context.is_empty()
-        {
-            system_content.push_str("\n\n# Memory\n");
-            system_content.push_str(&memory_context);
-        }
-        messages.push(Message::system(&system_content));
-
-        // 获取历史消息用于 LLM 输出
-        session.get_history(self.config.memory_window, &mut messages);
-        let skip = messages.len(); // 跳过已存在的消息（系统消息 + 历史消息）
-
-        // 添加用户消息
-        messages.push(Message::user(content));
-
-        // 执行 ReAct 循环（支持工具调用）
-        let result = self.re_act(messages).await?;
-
-        // 保存本回合消息（增量追加，跳过已存在的消息）
-        self.save_turn(&mut session, &result.messages, skip);
-        // 持久化会话
-        if let Err(e) = self.sessions.save(&session) {
-            error!("Failed to save session: {}", e);
-        }
-
-        // 记忆整合（在消息处理完成后）
-        if let Err(e) = self.try_consolidate(&mut session).await {
-            error!("Memory consolidation failed: {}", e);
-        }
-
-        // 如果使用了工具，记录相关信息
-        if !result.tools_used.is_empty() {
-            info!("已使用工具: {:?}", result.tools_used);
-        }
-
-        Ok(result.content)
+        Ok(outbound.content)
     }
 
     /// 尝试执行记忆整合
