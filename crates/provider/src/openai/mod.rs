@@ -1,5 +1,6 @@
 //! OpenAI 提供者实现
 
+use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Result;
@@ -17,6 +18,7 @@ use tracing::{debug, info};
 use crate::{Message, Provider, ProviderError, ToolCall};
 
 /// OpenAI 提供者
+#[derive(Clone)]
 pub struct OpenAILike {
     /// 客户端
     client: Client<OpenAIConfig>,
@@ -28,7 +30,7 @@ pub struct OpenAILike {
     timeout: u64,
 
     /// 绑定的工具列表（OpenAI 格式）
-    tools: Vec<ChatCompletionTool>,
+    tools: Arc<Vec<ChatCompletionTool>>,
 }
 
 impl OpenAILike {
@@ -55,7 +57,7 @@ impl OpenAILike {
             client,
             model: model.to_string(),
             timeout,
-            tools: Vec::new(),
+            tools: Arc::new(Vec::new()),
         })
     }
 
@@ -115,9 +117,8 @@ impl Provider for OpenAILike {
         let chat_tools: Vec<ChatCompletionTool> = if self.tools.is_empty() {
             Vec::new()
         } else {
-            self.tools.clone()
+            (*self.tools).clone()
         };
-
         debug!(
             "发送聊天请求, 消息数量: {}, 工具数量: {}",
             messages.len(),
@@ -182,18 +183,20 @@ impl Provider for OpenAILike {
 
     fn bind_tools(&mut self, tools: Vec<ToolDefinition>) {
         info!("绑定 {} 个工具到 OpenAI 提供者", tools.len());
-        self.tools = tools
-            .into_iter()
-            .map(|td| ChatCompletionTool {
-                r#type: ChatCompletionToolType::Function,
-                function: FunctionObject {
-                    name: td.name,
-                    description: Some(td.description),
-                    parameters: Some(td.parameters),
-                    strict: None,
-                },
-            })
-            .collect();
+        self.tools = Arc::new(
+            tools
+                .into_iter()
+                .map(|td| ChatCompletionTool {
+                    r#type: ChatCompletionToolType::Function,
+                    function: FunctionObject {
+                        name: td.name,
+                        description: Some(td.description),
+                        parameters: Some(td.parameters),
+                        strict: None,
+                    },
+                })
+                .collect(),
+        );
     }
 }
 

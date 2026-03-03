@@ -152,11 +152,11 @@ impl MemoryStore {
     /// # Returns
     /// * `Ok(new_last_consolidated)` - New index (may equal last_consolidated if no consolidation)
     /// * `Err(_)` - On failure
-    pub async fn try_consolidate(
+    pub async fn try_consolidate<P: Provider>(
         &self,
         messages: &[Message],
         last_consolidated: usize,
-        provider: &mut dyn Provider,
+        provider: P,
         archive_all: bool,
         memory_window: usize,
     ) -> Result<usize, MemoryError> {
@@ -185,13 +185,13 @@ impl MemoryStore {
     }
 
     /// Internal consolidation logic (assumes checks already done).
-    async fn consolidate_internal(
+    async fn consolidate_internal<P: Provider>(
         &self,
         messages: &[Message],
         last_consolidated: usize,
         new_last_consolidated: usize,
         archive_all: bool,
-        provider: &mut dyn Provider,
+        mut provider: P,
     ) -> Result<usize, MemoryError> {
         // Determine which messages to archive
         let old_messages = if archive_all {
@@ -316,11 +316,11 @@ impl MemoryStore {
     /// # Returns
     /// * `Ok(new_last_consolidated)` - New index for last_consolidated
     /// * `Err(_)` - On failure
-    pub async fn consolidate(
+    pub async fn consolidate<P: Provider>(
         &self,
         messages: &[Message],
         last_consolidated: usize,
-        provider: &mut dyn Provider,
+        provider: P,
         archive_all: bool,
         memory_window: usize,
     ) -> Result<usize, MemoryError> {
