@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use nanobot_config::AgentDefaults;
-use nanobot_memory::MemoryStore;
+use nanobot_context::ContextBuilder;
 use nanobot_provider::{Message, Provider};
 use nanobot_session::SessionManager;
 use nanobot_tools::ToolRegistry;
@@ -56,8 +56,8 @@ pub struct AgentLoop<P: Provider> {
     /// 工具注册表
     tool_registry: ToolRegistry,
 
-    /// 记忆存储
-    memory_store: MemoryStore,
+    /// 上下文构建器（包含 MemoryStore）
+    context: ContextBuilder,
 }
 
 impl<P: Provider + 'static> AgentLoop<P> {
@@ -92,8 +92,8 @@ impl<P: Provider + 'static> AgentLoop<P> {
         // Initialize SessionManager
         let sessions = Arc::new(SessionManager::new(config.workspace.clone()));
 
-        // Initialize MemoryStore
-        let memory_store = MemoryStore::new(config.workspace.clone()).expect("Failed to initialize MemoryStore");
+        // Initialize ContextBuilder (which contains MemoryStore)
+        let context = ContextBuilder::new(config.workspace.clone()).expect("Failed to initialize ContextBuilder");
 
         Self {
             provider,
@@ -102,7 +102,7 @@ impl<P: Provider + 'static> AgentLoop<P> {
             outbound_tx,
             sessions,
             tool_registry,
-            memory_store,
+            context,
         }
     }
 
@@ -338,7 +338,8 @@ impl<P: Provider + 'static> AgentLoop<P> {
     /// 整合失败不影响正常消息处理流程。
     async fn try_consolidate(&mut self, session: &mut nanobot_session::Session) -> Result<()> {
         match self
-            .memory_store
+            .context
+            .memory()
             .try_consolidate(
                 &session.messages,
                 session.last_consolidated,
@@ -416,46 +417,46 @@ impl<P: Provider + 'static> AgentLoop<P> {
         // 获取或创建会话
         let mut session = self.get_or_create_session(&channel, &chat_id);
 
-        // 构建完整消息列表（系统消息 + 长期记忆 + 历史 + 新消息）
-        let mut messages = Vec::new();
+        // 获取历史消息
+        let mut history = Vec::new();
+        session.get_history(self.config.memory_window, &mut history);
 
-        // 构建系统消息（包含长期记忆）
-        let mut system_content = String::from("你是一个有帮助的 AI 助手。");
-        if let Ok(memory_context) = self.memory_store.get_memory_context()
-            && !memory_context.is_empty()
-        {
-            system_content.push_str("\n\n# Memory\n");
-            system_content.push_str(&memory_context);
-        }
-        messages.push(Message::system(&system_content));
+        // 使用 ContextBuilder 构建消息列表
+        let messages = self
+            .context
+            .build_messages(&history, &content, None, Some(&channel), Some(&chat_id));
 
-        // 获取历史消息用于 LLM 输出
-        session.get_history(self.config.memory_window, &mut messages);
-        let skip = messages.len(); // 跳过已存在的消息（系统消息 + 历史消息）
+        match messages {
+            Ok(messages) => {
+                let skip = messages.len() - 1; // 跳过系统消息 + 历史消息（不包括新消息）
 
-        // 添加用户消息
-        messages.push(Message::user(content));
+                // 执行 ReAct 循环（支持工具调用）
+                match self.re_act(messages).await {
+                    Ok(result) => {
+                        // 保存本回合消息（增量追加，跳过已存在的消息）
+                        self.save_turn(&mut session, &result.messages, skip);
+                        // 持久化会话
+                        if let Err(e) = self.sessions.save(&session) {
+                            error!("Failed to save session: {}", e);
+                        }
 
-        // 执行 ReAct 循环（支持工具调用）
-        match self.re_act(messages).await {
-            Ok(result) => {
-                // 保存本回合消息（增量追加，跳过已存在的消息）
-                self.save_turn(&mut session, &result.messages, skip);
-                // 持久化会话
-                if let Err(e) = self.sessions.save(&session) {
-                    error!("Failed to save session: {}", e);
+                        // 记忆整合（在消息处理完成后）
+                        if let Err(e) = self.try_consolidate(&mut session).await {
+                            error!("Memory consolidation failed: {}", e);
+                        }
+
+                        OutboundMessage::new(&channel, &chat_id, &result.content)
+                    }
+                    Err(e) => {
+                        error!("处理消息失败: {}", e);
+                        let error_msg = format!("处理失败: {}", e);
+                        OutboundMessage::new(&channel, &chat_id, &error_msg)
+                    }
                 }
-
-                // 记忆整合（在消息处理完成后）
-                if let Err(e) = self.try_consolidate(&mut session).await {
-                    error!("Memory consolidation failed: {}", e);
-                }
-
-                OutboundMessage::new(&channel, &chat_id, &result.content)
             }
             Err(e) => {
-                error!("处理消息失败: {}", e);
-                let error_msg = format!("处理失败: {}", e);
+                error!("构建消息失败: {}", e);
+                let error_msg = format!("构建消息失败: {}", e);
                 OutboundMessage::new(&channel, &chat_id, &error_msg)
             }
         }

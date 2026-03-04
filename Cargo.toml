@@ -23,6 +23,7 @@ nanobot-agent.path = "crates/agent"
 nanobot-tools.path = "crates/tools"
 nanobot-session.path = "crates/session"
 nanobot-memory.path = "crates/memory"
+nanobot-context.path = "crates/context"
 
 [workspace.dependencies.tokio]
 version = "1"
