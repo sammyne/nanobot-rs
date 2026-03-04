@@ -1,0 +1,20 @@
+[package]
+name = "nanobot-context"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+thiserror.workspace = true
+tracing.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+tokio.workspace = true
+nanobot-provider.workspace = true
+nanobot-memory.workspace = true
+base64 = "0.22"
+mime_guess = "2"
+
+[dev-dependencies]
+tempfile.workspace = true
+nanobot-provider.workspace = true
