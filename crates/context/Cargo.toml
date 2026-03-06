@@ -12,6 +12,7 @@ chrono.workspace = true
 tokio.workspace = true
 nanobot-provider.workspace = true
 nanobot-memory.workspace = true
+nanobot-skills.workspace = true
 base64 = "0.22"
 mime_guess = "2"
 

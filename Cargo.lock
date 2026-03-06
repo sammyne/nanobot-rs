@@ -1061,6 +1061,7 @@ dependencies = [
  "mime_guess",
  "nanobot-memory",
  "nanobot-provider",
+ "nanobot-skills",
  "serde",
  "serde_json",
  "tempfile",
