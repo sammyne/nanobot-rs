@@ -13,8 +13,8 @@ fn create_workspace_skill(workspace: &std::path::Path, name: &str, content: &str
 }
 
 /// Creates a test skill in the builtin skills directory.
-fn create_builtin_skill(builtin: &std::path::Path, name: &str, content: &str) {
-    let skill_dir = builtin.join(name);
+fn create_builtin_skill(workspace: &std::path::Path, name: &str, content: &str) {
+    let skill_dir = workspace.join("builtin-skills").join(name);
     fs::create_dir_all(&skill_dir).unwrap();
     fs::write(skill_dir.join("SKILL.md"), content).unwrap();
 }
@@ -22,16 +22,15 @@ fn create_builtin_skill(builtin: &std::path::Path, name: &str, content: &str) {
 #[test]
 fn workspace_skill_priority_over_builtin() {
     let workspace = TempDir::new().unwrap();
-    let builtin = TempDir::new().unwrap();
 
     // Create same skill in both workspace and builtin
     let workspace_content = "---\ndescription: Workspace version\n---\n# Workspace Content";
     let builtin_content = "---\ndescription: Builtin version\n---\n# Builtin Content";
 
     create_workspace_skill(workspace.path(), "test-skill", workspace_content);
-    create_builtin_skill(builtin.path(), "test-skill", builtin_content);
+    create_builtin_skill(workspace.path(), "test-skill", builtin_content);
 
-    let loader = SkillsLoader::new(workspace.path().to_path_buf(), Some(builtin.path().to_path_buf()));
+    let loader = SkillsLoader::new(workspace.path().to_path_buf());
 
     let skills = loader.list_skills(false).unwrap();
     assert_eq!(skills.len(), 1);
@@ -42,13 +41,12 @@ fn workspace_skill_priority_over_builtin() {
 #[test]
 fn fallback_to_builtin_when_workspace_missing() {
     let workspace = TempDir::new().unwrap();
-    let builtin = TempDir::new().unwrap();
 
     // Create skill only in builtin
     let builtin_content = "---\ndescription: Builtin only\n---\n# Content";
-    create_builtin_skill(builtin.path(), "builtin-only", builtin_content);
+    create_builtin_skill(workspace.path(), "builtin-only", builtin_content);
 
-    let loader = SkillsLoader::new(workspace.path().to_path_buf(), Some(builtin.path().to_path_buf()));
+    let loader = SkillsLoader::new(workspace.path().to_path_buf());
 
     let skills = loader.list_skills(false).unwrap();
     assert_eq!(skills.len(), 1);
@@ -77,7 +75,7 @@ requires:
 # Content"#;
     create_workspace_skill(workspace.path(), "unavailable", unavailable_content);
 
-    let loader = SkillsLoader::new(workspace.path().to_path_buf(), None);
+    let loader = SkillsLoader::new(workspace.path().to_path_buf());
 
     // Without filter
     let all_skills = loader.list_skills(false).unwrap();
@@ -104,7 +102,7 @@ requires:
 # Content"#;
     create_workspace_skill(workspace.path(), "requires-skill", content);
 
-    let loader = SkillsLoader::new(workspace.path().to_path_buf(), None);
+    let loader = SkillsLoader::new(workspace.path().to_path_buf());
     let summary = loader.build_skills_summary().unwrap();
 
     assert!(summary.contains("available=\"false\""));
@@ -138,7 +136,7 @@ metadata: {"nanobot": {"always": true}}
         "---\ndescription: Normal\n---\n# Content",
     );
 
-    let loader = SkillsLoader::new(workspace.path().to_path_buf(), None);
+    let loader = SkillsLoader::new(workspace.path().to_path_buf());
     let always_skills = loader.get_always_skills().unwrap();
 
     assert_eq!(always_skills.len(), 2);
@@ -157,7 +155,7 @@ fn load_skills_for_context_strips_frontmatter() {
         "---\ndescription: Test\n---\n# Test Content\n\nThis is the body.",
     );
 
-    let loader = SkillsLoader::new(workspace.path().to_path_buf(), None);
+    let loader = SkillsLoader::new(workspace.path().to_path_buf());
     let context = loader.load_skills_for_context(&["test".to_string()]);
 
     assert!(!context.contains("---"));
@@ -174,7 +172,7 @@ fn multiple_skills_in_context() {
     create_workspace_skill(workspace.path(), "skill-a", "---\n---\n# Skill A");
     create_workspace_skill(workspace.path(), "skill-b", "---\n---\n# Skill B");
 
-    let loader = SkillsLoader::new(workspace.path().to_path_buf(), None);
+    let loader = SkillsLoader::new(workspace.path().to_path_buf());
     let context = loader.load_skills_for_context(&["skill-a".to_string(), "skill-b".to_string()]);
 
     assert!(context.contains("### Skill: skill-a"));
@@ -189,7 +187,7 @@ fn empty_directory_returns_empty_list() {
     let workspace = TempDir::new().unwrap();
     // Don't create any skills
 
-    let loader = SkillsLoader::new(workspace.path().to_path_buf(), None);
+    let loader = SkillsLoader::new(workspace.path().to_path_buf());
     let skills = loader.list_skills(false).unwrap();
 
     assert!(skills.is_empty());
@@ -206,7 +204,7 @@ fn invalid_yaml_returns_default_metadata() {
         "---\ninvalid yaml content :::\n---\n# Content",
     );
 
-    let loader = SkillsLoader::new(workspace.path().to_path_buf(), None);
+    let loader = SkillsLoader::new(workspace.path().to_path_buf());
     let skills = loader.list_skills(false).unwrap();
 
     assert_eq!(skills.len(), 1);
@@ -226,7 +224,7 @@ fn skill_without_frontmatter() {
         "# Just Markdown\n\nNo frontmatter here.",
     );
 
-    let loader = SkillsLoader::new(workspace.path().to_path_buf(), None);
+    let loader = SkillsLoader::new(workspace.path().to_path_buf());
     let skills = loader.list_skills(false).unwrap();
 
     assert_eq!(skills.len(), 1);
@@ -246,7 +244,7 @@ fn directory_without_skill_file_ignored() {
     // Create valid skill
     create_workspace_skill(workspace.path(), "valid", "---\n---\n# Valid");
 
-    let loader = SkillsLoader::new(workspace.path().to_path_buf(), None);
+    let loader = SkillsLoader::new(workspace.path().to_path_buf());
     let skills = loader.list_skills(false).unwrap();
 
     assert_eq!(skills.len(), 1);
@@ -264,7 +262,7 @@ metadata: {"openclaw": {"always": true, "custom": "value"}}
 # Content"#;
     create_workspace_skill(workspace.path(), "openclaw-skill", content);
 
-    let loader = SkillsLoader::new(workspace.path().to_path_buf(), None);
+    let loader = SkillsLoader::new(workspace.path().to_path_buf());
     let always_skills = loader.get_always_skills().unwrap();
 
     assert_eq!(always_skills.len(), 1);
@@ -278,7 +276,7 @@ fn description_fallback_to_name() {
     // Create skill without description
     create_workspace_skill(workspace.path(), "no-desc-skill", "---\n---\n# Content");
 
-    let loader = SkillsLoader::new(workspace.path().to_path_buf(), None);
+    let loader = SkillsLoader::new(workspace.path().to_path_buf());
     let summary = loader.build_skills_summary().unwrap();
 
     // Description should fall back to name
@@ -298,7 +296,7 @@ metadata:
 # Content"#;
     create_workspace_skill(workspace.path(), "clawhub", content);
 
-    let loader = SkillsLoader::new(workspace.path().to_path_buf(), None);
+    let loader = SkillsLoader::new(workspace.path().to_path_buf());
     let skills = loader.list_skills(false).unwrap();
 
     assert_eq!(skills[0].emoji(), Some("🦞"));
@@ -329,7 +327,7 @@ metadata:
 # Content"#;
     create_workspace_skill(workspace.path(), "github", content);
 
-    let loader = SkillsLoader::new(workspace.path().to_path_buf(), None);
+    let loader = SkillsLoader::new(workspace.path().to_path_buf());
     let skills = loader.list_skills(false).unwrap();
 
     let install_methods = skills[0].install_methods();
@@ -358,7 +356,7 @@ metadata:
 # Content"#;
     create_workspace_skill(workspace.path(), "test-requires", content);
 
-    let loader = SkillsLoader::new(workspace.path().to_path_buf(), None);
+    let loader = SkillsLoader::new(workspace.path().to_path_buf());
     let skills = loader.list_skills(false).unwrap();
 
     // Platform-specific requires should override top-level
@@ -382,7 +380,7 @@ metadata:
 # Content"#;
     create_workspace_skill(workspace.path(), "test-top-requires", content);
 
-    let loader = SkillsLoader::new(workspace.path().to_path_buf(), None);
+    let loader = SkillsLoader::new(workspace.path().to_path_buf());
     let skills = loader.list_skills(false).unwrap();
 
     // Should use top-level requires when metadata has no requires
@@ -420,7 +418,7 @@ Use the `gh` CLI to interact with GitHub.
 "#;
     create_workspace_skill(workspace.path(), "github", content);
 
-    let loader = SkillsLoader::new(workspace.path().to_path_buf(), None);
+    let loader = SkillsLoader::new(workspace.path().to_path_buf());
     let skills = loader.list_skills(false).unwrap();
 
     assert_eq!(skills.len(), 1);
