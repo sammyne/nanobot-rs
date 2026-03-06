@@ -19,7 +19,7 @@ pub struct SkillsLoader {
     /// Workspace skills directory.
     workspace: PathBuf,
     /// Built-in skills directory.
-    builtin: Option<PathBuf>,
+    builtin: PathBuf,
 }
 
 impl SkillsLoader {
@@ -27,13 +27,10 @@ impl SkillsLoader {
     ///
     /// # Arguments
     /// * `workspace` - The workspace root directory
-    /// * `builtin_skills_dir` - Optional built-in skills directory
-    pub fn new(workspace: PathBuf, builtin_skills_dir: Option<PathBuf>) -> Self {
-        let workspace_skills = workspace.join("skills");
-        Self {
-            workspace: workspace_skills,
-            builtin: builtin_skills_dir,
-        }
+    pub fn new(workspace: PathBuf) -> Self {
+        let workspace = workspace.join("skills");
+        let builtin = workspace.join("builtin-skills");
+        Self { workspace, builtin }
     }
 
     /// Lists all available skills.
@@ -50,10 +47,8 @@ impl SkillsLoader {
         }
 
         // Built-in skills
-        if let Some(ref builtin_dir) = self.builtin
-            && builtin_dir.exists()
-        {
-            self.scan_skills_dir(builtin_dir, SkillSource::Builtin, &mut skills, &mut seen_names)?;
+        if self.builtin.exists() {
+            self.scan_skills_dir(&self.builtin, SkillSource::Builtin, &mut skills, &mut seen_names)?;
         }
 
         // Filter by requirements if requested
@@ -79,11 +74,9 @@ impl SkillsLoader {
         }
 
         // Check built-in
-        if let Some(ref builtin_dir) = self.builtin {
-            let builtin_skill = builtin_dir.join(name).join("SKILL.md");
-            if builtin_skill.exists() {
-                return fs::read_to_string(&builtin_skill).ok();
-            }
+        let builtin_skill = self.builtin.join(name).join("SKILL.md");
+        if builtin_skill.exists() {
+            return fs::read_to_string(&builtin_skill).ok();
         }
 
         None
@@ -220,11 +213,9 @@ impl SkillsLoader {
         }
 
         // Check built-in
-        if let Some(ref builtin_dir) = self.builtin {
-            let builtin_skill = builtin_dir.join(name).join("SKILL.md");
-            if builtin_skill.exists() {
-                return Some(builtin_skill);
-            }
+        let builtin_skill = self.builtin.join(name).join("SKILL.md");
+        if builtin_skill.exists() {
+            return Some(builtin_skill);
         }
 
         None

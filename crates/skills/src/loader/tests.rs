@@ -18,7 +18,7 @@ fn list_skills_basic() {
     let content = "---\ndescription: Test skill\n---\n# Content";
     create_test_skill(temp.path(), "test-skill", content);
 
-    let loader = SkillsLoader::new(temp.path().to_path_buf(), None);
+    let loader = SkillsLoader::new(temp.path().to_path_buf());
     let skills = loader.list_skills(false).unwrap();
 
     assert_eq!(skills.len(), 1);
@@ -31,7 +31,7 @@ fn load_skill_existing() {
     let content = "---\ndescription: Test\n---\n# Test Content";
     create_test_skill(temp.path(), "my-skill", content);
 
-    let loader = SkillsLoader::new(temp.path().to_path_buf(), None);
+    let loader = SkillsLoader::new(temp.path().to_path_buf());
     let loaded = loader.load_skill("my-skill").unwrap();
 
     assert!(loaded.contains("# Test Content"));
@@ -40,7 +40,7 @@ fn load_skill_existing() {
 #[test]
 fn load_skill_nonexistent() {
     let temp = TempDir::new().unwrap();
-    let loader = SkillsLoader::new(temp.path().to_path_buf(), None);
+    let loader = SkillsLoader::new(temp.path().to_path_buf());
 
     assert!(loader.load_skill("nonexistent").is_none());
 }
@@ -48,7 +48,7 @@ fn load_skill_nonexistent() {
 #[test]
 fn build_skills_summary_empty() {
     let temp = TempDir::new().unwrap();
-    let loader = SkillsLoader::new(temp.path().to_path_buf(), None);
+    let loader = SkillsLoader::new(temp.path().to_path_buf());
 
     let summary = loader.build_skills_summary().unwrap();
     assert!(summary.is_empty());
@@ -60,7 +60,7 @@ fn build_skills_summary_with_skills() {
     let content = "---\ndescription: A test skill\n---\n# Content";
     create_test_skill(temp.path(), "test", content);
 
-    let loader = SkillsLoader::new(temp.path().to_path_buf(), None);
+    let loader = SkillsLoader::new(temp.path().to_path_buf());
     let summary = loader.build_skills_summary().unwrap();
 
     assert!(summary.contains("<skills>"));
