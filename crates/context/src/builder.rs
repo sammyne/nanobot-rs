@@ -4,7 +4,8 @@ use std::path::PathBuf;
 use chrono::{DateTime, Local};
 use nanobot_memory::MemoryStore;
 use nanobot_provider::{Message, ToolCall};
-use tracing::info;
+use nanobot_skills::SkillsLoader;
+use tracing::{info, warn};
 
 use crate::ContextError;
 
@@ -17,6 +18,8 @@ pub struct ContextBuilder {
     workspace: PathBuf,
     /// Memory store for accessing long-term memory
     memory: MemoryStore,
+    /// Skills loader for managing agent skills
+    skills: SkillsLoader,
 }
 
 impl ContextBuilder {
@@ -36,10 +39,15 @@ impl ContextBuilder {
         }
 
         let memory = MemoryStore::new(workspace.clone())?;
+        let skills = SkillsLoader::new(workspace.clone());
 
         info!("ContextBuilder initialized for workspace: {}", workspace.display());
 
-        Ok(Self { workspace, memory })
+        Ok(Self {
+            workspace,
+            memory,
+            skills,
+        })
     }
 
     /// Get a reference to the underlying memory store.
@@ -48,6 +56,14 @@ impl ContextBuilder {
     /// such as memory consolidation.
     pub fn memory(&self) -> &MemoryStore {
         &self.memory
+    }
+
+    /// Get a reference to the underlying skills loader.
+    ///
+    /// This is useful for operations that need direct access to skills,
+    /// such as skill discovery and loading.
+    pub fn skills(&self) -> &SkillsLoader {
+        &self.skills
     }
 
     /// Build the core identity section of the system prompt.
@@ -99,7 +115,7 @@ Reply directly with text for conversations. Only use the 'message' tool to send 
 
     /// Build the complete system prompt.
     ///
-    /// Assembles core identity, memory context, and skills.
+    /// Assembles core identity, memory context, active skills, and skills summary.
     /// Parts are joined with `---` separator.
     pub fn build_system_prompt(&self) -> Result<String, ContextError> {
         let mut parts = Vec::new();
@@ -111,6 +127,43 @@ Reply directly with text for conversations. Only use the 'message' tool to send 
         let memory_context = self.memory.get_memory_context()?;
         if !memory_context.is_empty() {
             parts.push(format!("# Memory\n\n{}", memory_context));
+        }
+
+        // Active Skills - always-loaded skills with full content
+        match self.skills.get_always_skills() {
+            Ok(always_skills) => {
+                if !always_skills.is_empty() {
+                    let always_content = self.skills.load_skills_for_context(&always_skills);
+                    if !always_content.is_empty() {
+                        parts.push(format!("# Active Skills\n\n{}", always_content));
+                        info!("Loaded {} active skills into context", always_skills.len());
+                    }
+                }
+            }
+            Err(e) => {
+                warn!("Failed to get always skills: {}", e);
+            }
+        }
+
+        // Skills Summary - available skills for on-demand loading
+        match self.skills.build_skills_summary() {
+            Ok(skills_summary) => {
+                if !skills_summary.is_empty() {
+                    let skills_section = format!(
+                        r#"# Skills
+
+The following skills extend your capabilities. To use a skill, read its SKILL.md file using the read_file tool.
+Skills with available="false" need dependencies installed first - you can try installing them with apt/brew.
+
+{}"#,
+                        skills_summary
+                    );
+                    parts.push(skills_section);
+                }
+            }
+            Err(e) => {
+                warn!("Failed to build skills summary: {}", e);
+            }
         }
 
         Ok(parts.join("\n\n---\n\n"))
