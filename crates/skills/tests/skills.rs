@@ -33,25 +33,40 @@ fn workspace_skill_priority_over_builtin() {
     let loader = SkillsLoader::new(workspace.path().to_path_buf());
 
     let skills = loader.list_skills(false).unwrap();
-    assert_eq!(skills.len(), 1);
-    assert_eq!(skills[0].source, SkillSource::Workspace);
-    assert_eq!(skills[0].meta.description, "Workspace version");
+    // Find the test-skill (there may be other builtin skills)
+    let test_skill = skills.iter().find(|s| s.name == "test-skill");
+    assert!(test_skill.is_some());
+    let test_skill = test_skill.unwrap();
+
+    assert_eq!(test_skill.source, SkillSource::Workspace);
+    assert_eq!(test_skill.meta.description, "Workspace version");
 }
 
 #[test]
 fn fallback_to_builtin_when_workspace_missing() {
     let workspace = TempDir::new().unwrap();
 
-    // Create skill only in builtin
+    // Create skill in builtin BEFORE initializing SkillsLoader
+    // (SkillsLoader will reinitialize builtin on first use)
     let builtin_content = "---\ndescription: Builtin only\n---\n# Content";
     create_builtin_skill(workspace.path(), "builtin-only", builtin_content);
+
+    // Create a VERSION file to prevent reinitialization
+    std::fs::write(
+        workspace.path().join("builtin-skills/VERSION"),
+        nanobot_skills::version::crate_version(),
+    )
+    .unwrap();
 
     let loader = SkillsLoader::new(workspace.path().to_path_buf());
 
     let skills = loader.list_skills(false).unwrap();
-    assert_eq!(skills.len(), 1);
-    assert_eq!(skills[0].source, SkillSource::Builtin);
-    assert_eq!(skills[0].name, "builtin-only");
+    // Find the builtin-only skill (there may be other builtin skills)
+    let builtin_only = skills.iter().find(|s| s.name == "builtin-only");
+    assert!(builtin_only.is_some());
+    let builtin_only = builtin_only.unwrap();
+
+    assert_eq!(builtin_only.source, SkillSource::Builtin);
 }
 
 #[test]
@@ -77,14 +92,20 @@ requires:
 
     let loader = SkillsLoader::new(workspace.path().to_path_buf());
 
-    // Without filter
+    // Without filter - should include workspace skills and builtin skills
     let all_skills = loader.list_skills(false).unwrap();
-    assert_eq!(all_skills.len(), 2);
+    let workspace_skills: Vec<_> = all_skills
+        .iter()
+        .filter(|s| s.name == "available" || s.name == "unavailable")
+        .collect();
+    assert_eq!(workspace_skills.len(), 2);
 
     // With filter
     let available_skills = loader.list_skills(true).unwrap();
-    assert_eq!(available_skills.len(), 1);
-    assert_eq!(available_skills[0].name, "available");
+    // The "available" skill should be in the filtered list
+    assert!(available_skills.iter().any(|s| s.name == "available"));
+    // The "unavailable" skill should not be in the filtered list
+    assert!(!available_skills.iter().any(|s| s.name == "unavailable"));
 }
 
 #[test]
@@ -190,7 +211,10 @@ fn empty_directory_returns_empty_list() {
     let loader = SkillsLoader::new(workspace.path().to_path_buf());
     let skills = loader.list_skills(false).unwrap();
 
-    assert!(skills.is_empty());
+    // Should have builtin skills even without custom skills
+    // So we check that there are no workspace skills
+    let workspace_skills: Vec<_> = skills.iter().filter(|s| s.source == SkillSource::Workspace).collect();
+    assert!(workspace_skills.is_empty());
 }
 
 #[test]
@@ -207,10 +231,13 @@ fn invalid_yaml_returns_default_metadata() {
     let loader = SkillsLoader::new(workspace.path().to_path_buf());
     let skills = loader.list_skills(false).unwrap();
 
-    assert_eq!(skills.len(), 1);
-    assert_eq!(skills[0].name, "invalid");
+    // Find the invalid skill
+    let invalid_skill = skills.iter().find(|s| s.name == "invalid");
+    assert!(invalid_skill.is_some());
+    let invalid_skill = invalid_skill.unwrap();
+
     // Should have default metadata, not crash
-    assert!(skills[0].meta.description.is_empty());
+    assert!(invalid_skill.meta.description.is_empty());
 }
 
 #[test]
@@ -227,9 +254,12 @@ fn skill_without_frontmatter() {
     let loader = SkillsLoader::new(workspace.path().to_path_buf());
     let skills = loader.list_skills(false).unwrap();
 
-    assert_eq!(skills.len(), 1);
-    assert_eq!(skills[0].name, "no-frontmatter");
-    assert!(skills[0].meta.description.is_empty());
+    // Find the skill
+    let skill = skills.iter().find(|s| s.name == "no-frontmatter");
+    assert!(skill.is_some());
+    let skill = skill.unwrap();
+
+    assert!(skill.meta.description.is_empty());
 }
 
 #[test]
@@ -247,8 +277,13 @@ fn directory_without_skill_file_ignored() {
     let loader = SkillsLoader::new(workspace.path().to_path_buf());
     let skills = loader.list_skills(false).unwrap();
 
-    assert_eq!(skills.len(), 1);
-    assert_eq!(skills[0].name, "valid");
+    // Find the valid skill
+    let valid_skill = skills.iter().find(|s| s.name == "valid");
+    assert!(valid_skill.is_some());
+
+    // empty-dir should not appear
+    let empty_dir_skill = skills.iter().find(|s| s.name == "empty-dir");
+    assert!(empty_dir_skill.is_none());
 }
 
 #[test]
@@ -421,8 +456,10 @@ Use the `gh` CLI to interact with GitHub.
     let loader = SkillsLoader::new(workspace.path().to_path_buf());
     let skills = loader.list_skills(false).unwrap();
 
-    assert_eq!(skills.len(), 1);
-    let skill = &skills[0];
+    // Find the github skill
+    let skill = skills.iter().find(|s| s.name == "github");
+    assert!(skill.is_some());
+    let skill = skill.unwrap();
 
     // Verify description
     assert_eq!(skill.meta.description, "Interact with GitHub using the `gh` CLI.");
@@ -448,4 +485,74 @@ Use the `gh` CLI to interact with GitHub.
     assert_eq!(install[1].kind, "apt");
     assert_eq!(install[1].package, Some("gh".to_string()));
     assert_eq!(install[1].label, "Install GitHub CLI (apt)");
+}
+
+/// Test that builtin skills are automatically initialized on first use
+#[test]
+fn builtin_skills_auto_initialized() {
+    let workspace = TempDir::new().unwrap();
+
+    // Initially, builtin-skills directory should not exist
+    assert!(!workspace.path().join("builtin-skills").exists());
+
+    // Create SkillsLoader
+    let loader = SkillsLoader::new(workspace.path().to_path_buf());
+
+    // Now builtin-skills directory should exist and contain VERSION file
+    assert!(workspace.path().join("builtin-skills").exists());
+    assert!(workspace.path().join("builtin-skills/VERSION").exists());
+
+    // Should be able to list builtin skills
+    let skills = loader.list_skills(false).unwrap();
+    // At minimum, should have tavily-search from builtin
+    assert!(!skills.is_empty());
+}
+
+/// Test that user modifications to builtin skills are preserved when version matches
+#[test]
+fn builtin_skills_user_modifications_preserved() {
+    let workspace = TempDir::new().unwrap();
+
+    // First initialization
+    let _loader1 = SkillsLoader::new(workspace.path().to_path_buf());
+
+    // Modify a builtin skill
+    let skill_path = workspace.path().join("builtin-skills/tavily-search/SKILL.md");
+    if skill_path.exists() {
+        fs::write(&skill_path, "modified content").unwrap();
+
+        // Create new loader (should not reinitialize because version matches)
+        let _loader2 = SkillsLoader::new(workspace.path().to_path_buf());
+
+        // Modification should still be there
+        let content = fs::read_to_string(&skill_path).unwrap();
+        assert_eq!(content, "modified content");
+    }
+}
+
+/// Test that workspace skills override builtin skills with same name
+#[test]
+fn workspace_overrides_builtin_with_same_name() {
+    let workspace = TempDir::new().unwrap();
+
+    // Initialize builtin skills
+    let _loader = SkillsLoader::new(workspace.path().to_path_buf());
+
+    // Check if tavily-search exists in builtin
+    let builtin_skill = workspace.path().join("builtin-skills/tavily-search/SKILL.md");
+    if builtin_skill.exists() {
+        // Create a workspace skill with same name
+        create_workspace_skill(
+            workspace.path(),
+            "tavily-search",
+            "---\ndescription: My custom tavily\n---\n# Custom Content",
+        );
+
+        let loader = SkillsLoader::new(workspace.path().to_path_buf());
+        let skill = loader.load_skill("tavily-search").unwrap();
+
+        // Should load workspace version, not builtin
+        assert!(skill.contains("Custom Content"));
+        assert!(skill.contains("My custom tavily"));
+    }
 }

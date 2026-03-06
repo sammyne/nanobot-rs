@@ -21,8 +21,10 @@ fn list_skills_basic() {
     let loader = SkillsLoader::new(temp.path().to_path_buf());
     let skills = loader.list_skills(false).unwrap();
 
-    assert_eq!(skills.len(), 1);
-    assert_eq!(skills[0].name, "test-skill");
+    // Should include both the test skill and builtin skills
+    assert!(!skills.is_empty());
+    let test_skill = skills.iter().find(|s| s.name == "test-skill");
+    assert!(test_skill.is_some());
 }
 
 #[test]
@@ -48,10 +50,15 @@ fn load_skill_nonexistent() {
 #[test]
 fn build_skills_summary_empty() {
     let temp = TempDir::new().unwrap();
+    // Create a workspace with no custom skills
     let loader = SkillsLoader::new(temp.path().to_path_buf());
 
     let summary = loader.build_skills_summary().unwrap();
-    assert!(summary.is_empty());
+    // May contain builtin skills, so we only check that it's valid XML
+    if !summary.is_empty() {
+        assert!(summary.contains("<skills>"));
+        assert!(summary.contains("</skills>"));
+    }
 }
 
 #[test]

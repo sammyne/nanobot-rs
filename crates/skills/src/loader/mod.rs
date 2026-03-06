@@ -27,10 +27,35 @@ impl SkillsLoader {
     ///
     /// # Arguments
     /// * `workspace` - The workspace root directory
+    ///
+    /// # Note
+    /// This constructor ensures builtin skills are initialized and up-to-date.
+    /// Errors during builtin skills initialization are logged but don't prevent
+    /// the loader from being created (graceful degradation).
     pub fn new(workspace: PathBuf) -> Self {
-        let workspace = workspace.join("skills");
-        let builtin = workspace.join("builtin-skills");
-        Self { workspace, builtin }
+        let skills_dir = workspace.join("skills");
+        let builtin_dir = workspace.join("builtin-skills");
+
+        // Ensure builtin skills are initialized
+        // Use graceful error handling - log warnings but don't fail
+        if let Err(e) = Self::ensure_builtin_skills_initialized(&workspace) {
+            tracing::warn!("Failed to initialize builtin skills: {}", e);
+        }
+
+        Self {
+            workspace: skills_dir,
+            builtin: builtin_dir,
+        }
+    }
+
+    /// Ensures builtin skills are properly initialized in the workspace.
+    fn ensure_builtin_skills_initialized(workspace: &Path) -> Result<()> {
+        // Builtin skills are embedded in the binary at compile time
+        // and extracted to workspace/builtin-skills at runtime
+        let builtin_dir = workspace.join("builtin-skills");
+        crate::builtin::ensure_builtin_skills(&builtin_dir)?;
+
+        Ok(())
     }
 
     /// Lists all available skills.
