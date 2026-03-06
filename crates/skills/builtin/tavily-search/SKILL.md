@@ -1,6 +1,6 @@
 ---
 name: search
-description: "Search the web using Tavily's LLM-optimized search API. Returns relevant results with content snippets, scores, and metadata. Use when you need to find web content on any topic without writing code."
+description: "Search the web for real-time information using Tavily's LLM-optimized API. Use this skill when you need: weather forecasts and conditions, latest news and current events, stock prices and financial data, sports scores and schedules, trending topics and breaking news, or any time-sensitive information beyond your knowledge cutoff. Returns relevant results with content snippets, scores, and metadata."
 metadata:
   nanobot:
     requires:
