@@ -1035,6 +1035,8 @@ dependencies = [
  "nanobot-agent",
  "nanobot-config",
  "nanobot-provider",
+ "nanobot-templates",
+ "tempfile",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -1131,6 +1133,13 @@ dependencies = [
  "thiserror 2.0.18",
  "tracing",
  "walkdir",
+]
+
+[[package]]
+name = "nanobot-templates"
+version = "0.1.0"
+dependencies = [
+ "include_dir",
 ]
 
 [[package]]
