@@ -27,6 +27,7 @@ nanobot-memory.path = "crates/memory"
 nanobot-context.path = "crates/context"
 nanobot-skills.path = "crates/skills"
 nanobot-templates.path = "crates/templates"
+nanobot-channels.path = "crates/channels"
 
 [workspace.dependencies.tokio]
 version = "1"
@@ -53,3 +54,6 @@ features = ["serde"]
 
 [workspace.dependencies.include_dir]
 version = "0.7"
+
+[workspace.dependencies.dingtalk-stream]
+version = "0.1"
