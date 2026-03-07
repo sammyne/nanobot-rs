@@ -1,3 +1,14 @@
+/// Bootstrap files that provide system-level context to the agent.
+///
+/// These files are loaded from the workspace root and integrated into the system prompt
+/// to provide the agent with essential configuration, identity, tools, and user preferences.
+/// The files are loaded in the order specified and each file's content is prefixed with
+/// a section header (e.g., "## AGENTS.md").
+///
+/// Files are optional - missing files are silently skipped. Only non-empty files
+/// with valid UTF-8 encoding are included in the final system prompt.
+const BOOTSTRAP_FILES: &[&str] = &["AGENTS.md", "SOUL.md", "USER.md", "TOOLS.md", "IDENTITY.md"];
+
 /// Context builder implementation.
 use std::path::PathBuf;
 
@@ -78,7 +89,7 @@ impl ContextBuilder {
         let runtime = format!("{} {}", os_name, arch);
 
         format!(
-            r#"# nanobot 🐈
+            r#"# nanobot 🐱
 
 You are nanobot, a helpful AI assistant.
 
@@ -113,15 +124,77 @@ Reply directly with text for conversations. Only use the 'message' tool to send 
         )
     }
 
+    /// Load bootstrap files from the workspace directory.
+    ///
+    /// This method reads bootstrap files (AGENTS.md, SOUL.md, USER.md, TOOLS.md, IDENTITY.md)
+    /// from the workspace and combines them into a single string. Each file's content is
+    /// prefixed with a section header using the filename.
+    ///
+    /// # Returns
+    /// A string containing all valid bootstrap file contents, joined by newlines.
+    /// Returns an empty string if no valid files are found.
+    ///
+    /// # Behavior
+    /// - Files that don't exist are silently skipped
+    /// - Files with IO errors are logged as warnings and skipped
+    /// - Files with non-UTF-8 encoding are logged as warnings and skipped
+    /// - Empty files or files with only whitespace are not included in the output
+    ///
+    /// # Example Output
+    /// ```text
+    /// ## AGENTS.md
+    /// This is the content of AGENTS.md...
+    ///
+    /// ## SOUL.md
+    /// This is the content of SOUL.md...
+    /// ```
+    pub fn load_bootstrap_files(&self) -> String {
+        let mut sections = Vec::new();
+
+        for filename in BOOTSTRAP_FILES {
+            let file_path = self.workspace.join(filename);
+
+            match std::fs::read_to_string(&file_path) {
+                Ok(content) => {
+                    let trimmed = content.trim();
+                    if !trimmed.is_empty() {
+                        sections.push(format!("## {}\n\n{}", filename, content));
+                    }
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                    // Silently skip missing files
+                }
+                Err(e) => {
+                    warn!("Failed to read bootstrap file {}: {}", file_path.display(), e);
+                }
+            }
+        }
+
+        sections.join("\n\n")
+    }
+
     /// Build the complete system prompt.
     ///
-    /// Assembles core identity, memory context, active skills, and skills summary.
+    /// Assembles core identity, bootstrap files, memory context, active skills, and skills summary.
     /// Parts are joined with `---` separator.
+    ///
+    /// # Assembly Order
+    /// 1. Core identity (nanobot introduction, runtime info, workspace path, tool guidelines)
+    /// 2. Bootstrap files (AGENTS.md, SOUL.md, USER.md, TOOLS.md, IDENTITY.md)
+    /// 3. Memory context (long-term memory contents)
+    /// 4. Active Skills (always-loaded skills with full content)
+    /// 5. Skills Summary (available skills for on-demand loading)
     pub fn build_system_prompt(&self) -> Result<String, ContextError> {
         let mut parts = Vec::new();
 
         // Core identity
         parts.push(self.build_core_identity());
+
+        // Bootstrap files
+        let bootstrap_content = self.load_bootstrap_files();
+        if !bootstrap_content.is_empty() {
+            parts.push(bootstrap_content);
+        }
 
         // Memory context
         let memory_context = self.memory.get_memory_context()?;
