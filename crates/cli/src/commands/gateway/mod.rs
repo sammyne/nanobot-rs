@@ -38,9 +38,6 @@ impl GatewayCmd {
 
         info!("启动 nanobot gateway (port={})", actual_port);
 
-        // 初始化日志
-        self.init_logging();
-
         // 显示启动信息
         self.print_startup_banner(actual_port, port_source);
 
@@ -59,26 +56,11 @@ impl GatewayCmd {
             .await
             .context("创建通道管理器失败")?;
 
-        // 显示启动状态
-        self.print_channel_status(&channel_manager).await;
-
         // 启动服务并等待关闭信号
         self.run_services(agent_loop, channel_manager).await?;
 
         info!("Gateway 服务已停止");
         Ok(())
-    }
-
-    /// 初始化日志
-    fn init_logging(&self) {
-        // 通过环境变量 RUST_LOG 控制日志级别
-        // 例如：RUST_LOG=debug nanobot gateway
-        tracing_subscriber::fmt()
-            .with_env_filter(
-                tracing_subscriber::EnvFilter::try_from_default_env()
-                    .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
-            )
-            .init();
     }
 
     /// 显示启动横幅
@@ -157,6 +139,9 @@ impl GatewayCmd {
 
         // 启动所有通道
         channel_manager.start_all().await.context("启动通道失败")?;
+
+        // 显示通道状态（在启动所有通道后）
+        self.print_channel_status(&channel_manager).await;
 
         println!("  ✓ 服务已启动，按 Ctrl+C 停止");
         println!();
