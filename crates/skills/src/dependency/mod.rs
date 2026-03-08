@@ -40,13 +40,13 @@ pub fn get_missing_requirements(requires: &Requires) -> Vec<String> {
 
     for bin in &requires.bins {
         if !is_bin_available(bin) {
-            missing.push(format!("CLI: {}", bin));
+            missing.push(format!("CLI: {bin}"));
         }
     }
 
     for var in &requires.env {
         if !is_env_set(var) {
-            missing.push(format!("ENV: {}", var));
+            missing.push(format!("ENV: {var}"));
         }
     }
 

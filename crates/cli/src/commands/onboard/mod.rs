@@ -56,7 +56,7 @@ impl OnboardCmd {
 
         // 工作空间初始化失败不中断整体流程
         if let Err(e) = initializer.initialize() {
-            eprintln!("\x1b[31mWarning:\x1b[0m Failed to initialize workspace: {}", e);
+            eprintln!("\x1b[31mWarning:\x1b[0m Failed to initialize workspace: {e}");
         }
 
         // 输出准备就绪信息

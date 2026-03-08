@@ -27,7 +27,7 @@ fn session_get_history_max_messages() {
 
     // Add 10 messages
     for i in 0..10 {
-        let msg = Message::user(format!("Message {}", i));
+        let msg = Message::user(format!("Message {i}"));
         session.add_message(msg);
     }
 
@@ -85,7 +85,7 @@ fn session_get_history_with_consolidation() {
 
     // Add 10 messages
     for i in 0..10 {
-        let msg = Message::user(format!("Message {}", i));
+        let msg = Message::user(format!("Message {i}"));
         session.add_message(msg);
     }
 

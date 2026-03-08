@@ -288,7 +288,7 @@ impl Config {
 
         let content = fs::read_to_string(&path)?;
         let config: Config =
-            serde_json::from_str(&content).map_err(|e| ConfigError::Parse(format!("配置文件格式错误: {}", e)))?;
+            serde_json::from_str(&content).map_err(|e| ConfigError::Parse(format!("配置文件格式错误: {e}")))?;
 
         config.validate()?;
         info!("配置加载成功");
@@ -395,7 +395,7 @@ impl Config {
 
         let start = &key[..4];
         let end = &key[key.len() - 4..];
-        format!("{}****{}", start, end)
+        format!("{start}****{end}")
     }
 }
 

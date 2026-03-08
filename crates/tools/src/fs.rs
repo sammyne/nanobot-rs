@@ -102,7 +102,7 @@ impl Tool for ReadFileTool {
         let metadata = fs::metadata(&path).await.map_err(ToolError::io)?;
 
         if !metadata.is_file() {
-            return Err(ToolError::path(format!("路径不是文件: {}", path_str)));
+            return Err(ToolError::path(format!("路径不是文件: {path_str}")));
         }
 
         // 读取内容
@@ -280,13 +280,12 @@ impl Tool for EditFileTool {
                 fs::write(&path, new_content).await.map_err(ToolError::io)?;
 
                 info!("成功编辑文件: {}", path_str);
-                Ok(format!("文件编辑成功: {}", path_str))
+                Ok(format!("文件编辑成功: {path_str}"))
             }
             n => {
                 // 多次匹配，警告用户
                 Err(ToolError::execution(format!(
-                    "找到 {} 处匹配，无法确定唯一位置。请提供更多上下文。",
-                    n
+                    "找到 {n} 处匹配，无法确定唯一位置。请提供更多上下文。"
                 )))
             }
         }
@@ -323,7 +322,7 @@ impl ListDirTool {
             String::new()
         };
         let kind = if metadata.is_dir() { "[DIR]" } else { "[FILE]" };
-        format!("{} {}{}", kind, name, size)
+        format!("{kind} {name}{size}")
     }
 }
 
@@ -366,7 +365,7 @@ impl Tool for ListDirTool {
         let metadata = fs::metadata(&path).await.map_err(ToolError::io)?;
 
         if !metadata.is_dir() {
-            return Err(ToolError::path(format!("路径不是目录: {}", path_str)));
+            return Err(ToolError::path(format!("路径不是目录: {path_str}")));
         }
 
         let mut results = vec![format!("目录: {}", path_str)];
@@ -384,7 +383,7 @@ impl Tool for ListDirTool {
                 let indent = "  ".repeat(depth);
                 if let Ok(meta) = entry.metadata() {
                     let formatted = Self::format_entry(entry.path(), &meta);
-                    results.push(format!("{}{}", indent, formatted));
+                    results.push(format!("{indent}{formatted}"));
                 }
             }
         } else {
@@ -394,7 +393,7 @@ impl Tool for ListDirTool {
             while let Some(entry) = entries.next_entry().await.map_err(ToolError::io)? {
                 if let Ok(meta) = entry.metadata().await {
                     let formatted = Self::format_entry(&entry.path(), &meta);
-                    results.push(format!("  {}", formatted));
+                    results.push(format!("  {formatted}"));
                 }
             }
         }

@@ -133,7 +133,7 @@ impl Tool for ShellTool {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
-            .map_err(|e| ToolError::execution(format!("命令启动失败: {}", e)))?;
+            .map_err(|e| ToolError::execution(format!("命令启动失败: {e}")))?;
 
         let output = timeout(Duration::from_millis(timeout_ms), child.wait_with_output())
             .await
@@ -141,7 +141,7 @@ impl Tool for ShellTool {
                 limit: timeout_ms / 1000,
                 elapsed: Duration::from_millis(timeout_ms),
             })?
-            .map_err(|e| ToolError::execution(format!("命令等待失败: {}", e)))?;
+            .map_err(|e| ToolError::execution(format!("命令等待失败: {e}")))?;
 
         let stdout = String::from_utf8_lossy(&output.stdout).to_string();
         let stderr = String::from_utf8_lossy(&output.stderr).to_string();

@@ -100,7 +100,7 @@ impl MemoryStore {
         if long_term.is_empty() {
             Ok(String::new())
         } else {
-            Ok(format!("## Long-term Memory\n{}", long_term))
+            Ok(format!("## Long-term Memory\n{long_term}"))
         }
     }
 

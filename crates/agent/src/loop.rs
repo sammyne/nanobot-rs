@@ -129,7 +129,7 @@ impl<P: Provider + 'static> AgentLoop<P> {
 
     /// 获取会话键
     fn session_key(channel: &str, chat_id: &str) -> String {
-        format!("{}:{}", channel, chat_id)
+        format!("{channel}:{chat_id}")
     }
 
     /// 获取或创建会话（与 Python 版本一致，返回 Session 对象）
@@ -260,10 +260,10 @@ impl<P: Provider + 'static> AgentLoop<P> {
 
                     // 转换结果为字符串
                     let result_content = match tool_result {
-                        Ok(output) => format!("Tool Call Result:\n{}", output),
+                        Ok(output) => format!("Tool Call Result:\n{output}"),
                         Err(e) => {
                             error!("工具 {} 执行失败: {}", tool_call.name, e);
-                            format!("Tool Call Error: {}", e)
+                            format!("Tool Call Error: {e}")
                         }
                     };
 
@@ -293,8 +293,7 @@ impl<P: Provider + 'static> AgentLoop<P> {
         // 达到最大迭代次数
         warn!("ReAct 循环达到最大迭代次数: {}", max_iterations);
         let warning_msg = format!(
-            "I reached the maximum number of tool call iterations ({}) without completing the task. You can try breaking the task into smaller steps.",
-            max_iterations
+            "I reached the maximum number of tool call iterations ({max_iterations}) without completing the task. You can try breaking the task into smaller steps."
         );
 
         messages.push(Message::assistant(&warning_msg));
@@ -449,14 +448,14 @@ impl<P: Provider + 'static> AgentLoop<P> {
                     }
                     Err(e) => {
                         error!("处理消息失败: {}", e);
-                        let error_msg = format!("处理失败: {}", e);
+                        let error_msg = format!("处理失败: {e}");
                         OutboundMessage::new(&channel, &chat_id, &error_msg)
                     }
                 }
             }
             Err(e) => {
                 error!("构建消息失败: {}", e);
-                let error_msg = format!("构建消息失败: {}", e);
+                let error_msg = format!("构建消息失败: {e}");
                 OutboundMessage::new(&channel, &chat_id, &error_msg)
             }
         }

@@ -86,7 +86,7 @@ impl ContextBuilder {
 
         let os_name = std::env::consts::OS;
         let arch = std::env::consts::ARCH;
-        let runtime = format!("{} {}", os_name, arch);
+        let runtime = format!("{os_name} {arch}");
 
         format!(
             r#"# nanobot 🐱
@@ -158,7 +158,7 @@ Reply directly with text for conversations. Only use the 'message' tool to send 
                 Ok(content) => {
                     let trimmed = content.trim();
                     if !trimmed.is_empty() {
-                        sections.push(format!("## {}\n\n{}", filename, content));
+                        sections.push(format!("## {filename}\n\n{content}"));
                     }
                 }
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
@@ -199,7 +199,7 @@ Reply directly with text for conversations. Only use the 'message' tool to send 
         // Memory context
         let memory_context = self.memory.get_memory_context()?;
         if !memory_context.is_empty() {
-            parts.push(format!("# Memory\n\n{}", memory_context));
+            parts.push(format!("# Memory\n\n{memory_context}"));
         }
 
         // Active Skills - always-loaded skills with full content
@@ -208,7 +208,7 @@ Reply directly with text for conversations. Only use the 'message' tool to send 
                 if !always_skills.is_empty() {
                     let always_content = self.skills.load_skills_for_context(&always_skills);
                     if !always_content.is_empty() {
-                        parts.push(format!("# Active Skills\n\n{}", always_content));
+                        parts.push(format!("# Active Skills\n\n{always_content}"));
                         info!("Loaded {} active skills into context", always_skills.len());
                     }
                 }
@@ -228,8 +228,7 @@ Reply directly with text for conversations. Only use the 'message' tool to send 
 The following skills extend your capabilities. To use a skill, read its SKILL.md file using the read_file tool.
 Skills with available="false" need dependencies installed first - you can try installing them with apt/brew.
 
-{}"#,
-                        skills_summary
+{skills_summary}"#,
                     );
                     parts.push(skills_section);
                 }
@@ -260,14 +259,14 @@ Skills with available="false" need dependencies installed first - you can try in
         let mut lines = vec![format!("Current Time: {} ({}) ({})", time_str, weekday, tz)];
 
         if let Some(ch) = channel {
-            lines.push(format!("Channel: {}", ch));
+            lines.push(format!("Channel: {ch}"));
         }
         if let Some(id) = chat_id {
-            lines.push(format!("Chat ID: {}", id));
+            lines.push(format!("Chat ID: {id}"));
         }
 
         let block = format!("[Runtime Context]\n{}", lines.join("\n"));
-        format!("{}\n\n{}", content, block)
+        format!("{content}\n\n{block}")
     }
 
     /// Encode an image file to base64 data URL format.
@@ -291,7 +290,7 @@ Skills with available="false" need dependencies installed first - you can try in
         let bytes = std::fs::read(path)?;
         let encoded = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &bytes);
 
-        Ok(Some(format!("data:{};base64,{}", mime, encoded)))
+        Ok(Some(format!("data:{mime};base64,{encoded}")))
     }
 
     /// Build the complete message list for an LLM call.

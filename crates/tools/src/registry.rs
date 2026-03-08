@@ -89,7 +89,7 @@ impl ToolRegistry {
     pub async fn execute(&self, name: &str, params: Value) -> ToolResult {
         let tool = self.tools.get(name).ok_or_else(|| {
             let available = self.tool_names().join(", ");
-            ToolError::NotFound(format!("工具 '{}' 不存在。可用工具: [{}]", name, available))
+            ToolError::NotFound(format!("工具 '{name}' 不存在。可用工具: [{available}]"))
         })?;
 
         info!("执行工具: {} 参数: {:?}", name, params);
