@@ -3,6 +3,7 @@
 //! 实现 DingTalk 通道，支持 Stream Mode (WebSocket) 接收消息和 HTTP API 发送消息。
 //! 使用 dingtalk-stream 库提供 Stream Mode 支持。
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -46,6 +47,9 @@ pub struct DingTalk {
 
     /// 入站消息发送端
     inbound_tx: mpsc::Sender<InboundMessage>,
+
+    /// 消息上下文（chat_id -> 原始 ChatbotMessage）
+    message_context: Arc<RwLock<HashMap<String, ChatbotMessage>>>,
 }
 
 impl DingTalk {
@@ -77,6 +81,7 @@ impl DingTalk {
             task_handle: Arc::new(RwLock::new(None)),
             name: "dingtalk".to_string(),
             inbound_tx,
+            message_context: Arc::new(RwLock::new(HashMap::new())),
         })
     }
 
@@ -134,6 +139,14 @@ impl DingTalk {
 
         // 获取聊天 ID（优先使用 conversation_id，其次使用 sender_id）
         let chat_id = msg.conversation_id.clone().unwrap_or_else(|| sender_id.clone());
+
+        // 保存原始消息到上下文
+        let message_context = self.message_context.clone();
+        let chat_id_clone = chat_id.clone();
+        let msg_clone = msg.clone();
+        tokio::spawn(async move {
+            message_context.write().await.insert(chat_id_clone, msg_clone);
+        });
 
         // 构造入站消息
         let inbound_msg = InboundMessage::new("dingtalk", &sender_id, &chat_id, &content);
@@ -225,21 +238,26 @@ impl Channel for DingTalk {
     async fn send(&self, msg: OutboundMessage) -> ChannelResult<()> {
         debug!("发送钉钉消息到: {}, 内容: {}", msg.chat_id, msg.content);
 
+        // 从上下文中获取原始消息
+        let incoming_msg = {
+            let context = self.message_context.read().await;
+            context.get(&msg.chat_id).cloned()
+        };
+
+        let incoming_msg = match incoming_msg {
+            Some(msg) => msg,
+            None => {
+                warn!("找不到 chat_id {} 的消息上下文，可能消息已过期", msg.chat_id);
+                return Err(ChannelError::SendFailed(format!("找不到消息上下文: {}", msg.chat_id)));
+            }
+        };
+
         // ChatbotReplier 会自动从 TokenManager 获取 token
         let replier = ChatbotReplier::new(
             self.http_client.clone(),
             Arc::clone(&self.token_manager),
             self.config.client_id.clone(),
         );
-
-        // 构造一个模拟的 ChatbotMessage 用于回复
-        let incoming_msg = ChatbotMessage {
-            sender_staff_id: Some(msg.chat_id.clone()),
-            sender_id: Some(msg.chat_id.clone()),
-            conversation_type: Some("1".to_string()),
-            conversation_id: Some(msg.chat_id.clone()),
-            ..Default::default()
-        };
 
         // 发送 Markdown 消息
         let markdown_content = format!("**Nanobot Reply**\n\n{}", msg.content);
@@ -278,6 +296,7 @@ impl Clone for DingTalk {
             task_handle: Arc::clone(&self.task_handle),
             name: self.name.clone(),
             inbound_tx: self.inbound_tx.clone(),
+            message_context: Arc::clone(&self.message_context),
         }
     }
 }
