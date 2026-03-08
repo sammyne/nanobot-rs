@@ -1,3 +1,5 @@
+use tokio::sync::mpsc;
+
 use super::*;
 
 /// 测试钉钉通道创建
@@ -10,7 +12,9 @@ async fn dingtalk_creation() {
         allow_from: Vec::new(),
     };
 
-    let dingtalk = DingTalk::new(config).await;
+    let (inbound_tx, _inbound_rx) = mpsc::channel::<crate::messages::InboundMessage>(16);
+
+    let dingtalk = DingTalk::new(config, inbound_tx).await;
     assert!(dingtalk.is_ok());
 }
 
@@ -24,7 +28,9 @@ async fn permission_check() {
         allow_from: vec!["user1".to_string(), "user2".to_string()],
     };
 
-    let dingtalk = DingTalk::new(config).await.unwrap();
+    let (inbound_tx, _inbound_rx) = mpsc::channel::<crate::messages::InboundMessage>(16);
+
+    let dingtalk = DingTalk::new(config, inbound_tx).await.unwrap();
 
     assert!(dingtalk.check_permission("user1"));
     assert!(dingtalk.check_permission("user2"));
