@@ -26,16 +26,22 @@
 //! use nanobot_channels::{
 //!     manager::ChannelManager,
 //!     config::ChannelsConfig,
+//!     messages::{InboundMessage, OutboundMessage},
 //!     traits::Channel,
 //! };
+//! use tokio::sync::mpsc;
 //!
 //! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 //! // 加载配置（使用 serde 反序列化）
 //! let yaml_content = std::fs::read_to_string("config.yaml")?;
 //! let config: ChannelsConfig = serde_yaml::from_str(&yaml_content)?;
 //!
+//! // 创建消息通道
+//! let (outbound_tx, outbound_rx) = mpsc::channel::<OutboundMessage>(16);
+//! let (inbound_tx, inbound_rx) = mpsc::channel::<InboundMessage>(16);
+//!
 //! // 创建通道管理器
-//! let mut manager = ChannelManager::new(config).await?;
+//! let mut manager = ChannelManager::new(config, outbound_rx, inbound_tx).await?;
 //!
 //! // 启动所有通道
 //! manager.start_all().await?;

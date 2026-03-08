@@ -13,12 +13,12 @@ use dingtalk_stream::{
     AsyncChatbotHandler, ChatbotMessage, ChatbotReplier, ClientBuilder, Credential, DingTalkStreamClient,
 };
 use serde_json::Value;
-use tokio::sync::RwLock;
+use tokio::sync::{RwLock, mpsc};
 use tracing::{debug, error, info, warn};
 
 use crate::config::DingTalkConfig;
 use crate::error::{ChannelError, ChannelResult};
-use crate::messages::OutboundMessage;
+use crate::messages::{InboundMessage, OutboundMessage};
 use crate::traits::Channel;
 
 /// 钉钉通道
@@ -43,11 +43,19 @@ pub struct DingTalk {
 
     /// 通道名称
     name: String,
+
+    /// 入站消息发送端
+    inbound_tx: mpsc::Sender<InboundMessage>,
 }
 
 impl DingTalk {
     /// 创建新的钉钉通道
-    pub async fn new(config: DingTalkConfig) -> ChannelResult<Self> {
+    ///
+    /// # 参数
+    ///
+    /// * `config` - 钉钉配置
+    /// * `inbound_tx` - 入站消息发送端，用于将接收到的消息发送给外部
+    pub async fn new(config: DingTalkConfig, inbound_tx: mpsc::Sender<InboundMessage>) -> ChannelResult<Self> {
         config.validate()?;
 
         // 注意：dingtalk-stream 的 HttpClient 目前不支持代理配置
@@ -68,6 +76,7 @@ impl DingTalk {
             running: Arc::new(RwLock::new(false)),
             task_handle: Arc::new(RwLock::new(None)),
             name: "dingtalk".to_string(),
+            inbound_tx,
         })
     }
 
@@ -123,9 +132,19 @@ impl DingTalk {
             sender_nick, sender_id, content
         );
 
-        // TODO: 调用消息回调处理消息
-        // 暂时只记录日志
-        debug!("处理入站消息: {}", content);
+        // 获取聊天 ID（优先使用 conversation_id，其次使用 sender_id）
+        let chat_id = msg.conversation_id.clone().unwrap_or_else(|| sender_id.clone());
+
+        // 构造入站消息
+        let inbound_msg = InboundMessage::new("dingtalk", &sender_id, &chat_id, &content);
+
+        // 异步发送入站消息
+        let inbound_tx = self.inbound_tx.clone();
+        tokio::spawn(async move {
+            if let Err(e) = inbound_tx.send(inbound_msg).await {
+                error!("发送入站消息失败: {}", e);
+            }
+        });
     }
 }
 
@@ -258,6 +277,7 @@ impl Clone for DingTalk {
             running: Arc::clone(&self.running),
             task_handle: Arc::clone(&self.task_handle),
             name: self.name.clone(),
+            inbound_tx: self.inbound_tx.clone(),
         }
     }
 }
