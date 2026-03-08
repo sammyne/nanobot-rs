@@ -1293,6 +1293,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "nanobot-channels",
  "nanobot-config",
  "nanobot-context",
  "nanobot-memory",
@@ -1335,6 +1336,7 @@ dependencies = [
  "dialoguer",
  "dirs",
  "nanobot-agent",
+ "nanobot-channels",
  "nanobot-config",
  "nanobot-provider",
  "nanobot-templates",

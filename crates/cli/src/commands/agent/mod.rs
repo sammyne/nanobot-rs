@@ -6,8 +6,7 @@ use std::io::{
 
 use anyhow::Result;
 use clap::Args;
-use nanobot_agent::AgentLoop;
-use nanobot_agent::bus::{InboundMessage, OutboundMessage};
+use nanobot_agent::{AgentLoop, InboundMessage, OutboundMessage};
 use nanobot_config::Config;
 use nanobot_provider::OpenAILike;
 use tracing::{debug, error, info};

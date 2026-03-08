@@ -183,68 +183,10 @@ fn agent_loop_uses_custom_config_values() {
     }
 }
 
-/// 从 bus 模块引入测试类型
-use crate::bus::InboundMessage;
-/// 从 bus 模块引入测试类型
-use crate::bus::OutboundMessage;
-
-/// 入站消息测试用例结构
-struct InboundCase {
-    name: &'static str,
-    session_id: &'static str,
-    content: &'static str,
-    expect: Option<(&'static str, &'static str, &'static str)>,
-}
-
-/// InboundMessage::from_session_id 解析测试
-#[test]
-fn inbound_message_from_session_id_parsing() {
-    let test_vector = [
-        InboundCase {
-            name: "标准格式 cli:direct",
-            session_id: "cli:direct",
-            content: "hello",
-            expect: Some(("cli", "user", "direct")),
-        },
-        InboundCase {
-            name: "多冒号格式 telegram:123:456",
-            session_id: "telegram:123:456",
-            content: "hello",
-            expect: Some(("telegram", "user", "123:456")),
-        },
-        InboundCase {
-            name: "空 session_id",
-            session_id: "",
-            content: "hello",
-            expect: None,
-        },
-        InboundCase {
-            name: "缺少冒号的 session_id",
-            session_id: "cli",
-            content: "hello",
-            expect: None,
-        },
-    ];
-
-    for case in test_vector {
-        let result = InboundMessage::from_session_id(case.session_id, case.content);
-
-        match (result, case.expect) {
-            (Some((ch, sender, id)), Some((exp_ch, exp_sender, exp_id))) => {
-                assert_eq!(ch, exp_ch, "case[{}]: channel mismatch", case.name);
-                assert_eq!(sender, exp_sender, "case[{}]: sender_id mismatch", case.name);
-                assert_eq!(id, exp_id, "case[{}]: chat_id mismatch", case.name);
-            }
-            (None, None) => {}
-            (Some(_), None) => {
-                panic!("case[{}]: expected None but got Some", case.name);
-            }
-            (None, Some(_)) => {
-                panic!("case[{}]: expected Some but got None", case.name);
-            }
-        }
-    }
-}
+/// 从顶级模块引入测试类型
+use crate::InboundMessage;
+/// 从顶级模块引入测试类型
+use crate::OutboundMessage;
 
 /// InboundMessage::new 构造测试
 #[test]
@@ -255,7 +197,7 @@ fn inbound_message_construct() {
     assert_eq!(msg.sender_id, "user123");
     assert_eq!(msg.chat_id, "chat456");
     assert_eq!(msg.content, "Hello, world!");
-    assert!(msg.metadata.is_none());
+    assert!(msg.metadata.is_empty());
 }
 
 /// 出站消息测试用例结构

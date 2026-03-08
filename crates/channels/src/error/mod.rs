@@ -62,5 +62,12 @@ pub enum ChannelError {
     HttpError(#[from] reqwest::Error),
 }
 
+/// 从 ConfigError 转换为 ChannelError
+impl From<nanobot_config::ConfigError> for ChannelError {
+    fn from(e: nanobot_config::ConfigError) -> Self {
+        ChannelError::ConfigError(e.to_string())
+    }
+}
+
 /// 通道操作结果类型
 pub type ChannelResult<T> = Result<T, ChannelError>;
