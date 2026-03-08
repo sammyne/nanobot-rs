@@ -1,11 +1,11 @@
 //! Nanobot CLI 入口
 //!
-//! 极简复现 HKUDS/nanobot 的 onboard 和 agent 命令
+//! 极简复现 HKUDS/nanobot 的 onboard、agent 和 gateway 命令
 
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
-use nanobot_cli::{AgentCmd, OnboardCmd, init_logging};
+use nanobot_cli::{AgentCmd, GatewayCmd, OnboardCmd, init_logging};
 
 /// Nanobot - AI Agent 命令行工具
 #[derive(Parser, Debug)]
@@ -25,6 +25,9 @@ enum Commands {
 
     /// 启动 AI Agent 交互式对话
     Agent(AgentCmd),
+
+    /// 启动 nanobot 后台服务
+    Gateway(GatewayCmd),
 }
 
 #[tokio::main]
@@ -37,6 +40,7 @@ async fn main() -> ExitCode {
     let result = match cli.command {
         Commands::Onboard(cmd) => cmd.run(),
         Commands::Agent(cmd) => cmd.run().await,
+        Commands::Gateway(cmd) => cmd.run().await,
     };
 
     match result {

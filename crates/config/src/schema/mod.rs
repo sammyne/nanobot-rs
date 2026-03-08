@@ -65,6 +65,54 @@ pub struct ProviderConfig {
     pub extra_headers: Option<std::collections::HashMap<String, String>>,
 }
 
+/// 钉钉通道配置
+///
+/// 钉钉通道的配置字段。
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct DingTalkConfig {
+    /// 是否启用此通道
+    #[serde(default)]
+    pub enabled: bool,
+
+    /// Client ID (AppKey)
+    #[serde(default)]
+    pub client_id: String,
+
+    /// Client Secret (AppSecret)
+    #[serde(default)]
+    pub client_secret: String,
+
+    /// 允许的用户列表（为空则允许所有用户）
+    #[serde(default)]
+    pub allow_from: Vec<String>,
+}
+
+impl DingTalkConfig {
+    /// 验证配置
+    pub fn validate(&self) -> Result<(), ConfigError> {
+        if self.enabled {
+            if self.client_id.is_empty() {
+                return Err(ConfigError::Validation("启用的钉钉通道必须配置 client_id".to_string()));
+            }
+            if self.client_secret.is_empty() {
+                return Err(ConfigError::Validation(
+                    "启用的钉钉通道必须配置 client_secret".to_string(),
+                ));
+            }
+        }
+
+        Ok(())
+    }
+}
+
+/// 所有通道的配置集合
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ChannelsConfig {
+    /// 钉钉通道配置
+    #[serde(default)]
+    pub dingtalk: Option<DingTalkConfig>,
+}
+
 /// 应用配置（兼容 HKUDS 版本）
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Config {
@@ -73,6 +121,10 @@ pub struct Config {
 
     #[serde(default)]
     pub agents: AgentsSection,
+
+    /// 通道配置
+    #[serde(default)]
+    pub channels: ChannelsConfig,
 }
 
 /// Providers 配置段
@@ -187,6 +239,7 @@ impl Config {
         Self {
             providers: ProvidersSection { custom: Some(provider) },
             agents: AgentsSection::default(),
+            channels: ChannelsConfig::default(),
         }
     }
 
@@ -306,6 +359,11 @@ impl Config {
             if !custom.api_key.is_empty() && custom.api_key.len() < 3 {
                 return Err(ConfigError::Validation("api_key 长度不能少于 3 个字符".to_string()));
             }
+        }
+
+        // 验证 channels 配置
+        if let Some(dingtalk) = &self.channels.dingtalk {
+            dingtalk.validate()?;
         }
 
         debug!("配置验证通过");

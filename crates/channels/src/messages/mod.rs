@@ -98,6 +98,40 @@ impl OutboundMessage {
         }
     }
 
+    /// 创建进度消息
+    ///
+    /// 进度消息用于通知用户当前处理进度，可选择是否标记为工具提示。
+    pub fn progress(content: impl Into<String>, is_tool_hint: bool) -> Self {
+        let mut metadata = HashMap::new();
+        metadata.insert("_progress".to_string(), serde_json::Value::Bool(true));
+        if is_tool_hint {
+            metadata.insert("_tool_hint".to_string(), serde_json::Value::Bool(true));
+        }
+        Self {
+            channel: String::new(),
+            chat_id: String::new(),
+            content: content.into(),
+            media: Vec::new(),
+            metadata,
+        }
+    }
+
+    /// 检查是否为进度消息
+    pub fn is_progress(&self) -> bool {
+        self.metadata
+            .get("_progress")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false)
+    }
+
+    /// 检查是否为工具提示
+    pub fn is_tool_hint(&self) -> bool {
+        self.metadata
+            .get("_tool_hint")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false)
+    }
+
     /// 添加媒体文件
     pub fn add_media(mut self, media: impl Into<String>) -> Self {
         self.media.push(media.into());

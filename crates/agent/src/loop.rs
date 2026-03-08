@@ -17,7 +17,7 @@ use nanobot_tools::ToolRegistry;
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
 
-use crate::bus::{InboundMessage, OutboundMessage};
+use crate::{InboundMessage, OutboundMessage};
 
 /// ReAct 运行结果
 #[derive(Debug, Clone)]

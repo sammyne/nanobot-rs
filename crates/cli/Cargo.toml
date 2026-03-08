@@ -7,9 +7,10 @@ edition = "2024"
 nanobot-config.workspace = true
 nanobot-provider.workspace = true
 nanobot-agent.workspace = true
+nanobot-channels.workspace = true
 nanobot-templates.workspace = true
 clap.workspace = true
-tokio.workspace = true
+tokio = { workspace = true, features = ["signal"] }
 anyhow.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true

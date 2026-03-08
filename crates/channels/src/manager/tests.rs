@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use tokio::sync::mpsc;
 
 use super::*;
@@ -7,10 +5,7 @@ use super::*;
 /// 测试通道管理器创建
 #[tokio::test]
 async fn channel_manager_creation() {
-    let config = ChannelsConfig {
-        dingtalk: None,
-        others: HashMap::new(),
-    };
+    let config = ChannelsConfig::default();
 
     let (outbound_tx, outbound_rx) = mpsc::channel::<OutboundMessage>(16);
     let (inbound_tx, inbound_rx) = mpsc::channel::<InboundMessage>(16);
