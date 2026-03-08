@@ -19,24 +19,30 @@ use tracing::{error, info, warn};
 /// Gateway 命令
 #[derive(Args, Debug)]
 pub struct GatewayCmd {
-    /// 服务端口（默认 18790）
-    #[arg(short, long, default_value = "18790")]
-    pub port: u16,
+    /// 服务端口（默认使用配置文件的 gateway.port，若未配置则使用 18790）
+    #[arg(short, long)]
+    pub port: Option<u16>,
 }
 
 impl GatewayCmd {
     /// 执行 gateway 命令
     pub async fn run(&self) -> Result<()> {
-        info!("启动 nanobot gateway (port={})", self.port);
+        // 加载配置（先加载配置以获取端口）
+        let config = self.load_config()?;
+
+        // 确定实际使用的端口：命令行参数优先，否则使用配置文件值
+        let (actual_port, port_source) = match self.port {
+            Some(port) => (port, "命令行"),
+            None => (config.gateway.port, "配置文件"),
+        };
+
+        info!("启动 nanobot gateway (port={})", actual_port);
 
         // 初始化日志
         self.init_logging();
 
         // 显示启动信息
-        self.print_startup_banner();
-
-        // 加载配置
-        let config = self.load_config()?;
+        self.print_startup_banner(actual_port, port_source);
 
         // 初始化 LLM Provider
         let provider = self.init_provider(&config)?;
@@ -76,13 +82,14 @@ impl GatewayCmd {
     }
 
     /// 显示启动横幅
-    fn print_startup_banner(&self) {
+    fn print_startup_banner(&self, port: u16, port_source: &str) {
         println!();
         println!("  ╔═══════════════════════════════════════╗");
         println!("  ║         🤖 Nanobot Gateway            ║");
         println!("  ╚═══════════════════════════════════════╝");
         println!();
-        println!("  🚀 启动 nanobot gateway on port {}...", self.port);
+        println!("  🚀 启动 nanobot gateway on port {}...", port);
+        println!("  📋 端口来源: {}", port_source);
     }
 
     /// 加载配置

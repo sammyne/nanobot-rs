@@ -323,3 +323,87 @@ fn extra_headers_serialize_when_some() {
     assert!(json.contains("APP-Code"));
     assert!(json.contains("test-code"));
 }
+
+#[test]
+fn gateway_config_default_values() {
+    // 测试 GatewayConfig 的默认值
+    let gateway = GatewayConfig::default();
+    assert_eq!(gateway.host, "0.0.0.0");
+    assert_eq!(gateway.port, 18790);
+}
+
+#[test]
+fn gateway_config_validate_success() {
+    // 测试有效的 gateway 配置
+    let gateway = GatewayConfig::default();
+    assert!(gateway.validate().is_ok());
+}
+
+#[test]
+fn gateway_config_validate_zero_port() {
+    // 测试 port 为 0 时验证失败
+    let gateway = GatewayConfig {
+        port: 0,
+        ..Default::default()
+    };
+    let result = gateway.validate();
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    assert!(matches!(err, ConfigError::Validation(msg) if msg == "gateway.port 必须大于 0"));
+}
+
+#[test]
+fn gateway_config_validate_empty_host() {
+    // 测试 host 为空时验证失败
+    let gateway = GatewayConfig {
+        host: String::new(),
+        ..Default::default()
+    };
+    let result = gateway.validate();
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    assert!(matches!(err, ConfigError::Validation(msg) if msg == "gateway.host 不能为空"));
+}
+
+#[test]
+fn config_with_gateway_section() {
+    // 测试配置文件中包含 gateway 节
+    let json = r#"{
+            "gateway": {
+                "host": "127.0.0.1",
+                "port": 8080
+            }
+        }"#;
+
+    let config: Config = serde_json::from_str(json).unwrap();
+    assert_eq!(config.gateway.host, "127.0.0.1");
+    assert_eq!(config.gateway.port, 8080);
+    assert!(config.validate().is_ok());
+}
+
+#[test]
+fn config_with_partial_gateway_section() {
+    // 测试配置文件中只包含部分 gateway 字段时自动填充默认值
+    let json = r#"{
+            "gateway": {
+                "port": 9090
+            }
+        }"#;
+
+    let config: Config = serde_json::from_str(json).unwrap();
+    assert_eq!(config.gateway.host, "0.0.0.0"); // 使用默认值
+    assert_eq!(config.gateway.port, 9090); // 使用配置值
+    assert!(config.validate().is_ok());
+}
+
+#[test]
+fn config_gateway_serialization() {
+    // 测试 gateway 配置的序列化
+    let config = Config::default();
+    let json = serde_json::to_string_pretty(&config).unwrap();
+
+    // 验证序列化后包含 gateway 字段
+    assert!(json.contains("gateway"));
+    assert!(json.contains("host"));
+    assert!(json.contains("port"));
+}

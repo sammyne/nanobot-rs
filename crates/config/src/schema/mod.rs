@@ -15,6 +15,10 @@ use serde::{Deserialize, Deserializer, Serialize};
 use thiserror::Error;
 use tracing::{debug, info};
 
+pub mod gateway;
+
+pub use gateway::GatewayConfig;
+
 /// 用户主目录路径，获取失败时直接 panic
 pub static HOME: LazyLock<PathBuf> = LazyLock::new(|| env::home_dir().expect("无法获取用户主目录"));
 
@@ -125,6 +129,10 @@ pub struct Config {
     /// 通道配置
     #[serde(default)]
     pub channels: ChannelsConfig,
+
+    /// 网关配置
+    #[serde(default)]
+    pub gateway: GatewayConfig,
 }
 
 /// Providers 配置段
@@ -240,6 +248,7 @@ impl Config {
             providers: ProvidersSection { custom: Some(provider) },
             agents: AgentsSection::default(),
             channels: ChannelsConfig::default(),
+            gateway: GatewayConfig::default(),
         }
     }
 
@@ -365,6 +374,9 @@ impl Config {
         if let Some(dingtalk) = &self.channels.dingtalk {
             dingtalk.validate()?;
         }
+
+        // 验证 gateway 配置
+        self.gateway.validate()?;
 
         debug!("配置验证通过");
         Ok(())
