@@ -55,17 +55,18 @@ pub const CONFIG_DIR_NAME: &str = ".nanobot";
 
 /// LLM 提供者配置
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
 pub struct ProviderConfig {
     /// API Key
-    #[serde(rename = "apiKey", default)]
+    #[serde(default)]
     pub api_key: String,
 
     /// API Base URL
-    #[serde(rename = "apiBase", default)]
+    #[serde(default)]
     pub api_base: Option<String>,
 
     /// 自定义请求头（例如 AiHubMix 的 APP-Code）
-    #[serde(rename = "extraHeaders", default, skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub extra_headers: Option<std::collections::HashMap<String, String>>,
 }
 
@@ -73,6 +74,7 @@ pub struct ProviderConfig {
 ///
 /// 钉钉通道的配置字段。
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
 pub struct DingTalkConfig {
     /// 是否启用此通道
     #[serde(default)]
@@ -111,6 +113,7 @@ impl DingTalkConfig {
 
 /// 所有通道的配置集合
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
 pub struct ChannelsConfig {
     /// 钉钉通道配置
     #[serde(default)]
@@ -119,6 +122,7 @@ pub struct ChannelsConfig {
 
 /// 应用配置（兼容 HKUDS 版本）
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
 pub struct Config {
     #[serde(default)]
     pub providers: ProvidersSection,
@@ -137,6 +141,7 @@ pub struct Config {
 
 /// Providers 配置段
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
 pub struct ProvidersSection {
     #[serde(default)]
     pub custom: Option<ProviderConfig>,
@@ -144,6 +149,7 @@ pub struct ProvidersSection {
 
 /// Agents 配置段
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
 pub struct AgentsSection {
     #[serde(default)]
     pub defaults: AgentDefaults,
@@ -151,33 +157,30 @@ pub struct AgentsSection {
 
 /// Agent 默认配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AgentDefaults {
     /// 工作目录路径
-    #[serde(
-        rename = "workspace",
-        default = "default_workspace",
-        deserialize_with = "deserialize_path_with_tilde"
-    )]
+    #[serde(default = "default_workspace", deserialize_with = "deserialize_path_with_tilde")]
     pub workspace: PathBuf,
 
     /// 模型名称
-    #[serde(rename = "model", default = "default_model")]
+    #[serde(default = "default_model")]
     pub model: String,
 
     /// 最大 token 数
-    #[serde(rename = "maxTokens", default = "default_max_tokens")]
+    #[serde(default = "default_max_tokens")]
     pub max_tokens: usize,
 
     /// 温度参数
-    #[serde(rename = "temperature", default = "default_temperature")]
+    #[serde(default = "default_temperature")]
     pub temperature: f64,
 
     /// 最大工具迭代次数
-    #[serde(rename = "maxToolIterations", default = "default_max_tool_iterations")]
+    #[serde(default = "default_max_tool_iterations")]
     pub max_tool_iterations: usize,
 
     /// 记忆窗口大小
-    #[serde(rename = "memoryWindow", default = "default_memory_window")]
+    #[serde(default = "default_memory_window")]
     pub memory_window: usize,
 }
 
