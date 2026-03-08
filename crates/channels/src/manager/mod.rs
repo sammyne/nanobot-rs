@@ -24,9 +24,6 @@ pub struct ChannelStatus {
     pub running: bool,
 }
 
-/// 消息回调类型
-pub type MessageCallback = Arc<dyn Fn(String, crate::messages::InboundMessage) + Send + Sync>;
-
 /// 通道管理器
 ///
 /// 负责管理所有通道的生命周期和消息路由。
@@ -36,9 +33,6 @@ pub struct ChannelManager {
 
     /// 配置
     config: ChannelsConfig,
-
-    /// 消息回调
-    message_callback: Option<MessageCallback>,
 
     /// 出站消息接收端
     outbound_rx: Option<mpsc::Receiver<OutboundMessage>>,
@@ -75,7 +69,6 @@ impl ChannelManager {
         let mut manager = Self {
             channels: HashMap::new(),
             config,
-            message_callback: None,
             outbound_rx: Some(outbound_rx),
             inbound_tx,
             outbound_task_handle: None,
@@ -104,16 +97,6 @@ impl ChannelManager {
 
         info!("钉钉通道添加成功: {}", name);
         Ok(())
-    }
-
-    /// 设置消息回调
-    ///
-    /// 当通道接收到消息时，会调用此回调。
-    pub fn set_message_callback<F>(&mut self, callback: F)
-    where
-        F: Fn(String, crate::messages::InboundMessage) + Send + Sync + 'static,
-    {
-        self.message_callback = Some(Arc::new(callback));
     }
 
     /// 启动所有通道
@@ -265,15 +248,6 @@ impl ChannelManager {
             name: name.to_string(),
             running: channel.is_running(),
         })
-    }
-
-    /// 处理接收到的消息
-    ///
-    /// 此方法供通道实现调用，将接收到的消息传递给管理器。
-    pub fn handle_incoming_message(&self, channel_name: String, msg: crate::messages::InboundMessage) {
-        if let Some(callback) = &self.message_callback {
-            callback(channel_name, msg);
-        }
     }
 }
 
