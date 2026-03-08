@@ -432,7 +432,7 @@ metadata: {"nanobot":{"emoji":"🐙","requires":{"bins":["gh"]},"install":[{"id"
 "#;
 
     let md: SkillMeta = serde_yaml::from_str(content).expect("failed");
-    println!("Parsed metadata: {:?}", md);
+    println!("Parsed metadata: {md:?}");
 }
 
 /// Test parsing actual github SKILL.md format with flow mapping metadata.

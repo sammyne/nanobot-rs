@@ -108,9 +108,9 @@ fn serde_enum_direct() {
     always: true"#;
 
     let result: Result<TestContainer, _> = serde_yaml::from_str(yaml);
-    println!("Result: {:?}", result);
+    println!("Result: {result:?}");
     if let Err(ref e) = result {
-        println!("Error: {}", e);
+        println!("Error: {e}");
     }
 
     assert!(result.is_ok());
@@ -141,9 +141,9 @@ fn serde_enum_json() {
     let json = r#"{"nanobot": {"emoji": "🦞", "always": true}}"#;
 
     let result: Result<TestEnum, _> = serde_json::from_str(json);
-    println!("JSON Result: {:?}", result);
+    println!("JSON Result: {result:?}");
     if let Err(ref e) = result {
-        println!("JSON Error: {}", e);
+        println!("JSON Error: {e}");
     }
 
     // Serialization test
@@ -152,7 +152,7 @@ fn serde_enum_json() {
         always: true,
     });
     let serialized = serde_json::to_string(&meta).unwrap();
-    println!("JSON Serialized: {}", serialized);
+    println!("JSON Serialized: {serialized}");
 
     assert!(result.is_ok());
 }
@@ -187,9 +187,9 @@ fn serde_yaml_with_json_format() {
     let yaml = r#"{"metadata": {"nanobot": {"emoji": "🦞", "always": true}}}"#;
 
     let result: Result<TestContainer, _> = serde_yaml::from_str(yaml);
-    println!("YAML (JSON-like) Result: {:?}", result);
+    println!("YAML (JSON-like) Result: {result:?}");
     if let Err(ref e) = result {
-        println!("Error: {}", e);
+        println!("Error: {e}");
     }
 
     assert!(result.is_ok());
@@ -224,7 +224,7 @@ fn serde_untagged_enum() {
 always: true"#;
 
     let result: Result<TestEnum, _> = serde_yaml::from_str(yaml);
-    println!("Untagged Result: {:?}", result);
+    println!("Untagged Result: {result:?}");
 
     // Check serialization
     let meta = TestEnum::Nanobot(NanobotMeta {
@@ -232,5 +232,5 @@ always: true"#;
         always: true,
     });
     let serialized = serde_yaml::to_string(&meta).unwrap();
-    println!("Untagged Serialized:\n{}", serialized);
+    println!("Untagged Serialized:\n{serialized}");
 }

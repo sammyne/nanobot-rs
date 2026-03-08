@@ -49,7 +49,7 @@ pub fn mask_sensitive(s: &str) -> String {
 
     let start = &s[..4];
     let end = &s[s.len() - 4..];
-    format!("{}****{}", start, end)
+    format!("{start}****{end}")
 }
 
 #[cfg(test)]

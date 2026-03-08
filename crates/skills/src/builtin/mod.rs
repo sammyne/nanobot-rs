@@ -44,11 +44,11 @@ pub fn initialize_builtin_skills(builtin_dir: &Path) -> Result<()> {
     );
 
     // Create target directory if it doesn't exist
-    fs::create_dir_all(builtin_dir).with_context(|| format!("Failed to create directory: {:?}", builtin_dir))?;
+    fs::create_dir_all(builtin_dir).with_context(|| format!("Failed to create directory: {builtin_dir:?}"))?;
 
     // Extract embedded builtin directory to target
     extract_dir(&BUILTIN_DIR, builtin_dir)
-        .with_context(|| format!("Failed to extract builtin skills to {:?}", builtin_dir))?;
+        .with_context(|| format!("Failed to extract builtin skills to {builtin_dir:?}"))?;
 
     debug!("Successfully extracted builtin skills to {:?}", builtin_dir);
 
@@ -59,7 +59,7 @@ pub fn initialize_builtin_skills(builtin_dir: &Path) -> Result<()> {
 pub fn remove_builtin_skills(builtin_dir: &Path) -> Result<()> {
     if builtin_dir.exists() {
         debug!("Removing existing builtin-skills directory: {:?}", builtin_dir);
-        fs::remove_dir_all(builtin_dir).with_context(|| format!("Failed to remove directory: {:?}", builtin_dir))?;
+        fs::remove_dir_all(builtin_dir).with_context(|| format!("Failed to remove directory: {builtin_dir:?}"))?;
         debug!("Successfully removed builtin-skills directory");
     }
 
@@ -115,7 +115,7 @@ pub fn ensure_builtin_skills(builtin_dir: &Path) -> Result<()> {
 
         // Write VERSION file
         crate::version::write_version_file(&version_file, current_version)
-            .with_context(|| format!("Failed to write VERSION file: {:?}", version_file))?;
+            .with_context(|| format!("Failed to write VERSION file: {version_file:?}"))?;
 
         debug!(
             "Successfully initialized builtin skills with version {}",

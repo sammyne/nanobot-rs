@@ -265,7 +265,7 @@ impl Channel for DingTalk {
         replier
             .reply_markdown("Nanobot", &markdown_content, &incoming_msg)
             .await
-            .map_err(|e| ChannelError::SendFailed(format!("发送钉钉消息失败: {}", e)))?;
+            .map_err(|e| ChannelError::SendFailed(format!("发送钉钉消息失败: {e}")))?;
 
         debug!("钉钉消息发送成功");
         Ok(())

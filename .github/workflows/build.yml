@@ -41,7 +41,7 @@ jobs:
         run: cargo fmt --check
 
       - name: Clippy check
-        run: cargo clippy -- -D warnings
+        run: cargo clippy -- -D warnings -D clippy::uninlined_format_args
 
       - name: Build
         run: cargo build

@@ -114,7 +114,7 @@ pub fn require_param(params: &serde_json::Value, name: &str) -> Result<String, T
         .get(name)
         .and_then(|v| v.as_str())
         .map(|s| s.to_string())
-        .ok_or_else(|| ToolError::validation(name, format!("缺少必需参数: {}", name)))
+        .ok_or_else(|| ToolError::validation(name, format!("缺少必需参数: {name}")))
 }
 
 /// Helper: 获取可选参数

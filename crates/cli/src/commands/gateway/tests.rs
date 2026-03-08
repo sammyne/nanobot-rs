@@ -23,6 +23,6 @@ fn gateway_cmd_custom_args() {
 fn gateway_cmd_debug_trait() {
     let cmd = GatewayCmd { port: Some(18790) };
 
-    let debug_str = format!("{:?}", cmd);
+    let debug_str = format!("{cmd:?}");
     assert!(debug_str.contains("18790"));
 }

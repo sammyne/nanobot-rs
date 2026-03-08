@@ -54,7 +54,7 @@ impl SessionManager {
         let safe_key = key
             .replace(':', "_")
             .replace(|c: char| !c.is_alphanumeric() && c != '_', "_");
-        self.sessions_dir.join(format!("{}.jsonl", safe_key))
+        self.sessions_dir.join(format!("{safe_key}.jsonl"))
     }
 
     /// Get an existing session or create a new one.
@@ -187,12 +187,12 @@ impl SessionManager {
         // Write metadata line
         let metadata = SessionMetadata::from(session);
         let metadata_line = serde_json::to_string(&metadata)?;
-        writeln!(file, "{}", metadata_line)?;
+        writeln!(file, "{metadata_line}")?;
 
         // Write messages
         for msg in &session.messages {
             let msg_line = serde_json::to_string(msg)?;
-            writeln!(file, "{}", msg_line)?;
+            writeln!(file, "{msg_line}")?;
         }
 
         // Update cache

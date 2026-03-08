@@ -73,7 +73,7 @@ impl WorkspaceInitializer {
         let memory_dir = self.workspace_path.join("memory");
 
         if !memory_dir.exists() {
-            fs::create_dir_all(&memory_dir).with_context(|| format!("创建 memory 目录失败: {:?}", memory_dir))?;
+            fs::create_dir_all(&memory_dir).with_context(|| format!("创建 memory 目录失败: {memory_dir:?}"))?;
             println!("\x1b[32m✓\x1b[0m Created directory: memory/");
         }
 
@@ -91,7 +91,7 @@ impl WorkspaceInitializer {
         let skills_dir = self.workspace_path.join("skills");
 
         if !skills_dir.exists() {
-            fs::create_dir_all(&skills_dir).with_context(|| format!("创建 skills 目录失败: {:?}", skills_dir))?;
+            fs::create_dir_all(&skills_dir).with_context(|| format!("创建 skills 目录失败: {skills_dir:?}"))?;
             println!("\x1b[32m✓\x1b[0m Created directory: skills/");
         }
 
@@ -105,7 +105,7 @@ impl WorkspaceInitializer {
             return Ok(());
         }
 
-        fs::write(path, content).with_context(|| format!("创建文件失败: {:?}", path))?;
+        fs::write(path, content).with_context(|| format!("创建文件失败: {path:?}"))?;
 
         let relative_path = path.strip_prefix(&self.workspace_path).unwrap_or(path);
         println!("\x1b[32m✓\x1b[0m Created file: {}", relative_path.display());

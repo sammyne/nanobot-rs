@@ -70,8 +70,8 @@ impl GatewayCmd {
         println!("  ║         🤖 Nanobot Gateway            ║");
         println!("  ╚═══════════════════════════════════════╝");
         println!();
-        println!("  🚀 启动 nanobot gateway on port {}...", port);
-        println!("  📋 端口来源: {}", port_source);
+        println!("  🚀 启动 nanobot gateway on port {port}...");
+        println!("  📋 端口来源: {port_source}");
     }
 
     /// 加载配置

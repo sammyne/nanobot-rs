@@ -120,7 +120,7 @@ impl SkillsLoader {
             .filter_map(|name| {
                 self.load_skill(name).map(|content| {
                     let stripped = strip_frontmatter(&content);
-                    format!("### Skill: {}\n\n{}", name, stripped)
+                    format!("### Skill: {name}\n\n{stripped}")
                 })
             })
             .collect();
@@ -143,10 +143,10 @@ impl SkillsLoader {
             let desc = escape_xml(skill.description());
             let path = skill.path.display().to_string();
 
-            lines.push(format!("  <skill available=\"{}\">", available));
-            lines.push(format!("    <name>{}</name>", name));
-            lines.push(format!("    <description>{}</description>", desc));
-            lines.push(format!("    <location>{}</location>", path));
+            lines.push(format!("  <skill available=\"{available}\">"));
+            lines.push(format!("    <name>{name}</name>"));
+            lines.push(format!("    <description>{desc}</description>"));
+            lines.push(format!("    <location>{path}</location>"));
 
             // Show missing requirements for unavailable skills
             if !available {

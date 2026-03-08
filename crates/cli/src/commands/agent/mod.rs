@@ -31,8 +31,8 @@ impl AgentCmd {
         info!("启动 agent 命令");
 
         // 加载配置
-        let config = Config::load()
-            .map_err(|e| anyhow::anyhow!("加载配置失败: {}。请先运行 'nanobot onboard' 进行配置。", e))?;
+        let config =
+            Config::load().map_err(|e| anyhow::anyhow!("加载配置失败: {e}。请先运行 'nanobot onboard' 进行配置。"))?;
 
         let provider_config = config.provider();
 
@@ -66,7 +66,7 @@ impl AgentCmd {
 
         match agent.process_direct(input, Some(&self.session)).await {
             Ok(response) => {
-                println!("{}", response);
+                println!("{response}");
             }
             Err(e) => {
                 error!("Agent 处理失败: {}", e);
@@ -88,7 +88,7 @@ impl AgentCmd {
 
         // 解析 session_id
         let (channel, chat_id) = Self::parse_session_id(&self.session);
-        let session_key = format!("{}:{}", channel, chat_id);
+        let session_key = format!("{channel}:{chat_id}");
 
         // 创建消息通道对
         // CLI 持有: inbound_tx, outbound_rx
@@ -102,7 +102,7 @@ impl AgentCmd {
         // 打印欢迎信息
         println!("🤖 Nanobot Agent - 交互式 AI 助手");
         println!("模型: {}", config.agents.defaults.model);
-        println!("会话: {}", session_key);
+        println!("会话: {session_key}");
         println!("输入 'exit' 或 'quit' 退出\n");
 
         // 启动 AgentLoop 后台任务

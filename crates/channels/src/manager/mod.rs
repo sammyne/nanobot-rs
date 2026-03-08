@@ -218,7 +218,7 @@ impl ChannelManager {
             channel.send(msg).await
         } else {
             warn!("目标通道 {} 不存在，无法发送消息", channel_name);
-            Err(ChannelError::SendFailed(format!("通道 {} 不存在", channel_name)))
+            Err(ChannelError::SendFailed(format!("通道 {channel_name} 不存在")))
         }
     }
 

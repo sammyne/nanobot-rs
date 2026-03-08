@@ -98,8 +98,8 @@ fn list_sessions() {
 
     // Create multiple sessions
     for i in 0..3 {
-        let mut session = Session::new(format!("test:{}", i));
-        session.add_message(Message::user(format!("Message {}", i)));
+        let mut session = Session::new(format!("test:{i}"));
+        session.add_message(Message::user(format!("Message {i}")));
         manager.save(&session).expect("Failed to save session");
     }
 
