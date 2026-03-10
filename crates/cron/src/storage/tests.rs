@@ -1,6 +1,7 @@
 use tempfile::tempdir;
 
 use super::*;
+use crate::types::{CronPayload, CronSchedule};
 
 #[tokio::test]
 async fn storage_new() {
@@ -21,8 +22,8 @@ async fn storage_save_and_load() {
 
     let job = CronJob::new(
         "Test".to_string(),
-        crate::cron_types::CronSchedule::Every { every_ms: 60000 },
-        crate::cron_types::CronPayload::default(),
+        CronSchedule::Every { every_ms: 60000 },
+        CronPayload::default(),
         false,
     );
 
@@ -44,8 +45,8 @@ async fn storage_remove_job() {
 
     let job = CronJob::new(
         "Test".to_string(),
-        crate::cron_types::CronSchedule::Every { every_ms: 60000 },
-        crate::cron_types::CronPayload::default(),
+        CronSchedule::Every { every_ms: 60000 },
+        CronPayload::default(),
         false,
     );
 

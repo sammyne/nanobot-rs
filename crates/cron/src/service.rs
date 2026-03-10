@@ -10,9 +10,9 @@ use tokio::task::JoinHandle;
 use tokio::time::{Duration, sleep};
 use tracing::{error, info, warn};
 
-use crate::cron::scheduler::{compute_next_run, validate_schedule};
-use crate::cron::storage::CronStorage;
-use crate::cron_types::{CronJob, CronPayload, CronSchedule};
+use crate::scheduler::{compute_next_run, validate_schedule};
+use crate::storage::CronStorage;
+use crate::types::{CronJob, CronPayload, CronSchedule};
 
 /// Callback function type for job execution
 pub type JobCallback =

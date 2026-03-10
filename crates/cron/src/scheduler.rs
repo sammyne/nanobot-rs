@@ -6,7 +6,7 @@ use chrono::{DateTime, TimeZone, Utc};
 use chrono_tz::Tz;
 use cron::Schedule;
 
-use crate::cron_types::CronSchedule;
+use crate::types::CronSchedule;
 
 /// Compute the next run time in milliseconds.
 pub fn compute_next_run(schedule: &CronSchedule, now_ms: i64) -> Option<i64> {
