@@ -66,6 +66,37 @@ impl ToolError {
     }
 }
 
+/// 工具执行上下文
+///
+/// 携带工具执行时的请求来源信息
+#[derive(Debug, Clone)]
+pub struct ToolContext {
+    /// 通道名称（如 dingtalk、wechat 等）
+    channel: String,
+    /// 聊天标识
+    chat_id: String,
+}
+
+impl ToolContext {
+    /// 创建新的工具上下文
+    pub fn new(channel: impl Into<String>, chat_id: impl Into<String>) -> Self {
+        Self {
+            channel: channel.into(),
+            chat_id: chat_id.into(),
+        }
+    }
+
+    /// 获取通道名称
+    pub fn channel(&self) -> &str {
+        &self.channel
+    }
+
+    /// 获取聊天标识
+    pub fn chat_id(&self) -> &str {
+        &self.chat_id
+    }
+}
+
 /// 工具定义结构体（用于 OpenAI Function Calling）
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ToolDefinition {
@@ -92,11 +123,12 @@ pub trait Tool: Send + Sync {
     /// 异步执行工具
     ///
     /// # Arguments
+    /// * `ctx` - 工具执行上下文，包含 channel 和 chat_id
     /// * `params` - JSON 格式的参数
     ///
     /// # Returns
     /// 成功返回输出字符串，失败返回 ToolError
-    async fn execute(&self, params: serde_json::Value) -> ToolResult;
+    async fn execute(&self, ctx: &ToolContext, params: serde_json::Value) -> ToolResult;
 
     /// 转换为 OpenAI Function Calling 格式
     fn to_definition(&self) -> ToolDefinition {

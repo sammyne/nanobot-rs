@@ -1,6 +1,17 @@
+use nanobot_tools::ToolContext;
 use tempfile::tempdir;
 
 use super::*;
+
+/// 创建测试用的 ToolContext
+fn test_context() -> ToolContext {
+    ToolContext::new("test-channel".to_string(), "12345".to_string())
+}
+
+/// 创建带指定 channel 和 chat_id 的 ToolContext
+fn context_with(channel: &str, chat_id: &str) -> ToolContext {
+    ToolContext::new(channel.to_string(), chat_id.to_string())
+}
 
 #[tokio::test]
 async fn cron_tool_creation() {
@@ -14,25 +25,14 @@ async fn cron_tool_creation() {
 }
 
 #[tokio::test]
-async fn cron_tool_set_context() {
-    let dir = tempdir().unwrap();
-    let path = dir.path().join("cron.json");
-    let service = Arc::new(CronService::new(path, None));
-    let tool = CronTool::new(service);
-
-    tool.set_context("whatsapp".to_string(), "1234567890".to_string());
-
-    assert_eq!(tool.get_channel(), "whatsapp");
-    assert_eq!(tool.get_chat_id(), "1234567890");
-}
-
-#[tokio::test]
 async fn cron_tool_add_without_context() {
     let dir = tempdir().unwrap();
     let path = dir.path().join("cron.json");
     let service = Arc::new(CronService::new(path, None));
     service.start().await.unwrap();
     let tool = CronTool::new(service);
+    // Use empty context to trigger the "no session context" error
+    let ctx = ToolContext::new("".to_string(), "".to_string());
 
     let params = serde_json::json!({
         "action": "add",
@@ -40,7 +40,7 @@ async fn cron_tool_add_without_context() {
         "every_seconds": 60
     });
 
-    let result = tool.execute(params).await;
+    let result = tool.execute(&ctx, params).await;
     assert!(result.is_err());
 }
 
@@ -51,12 +51,13 @@ async fn cron_tool_list_empty() {
     let service = Arc::new(CronService::new(path, None));
     service.start().await.unwrap();
     let tool = CronTool::new(service);
+    let ctx = test_context();
 
     let params = serde_json::json!({
         "action": "list"
     });
 
-    let result = tool.execute(params).await.unwrap();
+    let result = tool.execute(&ctx, params).await.unwrap();
     assert!(result.contains("No scheduled jobs"));
 }
 
@@ -67,8 +68,7 @@ async fn cron_tool_add_and_list() {
     let service = Arc::new(CronService::new(path, None));
     service.start().await.unwrap();
     let tool = CronTool::new(Arc::clone(&service));
-
-    tool.set_context("whatsapp".to_string(), "1234567890".to_string());
+    let ctx = context_with("whatsapp", "1234567890");
 
     let params = serde_json::json!({
         "action": "add",
@@ -76,14 +76,14 @@ async fn cron_tool_add_and_list() {
         "every_seconds": 60
     });
 
-    let result = tool.execute(params).await.unwrap();
+    let result = tool.execute(&ctx, params).await.unwrap();
     assert!(result.contains("Created job"));
 
     let params = serde_json::json!({
         "action": "list"
     });
 
-    let result = tool.execute(params).await.unwrap();
+    let result = tool.execute(&ctx, params).await.unwrap();
     assert!(result.contains("Test reminder"));
 }
 
@@ -94,8 +94,7 @@ async fn cron_tool_invalid_tz() {
     let service = Arc::new(CronService::new(path, None));
     service.start().await.unwrap();
     let tool = CronTool::new(service);
-
-    tool.set_context("whatsapp".to_string(), "1234567890".to_string());
+    let ctx = context_with("whatsapp", "1234567890");
 
     let params = serde_json::json!({
         "action": "add",
@@ -104,6 +103,6 @@ async fn cron_tool_invalid_tz() {
         "tz": "Invalid/Timezone"
     });
 
-    let result = tool.execute(params).await;
+    let result = tool.execute(&ctx, params).await;
     assert!(result.is_err());
 }

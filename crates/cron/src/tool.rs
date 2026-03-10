@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use nanobot_tools::{Tool, ToolError, ToolResult};
+use nanobot_tools::{Tool, ToolContext, ToolError, ToolResult};
 use schemars::JsonSchema;
 use schemars::schema::SchemaObject;
 use serde::{Deserialize, Serialize};
@@ -40,47 +40,20 @@ pub struct CronAddArgs {
 /// Tool to schedule reminders and recurring tasks.
 pub struct CronTool {
     service: Arc<CronService>,
-    channel: Arc<std::sync::RwLock<String>>,
-    chat_id: Arc<std::sync::RwLock<String>>,
 }
 
 impl CronTool {
     /// Create a new CronTool instance.
     pub fn new(service: Arc<CronService>) -> Self {
-        CronTool {
-            service,
-            channel: Arc::new(std::sync::RwLock::new(String::new())),
-            chat_id: Arc::new(std::sync::RwLock::new(String::new())),
-        }
-    }
-
-    /// Set the current session context for delivery.
-    pub fn set_context(&self, channel: String, chat_id: String) {
-        let mut ch = self.channel.write().unwrap();
-        *ch = channel;
-        let mut cid = self.chat_id.write().unwrap();
-        *cid = chat_id;
-    }
-
-    /// Get current channel
-    fn get_channel(&self) -> String {
-        self.channel.read().unwrap().clone()
-    }
-
-    /// Get current chat_id
-    fn get_chat_id(&self) -> String {
-        self.chat_id.read().unwrap().clone()
+        CronTool { service }
     }
 
     /// Handle add action
-    async fn handle_add(&self, args: &CronAddArgs) -> ToolResult {
+    async fn handle_add(&self, args: &CronAddArgs, channel: &str, chat_id: &str) -> ToolResult {
         let message = match &args.message {
             Some(m) if !m.is_empty() => m.clone(),
             _ => return Err(ToolError::validation("message", "message is required for add")),
         };
-
-        let channel = self.get_channel();
-        let chat_id = self.get_chat_id();
 
         if channel.is_empty() || chat_id.is_empty() {
             return Err(ToolError::validation("context", "no session context (channel/chat_id)"));
@@ -135,8 +108,8 @@ impl CronTool {
                 schedule,
                 message,
                 true,
-                Some(channel),
-                Some(chat_id),
+                Some(channel.to_string()),
+                Some(chat_id.to_string()),
                 delete_after_run,
             )
             .await
@@ -197,12 +170,12 @@ impl Tool for CronTool {
         root_schema.schema
     }
 
-    async fn execute(&self, params: serde_json::Value) -> ToolResult {
+    async fn execute(&self, ctx: &ToolContext, params: serde_json::Value) -> ToolResult {
         let args: CronAddArgs =
             serde_json::from_value(params).map_err(|e| ToolError::validation("params", e.to_string()))?;
 
         match args.action.as_str() {
-            "add" => self.handle_add(&args).await,
+            "add" => self.handle_add(&args, ctx.channel(), ctx.chat_id()).await,
             "list" => self.handle_list().await,
             "remove" => {
                 let job_id = args.job_id.unwrap_or_default();
