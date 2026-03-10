@@ -6,7 +6,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{info, warn};
 
-use crate::cron_types::{CronJob, CronStore};
+use crate::types::{CronJob, CronStore};
 
 /// Storage backend for cron jobs.
 pub struct CronStorage {

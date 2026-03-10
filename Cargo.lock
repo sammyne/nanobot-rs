@@ -1398,6 +1398,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "nanobot-cron"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "chrono-tz",
+ "cron",
+ "nanobot-tools",
+ "schemars",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "nanobot-memory"
 version = "0.1.0"
 dependencies = [
@@ -1473,9 +1493,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "chrono",
- "chrono-tz",
- "cron",
  "schemars",
  "serde",
  "serde_json",
@@ -1484,7 +1501,6 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
- "uuid",
  "walkdir",
 ]
 
