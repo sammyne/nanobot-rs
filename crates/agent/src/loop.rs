@@ -13,7 +13,7 @@ use nanobot_config::AgentDefaults;
 use nanobot_context::ContextBuilder;
 use nanobot_provider::{Message, Provider};
 use nanobot_session::SessionManager;
-use nanobot_tools::ToolRegistry;
+use nanobot_tools::{ToolContext, ToolRegistry};
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
 
@@ -194,10 +194,12 @@ impl<P: Provider + 'static> AgentLoop<P> {
     ///
     /// # Arguments
     /// * `initial_messages` - 初始消息列表
+    /// * `channel` - 通道名称
+    /// * `chat_id` - 聊天标识
     ///
     /// # Returns
     /// ReActResult 包含最终结果、工具使用列表和消息历史
-    pub async fn re_act(&self, mut messages: Vec<Message>) -> Result<ReActResult> {
+    pub async fn re_act(&self, mut messages: Vec<Message>, channel: &str, chat_id: &str) -> Result<ReActResult> {
         let max_iterations = self.config.max_tool_iterations;
         let mut iteration = 0;
         let mut tools_used: Vec<String> = Vec::new();
@@ -256,7 +258,8 @@ impl<P: Provider + 'static> AgentLoop<P> {
                     };
 
                     // 执行工具
-                    let tool_result = self.tool_registry.execute(&tool_call.name, args).await;
+                    let ctx = ToolContext::new(channel, chat_id);
+                    let tool_result = self.tool_registry.execute(&ctx, &tool_call.name, args).await;
 
                     // 转换结果为字符串
                     let result_content = match tool_result {
@@ -430,7 +433,7 @@ impl<P: Provider + 'static> AgentLoop<P> {
                 let skip = messages.len() - 1; // 跳过系统消息 + 历史消息（不包括新消息）
 
                 // 执行 ReAct 循环（支持工具调用）
-                match self.re_act(messages).await {
+                match self.re_act(messages, &channel, &chat_id).await {
                     Ok(result) => {
                         // 保存本回合消息（增量追加，跳过已存在的消息）
                         self.save_turn(&mut session, &result.messages, skip);

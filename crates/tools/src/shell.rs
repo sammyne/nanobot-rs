@@ -12,7 +12,7 @@ use tokio::process::Command;
 use tokio::time::timeout;
 use tracing::{debug, info};
 
-use crate::core::{Tool, ToolError, ToolResult, optional_param, require_param, u64_param};
+use crate::core::{Tool, ToolContext, ToolError, ToolResult, optional_param, require_param, u64_param};
 
 /// Shell 执行结果
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
@@ -112,7 +112,7 @@ impl Tool for ShellTool {
         .unwrap_or_default()
     }
 
-    async fn execute(&self, params: serde_json::Value) -> ToolResult {
+    async fn execute(&self, _ctx: &ToolContext, params: serde_json::Value) -> ToolResult {
         let command = require_param(&params, "command")?;
         let cwd = optional_param(&params, "cwd");
         let timeout_ms = u64_param(&params, "timeout_ms", self.default_timeout_secs * 1000);

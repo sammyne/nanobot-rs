@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use serde_json::Value;
 use tracing::{error, info};
 
-use crate::core::{Tool, ToolDefinition, ToolError, ToolResult};
+use crate::core::{Tool, ToolContext, ToolDefinition, ToolError, ToolResult};
 
 /// 工具注册表
 pub struct ToolRegistry {
@@ -86,7 +86,7 @@ impl ToolRegistry {
     }
 
     /// 异步执行指定工具
-    pub async fn execute(&self, name: &str, params: Value) -> ToolResult {
+    pub async fn execute(&self, ctx: &ToolContext, name: &str, params: Value) -> ToolResult {
         let tool = self.tools.get(name).ok_or_else(|| {
             let available = self.tool_names().join(", ");
             ToolError::NotFound(format!("工具 '{name}' 不存在。可用工具: [{available}]"))
@@ -94,7 +94,7 @@ impl ToolRegistry {
 
         info!("执行工具: {} 参数: {:?}", name, params);
 
-        let result = tool.execute(params).await;
+        let result = tool.execute(ctx, params).await;
 
         if let Err(ref e) = result {
             error!("工具 {} 执行失败: {:?}", name, e);

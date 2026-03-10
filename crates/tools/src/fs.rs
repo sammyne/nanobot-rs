@@ -9,7 +9,7 @@ use schemars::schema::SchemaObject;
 use tokio::fs;
 use tracing::{debug, info};
 
-use crate::core::{Tool, ToolError, ToolResult, bool_param, require_param};
+use crate::core::{Tool, ToolContext, ToolError, ToolResult, bool_param, require_param};
 
 /// 解析并验证路径
 ///
@@ -92,7 +92,7 @@ impl Tool for ReadFileTool {
         path_param_schema()
     }
 
-    async fn execute(&self, params: serde_json::Value) -> ToolResult {
+    async fn execute(&self, _ctx: &ToolContext, params: serde_json::Value) -> ToolResult {
         let path_str = require_param(&params, "path")?;
         let path = resolve_path(&path_str, &self.workspace, self.allowed_dir.as_deref())?;
 
@@ -163,7 +163,7 @@ impl Tool for WriteFileTool {
         .unwrap_or_default()
     }
 
-    async fn execute(&self, params: serde_json::Value) -> ToolResult {
+    async fn execute(&self, _ctx: &ToolContext, params: serde_json::Value) -> ToolResult {
         let path_str = require_param(&params, "path")?;
         let content = require_param(&params, "content")?;
 
@@ -251,7 +251,7 @@ impl Tool for EditFileTool {
         .unwrap_or_default()
     }
 
-    async fn execute(&self, params: serde_json::Value) -> ToolResult {
+    async fn execute(&self, _ctx: &ToolContext, params: serde_json::Value) -> ToolResult {
         let path_str = require_param(&params, "path")?;
         let old_text = require_param(&params, "old_text")?;
         let new_text = require_param(&params, "new_text")?;
@@ -355,7 +355,7 @@ impl Tool for ListDirTool {
         .unwrap_or_default()
     }
 
-    async fn execute(&self, params: serde_json::Value) -> ToolResult {
+    async fn execute(&self, _ctx: &ToolContext, params: serde_json::Value) -> ToolResult {
         let path_str = require_param(&params, "path")?;
         let recursive = bool_param(&params, "recursive");
 
