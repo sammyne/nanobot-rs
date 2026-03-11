@@ -11,6 +11,7 @@ nanobot-tools.workspace = true
 nanobot-session.workspace = true
 nanobot-memory.workspace = true
 nanobot-channels.workspace = true
+nanobot-cron.workspace = true
 tokio.workspace = true
 anyhow.workspace = true
 serde.workspace = true

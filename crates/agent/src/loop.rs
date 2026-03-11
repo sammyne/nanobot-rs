@@ -11,6 +11,7 @@ use std::sync::Arc;
 use anyhow::Result;
 use nanobot_config::AgentDefaults;
 use nanobot_context::ContextBuilder;
+use nanobot_cron::{CronService, CronTool};
 use nanobot_provider::{Message, Provider};
 use nanobot_session::SessionManager;
 use nanobot_tools::{ToolContext, ToolRegistry};
@@ -33,22 +34,12 @@ pub struct ReActResult {
 /// Agent 循环处理引擎
 ///
 /// 负责管理消息处理和 LLM 调用的完整生命周期。
-///
-/// 消息流向：
-/// - CLI -> AgentLoop: CLI 通过 inbound_tx 发送，AgentLoop 通过 inbound_rx 接收
-/// - AgentLoop -> CLI: AgentLoop 通过 outbound_tx 发送，CLI 通过 outbound_rx 接收
 pub struct AgentLoop<P: Provider> {
     /// LLM 提供者实例
     provider: P,
 
     /// Agent 配置
     config: AgentDefaults,
-
-    /// 入站消息接收端（从 CLI 接收）
-    inbound_rx: mpsc::Receiver<InboundMessage>,
-
-    /// 出站消息发送端（向 CLI 发送）
-    outbound_tx: mpsc::Sender<OutboundMessage>,
 
     /// 会话管理器
     sessions: Arc<SessionManager>,
@@ -61,29 +52,30 @@ pub struct AgentLoop<P: Provider> {
 }
 
 impl<P: Provider + 'static> AgentLoop<P> {
-    /// 创建新的 AgentLoop 实例（交互式模式，需要通道）
+    /// 创建新的 AgentLoop 实例
     ///
     /// tool_registry 会根据 config 中的 workspace 参数自动构造。
     ///
     /// # Arguments
     /// * `provider` - LLM 提供者实例
     /// * `config` - Agent 配置
-    /// * `inbound_rx` - 入站消息接收端（CLI -> AgentLoop）
-    /// * `outbound_tx` - 出站消息发送端（AgentLoop -> CLI）
-    pub fn new(
-        mut provider: P,
-        config: AgentDefaults,
-        inbound_rx: mpsc::Receiver<InboundMessage>,
-        outbound_tx: mpsc::Sender<OutboundMessage>,
-    ) -> Self {
+    /// * `cron_service` - 可选的 Cron 服务实例
+    pub fn new(mut provider: P, config: AgentDefaults, _cron_service: Option<Arc<CronService>>) -> Self {
         info!(
-            "初始化 AgentLoop (交互式模式): model={}, max_tool_iterations={}",
+            "初始化 AgentLoop: model={}, max_tool_iterations={}",
             config.model, config.max_tool_iterations
         );
 
         // 基于 config 构造 tool_registry
         let workspace_str = config.workspace.to_string_lossy();
-        let tool_registry = ToolRegistry::new(&workspace_str, None);
+        let mut tool_registry = ToolRegistry::new(&workspace_str, None);
+
+        // 如果提供了 cron_service，注册 CronTool
+        if let Some(ref service) = _cron_service {
+            let cron_tool = CronTool::new(Arc::clone(service));
+            info!("注册 CronTool");
+            tool_registry.register(cron_tool);
+        }
 
         // 从 tool_registry 导出工具列表并绑定到 provider
         let definitions = tool_registry.get_definitions();
@@ -98,44 +90,27 @@ impl<P: Provider + 'static> AgentLoop<P> {
         Self {
             provider,
             config,
-            inbound_rx,
-            outbound_tx,
             sessions,
             tool_registry,
             context,
         }
     }
 
-    /// 创建新的 AgentLoop 实例（单次消息模式，无通道）
+    /// 创建新的 AgentLoop 实例（单次消息模式）
     ///
-    /// 复用 new 函数的逻辑，创建虚拟通道。
+    /// 直接复用 new 函数的逻辑，无需通道。
     ///
     /// # Arguments
     /// * `provider` - LLM 提供者实例
     /// * `config` - Agent 配置
-    pub fn new_direct(provider: P, config: AgentDefaults) -> Self {
-        info!(
-            "初始化 AgentLoop (单次模式): model={}, max_tool_iterations={}",
-            config.model, config.max_tool_iterations
-        );
-
-        // 创建虚拟通道
-        let (_inbound_tx, inbound_rx) = mpsc::channel(1);
-        let (outbound_tx, _outbound_rx) = mpsc::channel(1);
-
-        // 复用 new 函数的逻辑
-        Self::new(provider, config, inbound_rx, outbound_tx)
-    }
-
-    /// 获取会话键
-    fn session_key(channel: &str, chat_id: &str) -> String {
-        format!("{channel}:{chat_id}")
+    /// * `cron_service` - 可选的 Cron 服务实例
+    pub fn new_direct(provider: P, config: AgentDefaults, _cron_service: Option<Arc<CronService>>) -> Self {
+        Self::new(provider, config, _cron_service)
     }
 
     /// 获取或创建会话（与 Python 版本一致，返回 Session 对象）
-    fn get_or_create_session(&self, channel: &str, chat_id: &str) -> nanobot_session::Session {
-        let key = Self::session_key(channel, chat_id);
-        self.sessions.get_or_create(&key)
+    fn get_or_create_session(&self, session_key: &str) -> nanobot_session::Session {
+        self.sessions.get_or_create(session_key)
     }
 
     /// 工具结果最大字符数（与 Python 版本一致）
@@ -312,24 +287,28 @@ impl<P: Provider + 'static> AgentLoop<P> {
     ///
     /// 参考 Python 版 `process_direct` 函数实现。
     /// 通过构造 InboundMessage 复用 process_message 方法。
-    pub async fn process_direct(&mut self, content: &str, session_key: Option<&str>) -> Result<String> {
+    ///
+    /// # Arguments
+    /// * `content` - 消息内容
+    /// * `session_key` - 会话标识，格式为 "channel:chat_id"，默认为 "cli:direct"
+    /// * `channel` - 可选的通道名称，默认为 "cli"
+    /// * `chat_id` - 可选的聊天标识，默认为 "direct"
+    pub async fn process_direct(
+        &self,
+        content: &str,
+        session_key: &str,
+        channel: Option<&str>,
+        chat_id: Option<&str>,
+    ) -> Result<String> {
         info!("直接处理消息: {}", content);
 
-        // 解析会话标识
-        let (channel, chat_id) = if let Some(key) = session_key {
-            let parts: Vec<&str> = key.splitn(2, ':').collect();
-            if parts.len() == 2 {
-                (parts[0].to_string(), parts[1].to_string())
-            } else {
-                ("cli".to_string(), key.to_string())
-            }
-        } else {
-            ("cli".to_string(), "direct".to_string())
-        };
+        // 使用独立参数或默认值
+        let channel = channel.unwrap_or("cli").to_string();
+        let chat_id = chat_id.unwrap_or("direct").to_string();
 
         // 构造入站消息并复用 process_message
         let inbound = InboundMessage::new(&channel, "user", &chat_id, content);
-        let outbound = self.process_message(inbound).await;
+        let outbound = self.process_message(inbound, Some(session_key)).await;
 
         Ok(outbound.content)
     }
@@ -338,7 +317,7 @@ impl<P: Provider + 'static> AgentLoop<P> {
     ///
     /// 检查是否需要整合，如果需要则调用 LLM 进行记忆压缩。
     /// 整合失败不影响正常消息处理流程。
-    async fn try_consolidate(&mut self, session: &mut nanobot_session::Session) -> Result<()> {
+    async fn try_consolidate(&self, session: &mut nanobot_session::Session) -> Result<()> {
         match self
             .context
             .memory()
@@ -375,19 +354,25 @@ impl<P: Provider + 'static> AgentLoop<P> {
     /// 循环在以下情况下会退出：
     /// - 入站通道关闭
     /// - 发生错误
-    pub async fn run(mut self) -> Result<()> {
-        let outbound_tx = self.outbound_tx.clone();
-
+    ///
+    /// # Arguments
+    /// * `inbound_rx` - 入站消息接收端（CLI -> AgentLoop）
+    /// * `outbound_tx` - 出站消息发送端（AgentLoop -> CLI）
+    pub async fn run(
+        &self,
+        mut inbound_rx: mpsc::Receiver<InboundMessage>,
+        outbound_tx: mpsc::Sender<OutboundMessage>,
+    ) -> Result<()> {
         info!("AgentLoop 后台循环已启动");
 
         loop {
             // 消费入站消息
-            match self.inbound_rx.recv().await {
+            match inbound_rx.recv().await {
                 Some(msg) => {
                     debug!("收到入站消息: channel={}, chat_id={}", msg.channel, msg.chat_id);
 
-                    // 处理消息并发送响应
-                    let outbound = self.process_message(msg).await;
+                    // 处理消息并发送响应（使用 inbound 的 session_key）
+                    let outbound = self.process_message(msg, None).await;
                     if let Err(e) = outbound_tx.send(outbound).await {
                         error!("发送出站消息失败: {}", e);
                     }
@@ -406,8 +391,18 @@ impl<P: Provider + 'static> AgentLoop<P> {
 
     /// 处理入站消息并返回待发送的响应
     ///
+    /// # Arguments
+    /// * `inbound` - 入站消息
+    /// * `session_key` - 可选的会话标识，格式为 "channel:chat_id"；不存在时从 inbound.session_key() 获取
+    ///
     /// 注意：此方法总是返回 OutboundMessage，错误会被转换为错误消息内容
-    async fn process_message(&mut self, inbound: InboundMessage) -> OutboundMessage {
+    async fn process_message(&self, inbound: InboundMessage, session_key: Option<&str>) -> OutboundMessage {
+        // 获取或创建会话：优先使用传入的 session_key，否则从 inbound 获取
+        let session_key = session_key
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| inbound.session_key());
+        let mut session = self.get_or_create_session(&session_key);
+
         let InboundMessage {
             channel,
             sender_id: _,
@@ -415,9 +410,6 @@ impl<P: Provider + 'static> AgentLoop<P> {
             content,
             ..
         } = inbound;
-
-        // 获取或创建会话
-        let mut session = self.get_or_create_session(&channel, &chat_id);
 
         // 获取历史消息
         let mut history = Vec::new();

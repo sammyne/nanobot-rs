@@ -9,7 +9,7 @@ pub mod tool;
 pub mod types;
 
 pub use scheduler::{compute_next_run, is_valid_timezone, validate_schedule};
-pub use service::CronService;
+pub use service::{CronService, JobCallback};
 pub use storage::CronStorage;
 pub use tool::CronTool;
 pub use types::{CronJob, CronJobState, CronPayload, CronSchedule, CronStore};

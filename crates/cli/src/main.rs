@@ -5,7 +5,7 @@
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
-use nanobot_cli::{AgentCmd, GatewayCmd, OnboardCmd, init_logging};
+use nanobot_cli::{AgentCmd, CronCmd, GatewayCmd, OnboardCmd, init_logging};
 
 /// Nanobot - AI Agent 命令行工具
 #[derive(Parser, Debug)]
@@ -28,6 +28,9 @@ enum Commands {
 
     /// 启动 nanobot 后台服务
     Gateway(GatewayCmd),
+
+    /// 管理定时任务
+    Cron(CronCmd),
 }
 
 #[tokio::main]
@@ -41,6 +44,7 @@ async fn main() -> ExitCode {
         Commands::Onboard(cmd) => cmd.run(),
         Commands::Agent(cmd) => cmd.run().await,
         Commands::Gateway(cmd) => cmd.run().await,
+        Commands::Cron(cmd) => cmd.run().await,
     };
 
     match result {

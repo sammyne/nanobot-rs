@@ -17,7 +17,7 @@ fn context_with(channel: &str, chat_id: &str) -> ToolContext {
 async fn cron_tool_creation() {
     let dir = tempdir().unwrap();
     let path = dir.path().join("cron.json");
-    let service = Arc::new(CronService::new(path, None));
+    let service = Arc::new(CronService::new(path).await.unwrap());
     let tool = CronTool::new(service);
 
     assert_eq!(tool.name(), "cron");
@@ -28,8 +28,8 @@ async fn cron_tool_creation() {
 async fn cron_tool_add_without_context() {
     let dir = tempdir().unwrap();
     let path = dir.path().join("cron.json");
-    let service = Arc::new(CronService::new(path, None));
-    service.start().await.unwrap();
+    let service = Arc::new(CronService::new(path).await.unwrap());
+    service.start().await;
     let tool = CronTool::new(service);
     // Use empty context to trigger the "no session context" error
     let ctx = ToolContext::new("".to_string(), "".to_string());
@@ -48,8 +48,8 @@ async fn cron_tool_add_without_context() {
 async fn cron_tool_list_empty() {
     let dir = tempdir().unwrap();
     let path = dir.path().join("cron.json");
-    let service = Arc::new(CronService::new(path, None));
-    service.start().await.unwrap();
+    let service = Arc::new(CronService::new(path).await.unwrap());
+    service.start().await;
     let tool = CronTool::new(service);
     let ctx = test_context();
 
@@ -65,8 +65,8 @@ async fn cron_tool_list_empty() {
 async fn cron_tool_add_and_list() {
     let dir = tempdir().unwrap();
     let path = dir.path().join("cron.json");
-    let service = Arc::new(CronService::new(path, None));
-    service.start().await.unwrap();
+    let service = Arc::new(CronService::new(path).await.unwrap());
+    service.start().await;
     let tool = CronTool::new(Arc::clone(&service));
     let ctx = context_with("whatsapp", "1234567890");
 
@@ -91,8 +91,8 @@ async fn cron_tool_add_and_list() {
 async fn cron_tool_invalid_tz() {
     let dir = tempdir().unwrap();
     let path = dir.path().join("cron.json");
-    let service = Arc::new(CronService::new(path, None));
-    service.start().await.unwrap();
+    let service = Arc::new(CronService::new(path).await.unwrap());
+    service.start().await;
     let tool = CronTool::new(service);
     let ctx = context_with("whatsapp", "1234567890");
 

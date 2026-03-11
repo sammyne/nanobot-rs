@@ -9,6 +9,7 @@ nanobot-provider.workspace = true
 nanobot-agent.workspace = true
 nanobot-channels.workspace = true
 nanobot-templates.workspace = true
+nanobot-cron.workspace = true
 clap.workspace = true
 tokio = { workspace = true, features = ["signal"] }
 anyhow.workspace = true
@@ -16,6 +17,7 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 dialoguer.workspace = true
 dirs.workspace = true
+chrono.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

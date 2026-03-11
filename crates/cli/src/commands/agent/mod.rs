@@ -3,11 +3,13 @@
 use std::io::{
     Write, {self},
 };
+use std::sync::Arc;
 
 use anyhow::Result;
 use clap::Args;
 use nanobot_agent::{AgentLoop, InboundMessage, OutboundMessage};
 use nanobot_config::Config;
+use nanobot_cron::CronService;
 use nanobot_provider::OpenAILike;
 use tracing::{debug, error, info};
 /// 退出命令集合
@@ -46,35 +48,41 @@ impl AgentCmd {
         let provider = OpenAILike::from_config(&config)?;
         debug!("LLM Provider 初始化成功");
 
+        // 初始化 CronService（使用配置中的 workspace）
+        let cron_service = self.init_cron_service(&config.agents.defaults.workspace).await?;
+
         if let Some(msg) = &self.message {
             // 单次消息模式
-            self.run_once(provider, &config, msg).await?;
+            self.run_once(provider, &config, &cron_service, msg).await
         } else {
             // 交互式模式 - 使用 MessageBus 和 AgentLoop
-            self.run_interactive(provider, &config).await?;
+            self.run_interactive(provider, &config, &cron_service).await
         }
-
-        Ok(())
     }
 
     /// 单次消息模式
-    async fn run_once(&self, provider: OpenAILike, config: &Config, input: &str) -> Result<()> {
+    async fn run_once(
+        &self,
+        provider: OpenAILike,
+        config: &Config,
+        cron_service: &Arc<CronService>,
+        input: &str,
+    ) -> Result<()> {
         debug!("单次消息模式");
 
         // 创建 AgentLoop 实例（简单模式，直接调用）
-        let mut agent = AgentLoop::new_direct(provider, config.agents.defaults.clone());
+        let agent = AgentLoop::new_direct(provider, config.agents.defaults.clone(), Some(cron_service.clone()));
 
-        match agent.process_direct(input, Some(&self.session)).await {
+        match agent.process_direct(input, &self.session, None, None).await {
             Ok(response) => {
                 println!("{response}");
+                Ok(())
             }
             Err(e) => {
                 error!("Agent 处理失败: {}", e);
-                return Err(e);
+                Err(e)
             }
         }
-
-        Ok(())
     }
 
     /// 交互式模式 - 使用 mpsc 通道
@@ -83,7 +91,12 @@ impl AgentCmd {
     /// - 使用 Tokio mpsc 通道分离发送端和接收端，避免锁竞争
     /// - CLI 持有 inbound_tx（发送用户输入）和 outbound_rx（接收助手回复）
     /// - AgentLoop 持有 inbound_rx（接收用户输入）和 outbound_tx（发送助手回复）
-    async fn run_interactive(&self, provider: OpenAILike, config: &Config) -> Result<()> {
+    async fn run_interactive(
+        &self,
+        provider: OpenAILike,
+        config: &Config,
+        cron_service: &Arc<CronService>,
+    ) -> Result<()> {
         debug!("交互式模式（使用 mpsc 通道）");
 
         // 解析 session_id
@@ -96,8 +109,8 @@ impl AgentCmd {
         let (inbound_tx, inbound_rx) = tokio::sync::mpsc::channel::<InboundMessage>(100);
         let (outbound_tx, mut outbound_rx) = tokio::sync::mpsc::channel::<OutboundMessage>(100);
 
-        // 创建 AgentLoop（传递通道）
-        let agent_loop = AgentLoop::new(provider, config.agents.defaults.clone(), inbound_rx, outbound_tx);
+        // 创建 AgentLoop（不再传递通道）
+        let agent_loop = AgentLoop::new(provider, config.agents.defaults.clone(), Some(cron_service.clone()));
 
         // 打印欢迎信息
         println!("🤖 Nanobot Agent - 交互式 AI 助手");
@@ -105,9 +118,9 @@ impl AgentCmd {
         println!("会话: {session_key}");
         println!("输入 'exit' 或 'quit' 退出\n");
 
-        // 启动 AgentLoop 后台任务
+        // 启动 AgentLoop 后台任务（传递通道给 run）
         let agent_task = tokio::spawn(async move {
-            if let Err(e) = agent_loop.run().await {
+            if let Err(e) = agent_loop.run(inbound_rx, outbound_tx).await {
                 error!("AgentLoop 运行失败: {}", e);
             }
         });
@@ -173,6 +186,30 @@ impl AgentCmd {
         agent_task.abort();
 
         Ok(())
+    }
+
+    /// 初始化 CronService（用于工具操作，不启动定时器）
+    ///
+    /// 设计说明：
+    /// - CLI 进程是短期的，仅用于管理定时任务（通过 CronTool 进行 CRUD 操作）
+    /// - 不需要实际触发定时任务执行，实际执行由长期运行的后端服务负责
+    /// - 因此不需要设置 callback 或启动定时器
+    /// - cron 任务文件存储在 workspace/cron/jobs.json
+    async fn init_cron_service(&self, workspace: &std::path::Path) -> Result<Arc<CronService>> {
+        // cron 任务存储路径: workspace/cron/jobs.json
+        let cron_dir = workspace.join("cron");
+
+        // 确保 cron 目录存在
+        tokio::fs::create_dir_all(&cron_dir).await?;
+
+        let cron_file = cron_dir.join("jobs.json");
+        debug!("CronService 数据文件: {:?}", cron_file);
+
+        // 创建 CronService（不启动定时器）
+        let cron_service = Arc::new(CronService::new(cron_file).await?);
+        debug!("CronService 已初始化（仅用于工具操作）");
+
+        Ok(cron_service)
     }
 
     /// 解析 session_id 为 (channel, chat_id)

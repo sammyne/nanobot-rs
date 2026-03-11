@@ -61,6 +61,13 @@ impl InboundMessage {
         self.metadata.insert(key.into(), value);
         self
     }
+
+    /// 获取会话标识
+    ///
+    /// 返回格式为 "channel:chat_id" 的字符串，用于唯一标识一个会话。
+    pub fn session_key(&self) -> String {
+        format!("{}:{}", self.channel, self.chat_id)
+    }
 }
 
 /// 出站消息

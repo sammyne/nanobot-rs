@@ -81,10 +81,11 @@ async fn process_direct_returns_expected_response() {
     for case in test_vector {
         let provider = MockProvider::new(case.expected_response);
         let config = test_config();
-        let mut agent = AgentLoop::new_direct(provider, config);
+        let agent = AgentLoop::new_direct(provider, config, None);
 
+        let session_key = case.session_id.unwrap_or("cli:direct");
         let result = agent
-            .process_direct(case.input, case.session_id)
+            .process_direct(case.input, session_key, None, None)
             .await
             .unwrap_or_else(|e| panic!("case[{}]: process_direct failed: {}", case.name, e));
 
@@ -97,10 +98,10 @@ async fn process_direct_returns_expected_response() {
 async fn process_direct_handles_empty_message() {
     let provider = MockProvider::new("OK");
     let config = test_config();
-    let mut agent = AgentLoop::new_direct(provider, config);
+    let agent = AgentLoop::new_direct(provider, config, None);
 
     let result = agent
-        .process_direct("", None::<&str>)
+        .process_direct("", "cli:direct", None, None)
         .await
         .expect("empty message should be handled");
 
@@ -112,7 +113,7 @@ async fn process_direct_handles_empty_message() {
 fn config_returns_correct_reference() {
     let provider = MockProvider::new("test");
     let config = test_config();
-    let agent = AgentLoop::new_direct(provider, config.clone());
+    let agent = AgentLoop::new_direct(provider, config.clone(), None);
 
     let returned_config = agent.config();
 
@@ -160,13 +161,13 @@ fn agent_loop_uses_custom_config_values() {
     let test_vector = [
         DefaultsCase {
             name: "自定义配置 1",
-            agent: AgentLoop::new_direct(MockProvider::new("test"), custom_defaults1),
+            agent: AgentLoop::new_direct(MockProvider::new("test"), custom_defaults1, None),
             expect_model: "custom-model-1",
             expect_max_tokens: 2048,
         },
         DefaultsCase {
             name: "自定义配置 2",
-            agent: AgentLoop::new_direct(MockProvider::new("test"), custom_defaults2),
+            agent: AgentLoop::new_direct(MockProvider::new("test"), custom_defaults2, None),
             expect_model: "custom-model-2",
             expect_max_tokens: 4096,
         },

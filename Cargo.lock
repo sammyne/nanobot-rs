@@ -1317,6 +1317,7 @@ dependencies = [
  "nanobot-channels",
  "nanobot-config",
  "nanobot-context",
+ "nanobot-cron",
  "nanobot-memory",
  "nanobot-provider",
  "nanobot-session",
@@ -1353,12 +1354,14 @@ name = "nanobot-cli"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "chrono",
  "clap",
  "dialoguer",
  "dirs",
  "nanobot-agent",
  "nanobot-channels",
  "nanobot-config",
+ "nanobot-cron",
  "nanobot-provider",
  "nanobot-templates",
  "tempfile",
