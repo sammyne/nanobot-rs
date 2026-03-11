@@ -6,7 +6,7 @@ use super::*;
 async fn cron_service_new() {
     let dir = tempdir().unwrap();
     let path = dir.path().join("cron.json");
-    let service = CronService::new(path, None);
+    let service = CronService::new(path).await.unwrap();
 
     assert!(!service.is_running().await);
 }
@@ -15,9 +15,9 @@ async fn cron_service_new() {
 async fn cron_service_start_stop() {
     let dir = tempdir().unwrap();
     let path = dir.path().join("cron.json");
-    let service = CronService::new(path, None);
+    let service = CronService::new(path).await.unwrap();
 
-    service.start().await.unwrap();
+    service.start().await;
     assert!(service.is_running().await);
 
     service.stop().await;
@@ -28,8 +28,8 @@ async fn cron_service_start_stop() {
 async fn add_job() {
     let dir = tempdir().unwrap();
     let path = dir.path().join("cron.json");
-    let service = CronService::new(path, None);
-    service.start().await.unwrap();
+    let service = CronService::new(path).await.unwrap();
+    service.start().await;
 
     let schedule = CronSchedule::Every { every_ms: 60000 };
     let job = service
@@ -56,8 +56,8 @@ async fn add_job() {
 async fn remove_job() {
     let dir = tempdir().unwrap();
     let path = dir.path().join("cron.json");
-    let service = CronService::new(path, None);
-    service.start().await.unwrap();
+    let service = CronService::new(path).await.unwrap();
+    service.start().await;
 
     let schedule = CronSchedule::Every { every_ms: 60000 };
     let job = service

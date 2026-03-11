@@ -5,13 +5,17 @@
 //! - 初始化 LLM Provider
 //! - 启动 AgentLoop 消息处理引擎
 //! - 启动 ChannelManager 管理各渠道通道
+//! - 启动 CronService 管理定时任务
 //! - 提供优雅的启动和关闭机制
+
+use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use clap::Args;
 use nanobot_agent::{AgentLoop, InboundMessage, OutboundMessage};
 use nanobot_channels::ChannelManager;
 use nanobot_config::Config;
+use nanobot_cron::{CronJob, CronService};
 use nanobot_provider::OpenAILike;
 use tokio::sync::mpsc;
 use tracing::{error, info, warn};
@@ -48,8 +52,18 @@ impl GatewayCmd {
         let (inbound_tx, inbound_rx) = mpsc::channel::<InboundMessage>(100);
         let (outbound_tx, outbound_rx) = mpsc::channel::<OutboundMessage>(100);
 
+        // 初始化 CronService（不设置回调，后续复用 AgentLoop）
+        let cron_service = self.init_cron_service().await?;
+
         // 创建 AgentLoop
-        let agent_loop = AgentLoop::new(provider, config.agents.defaults.clone(), inbound_rx, outbound_tx);
+        let agent_loop = Arc::new(AgentLoop::new(
+            provider,
+            config.agents.defaults.clone(),
+            Some(cron_service.clone()),
+        ));
+
+        // 设置 cron 回调，复用同一个 AgentLoop
+        self.setup_cron_callback(&cron_service, agent_loop.clone()).await;
 
         // 使用 Config 中的 channels 配置创建 ChannelManager
         let channel_manager = ChannelManager::new(config.channels.clone(), outbound_rx, inbound_tx)
@@ -57,7 +71,8 @@ impl GatewayCmd {
             .context("创建通道管理器失败")?;
 
         // 启动服务并等待关闭信号
-        self.run_services(agent_loop, channel_manager).await?;
+        self.run_services(agent_loop, channel_manager, cron_service, inbound_rx, outbound_tx)
+            .await?;
 
         info!("Gateway 服务已停止");
         Ok(())
@@ -103,6 +118,58 @@ impl GatewayCmd {
         OpenAILike::from_config(config).context("初始化 LLM Provider 失败")
     }
 
+    /// 初始化 CronService
+    async fn init_cron_service(&self) -> Result<Arc<CronService>> {
+        // 获取数据目录
+        let data_dir = dirs::data_local_dir()
+            .unwrap_or_else(|| std::path::PathBuf::from("."))
+            .join("nanobot");
+
+        // 确保数据目录存在
+        tokio::fs::create_dir_all(&data_dir).await.context("创建数据目录失败")?;
+
+        let cron_file = data_dir.join("cron_jobs.json");
+        info!("CronService 数据文件: {:?}", cron_file);
+
+        // 创建 CronService
+        let cron_service = Arc::new(CronService::new(cron_file).await.context("初始化 CronService 失败")?);
+
+        Ok(cron_service)
+    }
+
+    /// 设置 cron 回调，复用同一个 AgentLoop
+    async fn setup_cron_callback(&self, cron_service: &Arc<CronService>, agent_loop: Arc<AgentLoop<OpenAILike>>) {
+        let callback: nanobot_cron::JobCallback = Arc::new(move |job: CronJob| {
+            let agent = agent_loop.clone();
+
+            Box::pin(async move {
+                let payload = &job.payload;
+
+                // 使用 payload 中的消息作为输入
+                let message = if payload.message.is_empty() {
+                    // 如果没有消息，使用任务名称
+                    job.name.clone()
+                } else {
+                    payload.message.clone()
+                };
+
+                // 执行消息
+                match agent.process_direct(&message, "cli:direct", None, None).await {
+                    Ok(response) => {
+                        info!("Cron job '{}' executed successfully", job.id);
+                        Ok(response)
+                    }
+                    Err(e) => {
+                        error!("Cron job '{}' execution failed: {}", job.id, e);
+                        Err(e.to_string())
+                    }
+                }
+            }) as std::pin::Pin<Box<dyn std::future::Future<Output = Result<String, String>> + Send>>
+        });
+
+        cron_service.set_on_job_callback(callback).await;
+    }
+
     /// 显示通道状态
     async fn print_channel_status(&self, channel_manager: &ChannelManager) {
         let status = channel_manager.get_status().await;
@@ -129,16 +196,27 @@ impl GatewayCmd {
     }
 
     /// 启动服务并等待关闭信号
-    async fn run_services(&self, agent_loop: AgentLoop<OpenAILike>, mut channel_manager: ChannelManager) -> Result<()> {
-        // 启动 AgentLoop 后台任务
+    async fn run_services(
+        &self,
+        agent_loop: Arc<AgentLoop<OpenAILike>>,
+        mut channel_manager: ChannelManager,
+        cron_service: Arc<CronService>,
+        inbound_rx: mpsc::Receiver<InboundMessage>,
+        outbound_tx: mpsc::Sender<OutboundMessage>,
+    ) -> Result<()> {
+        // 启动 AgentLoop 后台任务（传递通道给 run）
         let agent_task = tokio::spawn(async move {
-            if let Err(e) = agent_loop.run().await {
+            if let Err(e) = agent_loop.run(inbound_rx, outbound_tx).await {
                 error!("AgentLoop 运行失败: {}", e);
             }
         });
 
         // 启动所有通道
         channel_manager.start_all().await.context("启动通道失败")?;
+
+        // 启动 CronService
+        cron_service.start().await;
+        info!("CronService 已启动");
 
         // 显示通道状态（在启动所有通道后）
         self.print_channel_status(&channel_manager).await;
@@ -158,7 +236,7 @@ impl GatewayCmd {
         }
 
         // 优雅关闭
-        self.shutdown(agent_task, channel_manager).await?;
+        self.shutdown(agent_task, channel_manager, cron_service).await?;
 
         println!("  ✓ 服务已停止");
         println!();
@@ -171,9 +249,14 @@ impl GatewayCmd {
         &self,
         agent_task: tokio::task::JoinHandle<()>,
         mut channel_manager: ChannelManager,
+        cron_service: Arc<CronService>,
     ) -> Result<()> {
         println!("    ↦ 停止 AgentLoop...");
         agent_task.abort();
+
+        println!("    ↦ 停止 CronService...");
+        cron_service.stop().await;
+        info!("CronService 已停止");
 
         println!("    ↦ 停止 ChannelManager...");
         if let Err(e) = channel_manager.stop_all().await {

@@ -21,49 +21,57 @@ pub type JobCallback =
 /// Service for managing and executing scheduled jobs.
 pub struct CronService {
     storage: Arc<CronStorage>,
-    on_job: Option<JobCallback>,
+    on_job: Arc<RwLock<Option<JobCallback>>>,
     running: Arc<RwLock<bool>>,
     timer_task: Arc<RwLock<Option<JoinHandle<()>>>>,
 }
 
 impl CronService {
-    /// Create a new cron service.
-    pub fn new(store_path: PathBuf, on_job: Option<JobCallback>) -> Self {
-        CronService {
+    /// Create a new cron service without callback.
+    pub async fn new(store_path: PathBuf) -> Result<Self, anyhow::Error> {
+        let service = CronService {
             storage: Arc::new(CronStorage::new(store_path)),
-            on_job,
+            on_job: Arc::new(RwLock::new(None)),
             running: Arc::new(RwLock::new(false)),
             timer_task: Arc::new(RwLock::new(None)),
-        }
+        };
+
+        // Load persisted data
+        service.storage.load().await?;
+
+        Ok(service)
+    }
+
+    /// Set the job execution callback.
+    pub async fn set_on_job_callback(&self, callback: JobCallback) {
+        let mut on_job = self.on_job.write().await;
+        *on_job = Some(callback);
     }
 
     /// Start the cron service.
-    pub async fn start(&self) -> Result<(), anyhow::Error> {
+    pub async fn start(&self) {
         let mut running = self.running.write().await;
         if *running {
             warn!("Cron service is already running");
-            return Ok(());
+            return;
         }
 
         *running = true;
         drop(running);
 
-        // Load persisted data
-        self.storage.load().await?;
-
         // Recompute next run times for all enabled jobs
         self.recompute_next_runs().await;
 
         // Save updated state
-        self.storage.save().await?;
+        if let Err(e) = self.storage.save().await {
+            error!("Failed to save cron store: {}", e);
+        }
 
         // Start the timer
         self.arm_timer().await;
 
         let job_count = self.storage.list_jobs(true).await.len();
         info!("Cron service started with {} jobs", job_count);
-
-        Ok(())
     }
 
     /// Stop the cron service.
@@ -108,7 +116,7 @@ impl CronService {
 
         let running = Arc::clone(&self.running);
         let storage = Arc::clone(&self.storage);
-        let on_job = self.on_job.clone();
+        let on_job = Arc::clone(&self.on_job);
 
         let task = tokio::spawn(async move {
             // Use a loop instead of recursion
@@ -163,11 +171,12 @@ impl CronService {
     }
 
     /// Execute a single job.
-    async fn execute_job(storage: Arc<CronStorage>, on_job: Option<JobCallback>, mut job: CronJob) {
+    async fn execute_job(storage: Arc<CronStorage>, on_job: Arc<RwLock<Option<JobCallback>>>, mut job: CronJob) {
         let start_ms = chrono::Utc::now().timestamp_millis();
         info!("Cron: executing job '{}' ({})", job.name, job.id);
 
-        let result = if let Some(callback) = on_job {
+        let on_job_guard = on_job.read().await;
+        let result = if let Some(callback) = on_job_guard.as_ref() {
             match callback(job.clone()).await {
                 Ok(response) => {
                     info!("Cron: job '{}' completed: {}", job.name, response);
@@ -182,6 +191,7 @@ impl CronService {
             info!("Cron: job '{}' completed (no callback)", job.name);
             Ok(())
         };
+        drop(on_job_guard);
 
         job.state.last_run_at_ms = Some(start_ms);
         job.updated_at_ms = chrono::Utc::now().timestamp_millis();
