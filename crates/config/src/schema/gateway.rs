@@ -6,6 +6,47 @@ use serde::{Deserialize, Serialize};
 
 use super::ConfigError;
 
+/// Heartbeat 服务配置
+///
+/// 独立定义以避免循环依赖
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HeartbeatConfig {
+    /// 是否启用心跳服务
+    #[serde(default = "default_enabled")]
+    pub enabled: bool,
+
+    /// 心跳检查间隔（秒）
+    #[serde(default = "default_interval")]
+    pub interval_s: u64,
+}
+
+fn default_enabled() -> bool {
+    true
+}
+
+fn default_interval() -> u64 {
+    1800
+}
+
+impl Default for HeartbeatConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_enabled(),
+            interval_s: default_interval(),
+        }
+    }
+}
+
+impl HeartbeatConfig {
+    /// 验证配置
+    pub fn validate(&self) -> Result<(), String> {
+        if self.interval_s == 0 {
+            return Err("interval_s must be greater than 0".to_string());
+        }
+        Ok(())
+    }
+}
+
 /// 网关配置
 ///
 /// 网关服务的监听参数配置。
@@ -18,6 +59,10 @@ pub struct GatewayConfig {
     /// 监听端口
     #[serde(default = "default_port")]
     pub port: u16,
+
+    /// 心跳配置
+    #[serde(default)]
+    pub heartbeat: HeartbeatConfig,
 }
 
 fn default_host() -> String {
@@ -33,6 +78,7 @@ impl Default for GatewayConfig {
         Self {
             host: default_host(),
             port: default_port(),
+            heartbeat: HeartbeatConfig::default(),
         }
     }
 }
@@ -49,6 +95,11 @@ impl GatewayConfig {
         if self.host.is_empty() {
             return Err(ConfigError::Validation("gateway.host 不能为空".to_string()));
         }
+
+        // 验证 heartbeat 配置
+        self.heartbeat
+            .validate()
+            .map_err(|e| ConfigError::Validation(format!("gateway.heartbeat 配置错误: {e}")))?;
 
         Ok(())
     }
