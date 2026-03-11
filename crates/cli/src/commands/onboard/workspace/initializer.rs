@@ -59,6 +59,7 @@ impl WorkspaceInitializer {
             ("AGENTS.md", nanobot_templates::agents_template()),
             ("SOUL.md", nanobot_templates::soul_template()),
             ("TOOLS.md", nanobot_templates::tools_template()),
+            ("HEARTBEAT.md", nanobot_templates::heartbeat_template()),
         ];
 
         for (filename, content) in templates {

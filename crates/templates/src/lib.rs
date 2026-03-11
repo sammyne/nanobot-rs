@@ -44,5 +44,10 @@ pub fn memory_template() -> &'static str {
     get_template("memory/MEMORY.md").expect("memory/MEMORY.md template not found")
 }
 
+/// Get the HEARTBEAT.md template content
+pub fn heartbeat_template() -> &'static str {
+    get_template("HEARTBEAT.md").expect("HEARTBEAT.md template not found")
+}
+
 #[cfg(test)]
 mod tests;
