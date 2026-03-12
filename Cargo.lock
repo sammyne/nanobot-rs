@@ -1503,6 +1503,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "nanobot-subagent"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "futures",
+ "nanobot-channels",
+ "nanobot-provider",
+ "nanobot-tools",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-test",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "nanobot-templates"
 version = "0.1.0"
 dependencies = [
