@@ -18,6 +18,7 @@ async-trait.workspace = true
 uuid.workspace = true
 chrono.workspace = true
 futures.workspace = true
+schemars.workspace = true
 
 [dev-dependencies]
 tokio-test.workspace = true
