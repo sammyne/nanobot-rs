@@ -46,9 +46,9 @@ where
     /// Heartbeat configuration
     config: HeartbeatConfig,
     /// Execute callback
-    on_execute: Arc<RwLock<Option<Arc<dyn OnExecuteCallback>>>>,
+    on_execute: Arc<RwLock<Option<OnExecuteCallback>>>,
     /// Notify callback
-    on_notify: Arc<RwLock<Option<Arc<dyn OnNotifyCallback>>>>,
+    on_notify: Arc<RwLock<Option<OnNotifyCallback>>>,
     /// Running state
     running: Arc<RwLock<bool>>,
     /// Timer task handle
@@ -76,8 +76,8 @@ where
         workspace_path: PathBuf,
         provider: P,
         config: HeartbeatConfig,
-        on_execute: Option<Arc<dyn OnExecuteCallback>>,
-        on_notify: Option<Arc<dyn OnNotifyCallback>>,
+        on_execute: Option<OnExecuteCallback>,
+        on_notify: Option<OnNotifyCallback>,
     ) -> Self {
         // Bind heartbeat tool to provider once during initialization
         let mut provider = provider;
@@ -213,7 +213,7 @@ where
                 };
                 drop(on_execute);
 
-                let result = callback.execute(tasks).await.map_err(HeartbeatError::ExecuteError)?;
+                let result = callback(tasks).await.map_err(HeartbeatError::ExecuteError)?;
 
                 // Check result
                 if result.trim().is_empty() {
@@ -224,10 +224,7 @@ where
                 // Notify callback if configured
                 let on_notify = self.on_notify.read().await;
                 if let Some(notify_callback) = on_notify.as_ref() {
-                    notify_callback
-                        .notify(&result)
-                        .await
-                        .map_err(HeartbeatError::NotifyError)?;
+                    notify_callback(&result).await.map_err(HeartbeatError::NotifyError)?;
                 }
 
                 Ok(Some(result))

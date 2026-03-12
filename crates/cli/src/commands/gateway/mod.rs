@@ -14,9 +14,12 @@ use anyhow::{Context, Result};
 use clap::Args;
 use nanobot_agent::{AgentLoop, InboundMessage, OutboundMessage};
 use nanobot_channels::ChannelManager;
-use nanobot_config::Config;
+use nanobot_config::{Config, HeartbeatConfig as GatewayHeartbeatConfig};
 use nanobot_cron::{CronJob, CronService};
-use nanobot_provider::OpenAILike;
+use nanobot_heartbeat::config::HeartbeatConfig as HeartbeatServiceConfig;
+use nanobot_heartbeat::{HeartbeatService, OnExecuteCallback, OnNotifyCallback};
+use nanobot_provider::{OpenAILike, Provider};
+use nanobot_session::SessionInfo;
 use tokio::sync::mpsc;
 use tracing::{error, info, warn};
 
@@ -26,6 +29,22 @@ pub struct GatewayCmd {
     /// 服务端口（默认使用配置文件的 gateway.port，若未配置则使用 18790）
     #[arg(short, long)]
     pub port: Option<u16>,
+}
+
+/// 服务运行时的上下文
+struct ServicesContext<P: Provider + Send + Sync + Clone + 'static> {
+    /// AgentLoop 实例
+    agent_loop: Arc<AgentLoop<P>>,
+    /// ChannelManager 实例
+    channel_manager: ChannelManager,
+    /// CronService 实例
+    cron_service: Arc<CronService>,
+    /// HeartbeatService 实例
+    heartbeat_service: HeartbeatService<P>,
+    /// 入站消息接收端
+    inbound_rx: mpsc::Receiver<InboundMessage>,
+    /// 出站消息发送端
+    outbound_tx: mpsc::Sender<OutboundMessage>,
 }
 
 impl GatewayCmd {
@@ -57,7 +76,7 @@ impl GatewayCmd {
 
         // 创建 AgentLoop
         let agent_loop = Arc::new(AgentLoop::new(
-            provider,
+            provider.clone(),
             config.agents.defaults.clone(),
             Some(cron_service.clone()),
         ));
@@ -70,9 +89,28 @@ impl GatewayCmd {
             .await
             .context("创建通道管理器失败")?;
 
+        // 初始化 HeartbeatService（在创建 AgentLoop 和 ChannelManager 之后）
+        let heartbeat_service = self.setup_heartbeat_service(
+            config.agents.defaults.workspace.clone(),
+            provider,
+            &config.gateway.heartbeat,
+            agent_loop.clone(),
+            outbound_tx.clone(),
+        )?;
+
         // 启动服务并等待关闭信号
-        self.run_services(agent_loop, channel_manager, cron_service, inbound_rx, outbound_tx)
-            .await?;
+        self.run_services(
+            ServicesContext {
+                agent_loop,
+                channel_manager,
+                cron_service,
+                heartbeat_service,
+                inbound_rx,
+                outbound_tx,
+            },
+            &config.gateway.heartbeat,
+        )
+        .await?;
 
         info!("Gateway 服务已停止");
         Ok(())
@@ -87,6 +125,42 @@ impl GatewayCmd {
         println!();
         println!("  🚀 启动 nanobot gateway on port {port}...");
         println!("  📋 端口来源: {port_source}");
+    }
+
+    /// 显示服务启动状态
+    async fn print_service_status(&self, channel_manager: &ChannelManager, heartbeat_config: &GatewayHeartbeatConfig) {
+        println!();
+        println!("  ┌─────────────────────────────────────┐");
+        println!("  │           服务状态                   │");
+        println!("  └─────────────────────────────────────┘");
+
+        // 显示通道状态
+        let status = channel_manager.get_status().await;
+
+        if status.is_empty() {
+            println!("  ⚠️  警告: 没有启用的通道");
+            println!("     请在 ~/.nanobot/config.json 中配置 channels 字段");
+        } else {
+            println!("  ✓ 已启用的通道:");
+            for s in status {
+                let status_icon = if s.running { "🟢" } else { "🔴" };
+                println!(
+                    "    {} {} ({})",
+                    status_icon,
+                    s.name,
+                    if s.running { "运行中" } else { "已停止" }
+                );
+            }
+        }
+
+        // 显示 HeartbeatService 状态
+        if heartbeat_config.enabled {
+            println!("  ✓ HeartbeatService: 已启用 (间隔: {}s)", heartbeat_config.interval_s);
+        } else {
+            println!("  ✓ HeartbeatService: 已禁用");
+        }
+
+        println!();
     }
 
     /// 加载配置
@@ -137,6 +211,128 @@ impl GatewayCmd {
         Ok(cron_service)
     }
 
+    /// 设置 HeartbeatService（包含回调）
+    ///
+    /// # 参数
+    ///
+    /// * `workspace_path` - 工作区路径
+    /// * `provider` - LLM Provider
+    /// * `config` - Gateway 配置中的 heartbeat 配置
+    /// * `agent_loop` - AgentLoop 实例
+    /// * `outbound_tx` - 出站消息发送端
+    ///
+    /// # 返回
+    ///
+    /// 返回配置好回调的 HeartbeatService 实例
+    fn setup_heartbeat_service(
+        &self,
+        workspace_path: std::path::PathBuf,
+        provider: OpenAILike,
+        config: &GatewayHeartbeatConfig,
+        agent_loop: Arc<AgentLoop<OpenAILike>>,
+        outbound_tx: mpsc::Sender<OutboundMessage>,
+    ) -> Result<HeartbeatService<OpenAILike>> {
+        info!(
+            "设置 HeartbeatService: enabled={}, interval_s={}",
+            config.enabled, config.interval_s
+        );
+
+        // 转换配置格式
+        let heartbeat_config = HeartbeatServiceConfig::with_values(config.enabled, config.interval_s);
+
+        // 创建 SessionManager 用于访问会话列表
+        let sessions = Arc::new(nanobot_session::SessionManager::new(workspace_path.clone()));
+
+        // 创建 on_execute 回调（函数指针形式）
+        let on_execute: OnExecuteCallback = Arc::new({
+            let agent = agent_loop.clone();
+            let sessions = sessions.clone();
+            move |task_summary: &str| {
+                let agent = agent.clone();
+                let sessions = sessions.clone();
+                let task_summary = task_summary.to_string();
+                Box::pin(async move {
+                    info!("Heartbeat on_execute: {}", task_summary);
+
+                    // 获取会话列表
+                    let sessions_list = sessions.list_sessions();
+
+                    // 获取已启用的渠道列表（目前暂时为空，后续可以从配置获取）
+                    let enabled_channels = vec![];
+
+                    // 选择目标渠道
+                    let (channel, chat_id) = Self::pick_heartbeat_target(&enabled_channels, &sessions_list);
+
+                    // 使用 "heartbeat" 作为 session_key
+                    let session_key = "heartbeat";
+
+                    // 调用 AgentLoop::process_direct
+                    match agent
+                        .process_direct(&task_summary, session_key, Some(&channel), Some(&chat_id))
+                        .await
+                    {
+                        Ok(response) => {
+                            info!("Heartbeat 任务执行成功");
+                            Ok(response)
+                        }
+                        Err(e) => {
+                            error!("Heartbeat 任务执行失败: {}", e);
+                            Err(anyhow::anyhow!(e))
+                        }
+                    }
+                })
+            }
+        });
+
+        // 创建 on_notify 回调（函数指针形式）
+        let on_notify: OnNotifyCallback = Arc::new({
+            let sessions = sessions.clone();
+            move |result: &str| {
+                let sessions = sessions.clone();
+                let result = result.to_string();
+                let outbound_tx = outbound_tx.clone();
+                Box::pin(async move {
+                    info!("Heartbeat on_notify: {}", result);
+
+                    // 获取会话列表
+                    let sessions_list = sessions.list_sessions();
+
+                    // 获取已启用的渠道列表（目前暂时为空，后续可以从配置获取）
+                    let enabled_channels = vec![];
+
+                    // 选择目标渠道
+                    let (channel, chat_id) = Self::pick_heartbeat_target(&enabled_channels, &sessions_list);
+
+                    // 跳过 "cli" 目标
+                    if channel == "cli" {
+                        info!("跳过 cli 渠道的通知");
+                        return Ok(());
+                    }
+
+                    // 发送 OutboundMessage
+                    let msg = OutboundMessage::new(&channel, &chat_id, &result);
+                    if let Err(e) = outbound_tx.send(msg).await {
+                        error!("发送心跳通知失败: {}", e);
+                        return Err(anyhow::anyhow!(e));
+                    }
+
+                    Ok(())
+                })
+            }
+        });
+
+        // 创建 HeartbeatService（带回调）
+        let heartbeat_service = HeartbeatService::new(
+            workspace_path,
+            provider,
+            heartbeat_config,
+            Some(on_execute),
+            Some(on_notify),
+        );
+
+        Ok(heartbeat_service)
+    }
+
     /// 设置 cron 回调，复用同一个 AgentLoop
     async fn setup_cron_callback(&self, cron_service: &Arc<CronService>, agent_loop: Arc<AgentLoop<OpenAILike>>) {
         let callback: nanobot_cron::JobCallback = Arc::new(move |job: CronJob| {
@@ -170,56 +366,44 @@ impl GatewayCmd {
         cron_service.set_on_job_callback(callback).await;
     }
 
-    /// 显示通道状态
-    async fn print_channel_status(&self, channel_manager: &ChannelManager) {
-        let status = channel_manager.get_status().await;
-
-        if status.is_empty() {
-            println!();
-            println!("  ⚠️  警告: 没有启用的通道");
-            println!("     请在 ~/.nanobot/config.json 中配置 channels 字段");
-            println!();
-        } else {
-            println!();
-            println!("  ✓ 已启用的通道:");
-            for s in status {
-                let status_icon = if s.running { "🟢" } else { "🔴" };
-                println!(
-                    "    {} {} ({})",
-                    status_icon,
-                    s.name,
-                    if s.running { "运行中" } else { "已停止" }
-                );
-            }
-            println!();
-        }
-    }
-
     /// 启动服务并等待关闭信号
     async fn run_services(
         &self,
-        agent_loop: Arc<AgentLoop<OpenAILike>>,
-        mut channel_manager: ChannelManager,
-        cron_service: Arc<CronService>,
-        inbound_rx: mpsc::Receiver<InboundMessage>,
-        outbound_tx: mpsc::Sender<OutboundMessage>,
+        ctx: ServicesContext<OpenAILike>,
+        heartbeat_config: &GatewayHeartbeatConfig,
     ) -> Result<()> {
         // 启动 AgentLoop 后台任务（传递通道给 run）
         let agent_task = tokio::spawn(async move {
-            if let Err(e) = agent_loop.run(inbound_rx, outbound_tx).await {
+            if let Err(e) = ctx.agent_loop.run(ctx.inbound_rx, ctx.outbound_tx).await {
                 error!("AgentLoop 运行失败: {}", e);
             }
         });
 
         // 启动所有通道
+        let mut channel_manager = ctx.channel_manager;
         channel_manager.start_all().await.context("启动通道失败")?;
 
         // 启动 CronService
-        cron_service.start().await;
+        ctx.cron_service.start().await;
         info!("CronService 已启动");
 
-        // 显示通道状态（在启动所有通道后）
-        self.print_channel_status(&channel_manager).await;
+        // 启动 HeartbeatService
+        let heartbeat_service = Arc::new(ctx.heartbeat_service);
+        let heartbeat_interval = heartbeat_config.interval_s;
+        match heartbeat_service.clone().start().await {
+            Ok(()) => {
+                info!("HeartbeatService 已启动 (间隔: {}s)", heartbeat_interval);
+            }
+            Err(nanobot_heartbeat::error::HeartbeatError::Disabled) => {
+                info!("HeartbeatService 已禁用");
+            }
+            Err(e) => {
+                error!("HeartbeatService 启动失败: {}", e);
+            }
+        }
+
+        // 显示服务状态（在启动所有通道后）
+        self.print_service_status(&channel_manager, heartbeat_config).await;
 
         println!("  ✓ 服务已启动，按 Ctrl+C 停止");
         println!();
@@ -236,7 +420,8 @@ impl GatewayCmd {
         }
 
         // 优雅关闭
-        self.shutdown(agent_task, channel_manager, cron_service).await?;
+        self.shutdown(agent_task, channel_manager, ctx.cron_service, heartbeat_service)
+            .await?;
 
         println!("  ✓ 服务已停止");
         println!();
@@ -250,7 +435,11 @@ impl GatewayCmd {
         agent_task: tokio::task::JoinHandle<()>,
         mut channel_manager: ChannelManager,
         cron_service: Arc<CronService>,
+        heartbeat_service: Arc<HeartbeatService<OpenAILike>>,
     ) -> Result<()> {
+        println!("    ↦ 停止 HeartbeatService...");
+        heartbeat_service.stop().await;
+
         println!("    ↦ 停止 AgentLoop...");
         agent_task.abort();
 
@@ -264,6 +453,41 @@ impl GatewayCmd {
         }
 
         Ok(())
+    }
+
+    /// 选择心跳通知的目标渠道和聊天ID
+    ///
+    /// # 参数
+    ///
+    /// * `enabled_channels` - 已启用的渠道名称集合
+    /// * `sessions` - 所有会话信息列表，按更新时间降序排列
+    ///
+    /// # 返回
+    ///
+    /// 返回 (channel, chat_id) 元组，用于指定心跳通知的目标
+    fn pick_heartbeat_target(enabled_channels: &[String], sessions: &[SessionInfo]) -> (String, String) {
+        // 优先选择最近更新的非内部会话
+        for session in sessions {
+            let key = &session.key;
+
+            // 解析 session_key 格式: "channel:chat_id"
+            if let Some((channel, chat_id)) = key.split_once(':') {
+                // 跳过内部渠道 (cli, system)
+                if matches!(channel, "cli" | "system") {
+                    continue;
+                }
+
+                // 检查渠道是否已启用
+                if enabled_channels.contains(&channel.to_string()) && !chat_id.is_empty() {
+                    info!("选择心跳目标: {} ({})", channel, chat_id);
+                    return (channel.to_string(), chat_id.to_string());
+                }
+            }
+        }
+
+        // 默认返回 cli 渠道
+        info!("使用默认心跳目标: cli:direct");
+        ("cli".to_string(), "direct".to_string())
     }
 }
 
