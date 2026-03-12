@@ -18,7 +18,9 @@
 mod error;
 mod manager;
 mod task;
+mod tool;
 
 pub use error::{SubagentError, SubagentResult};
 pub use manager::SubagentManager;
 pub use task::Task;
+pub use tool::SpawnTool;
