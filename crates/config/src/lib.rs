@@ -4,4 +4,5 @@
 
 mod schema;
 
-pub use schema::{AgentDefaults, ChannelsConfig, Config, ConfigError, DingTalkConfig, ProviderConfig};
+pub use schema::gateway::HeartbeatConfig;
+pub use schema::{AgentDefaults, ChannelsConfig, Config, ConfigError, DingTalkConfig, GatewayConfig, ProviderConfig};

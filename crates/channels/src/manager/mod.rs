@@ -249,6 +249,13 @@ impl ChannelManager {
             running: channel.is_running(),
         })
     }
+
+    /// 获取已启用的通道名称列表
+    ///
+    /// 返回所有已配置并启用（enabled=true）的通道名称
+    pub fn get_enabled_channels(&self) -> Vec<String> {
+        self.channels.keys().cloned().collect()
+    }
 }
 
 #[cfg(test)]
