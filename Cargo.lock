@@ -1352,6 +1352,7 @@ dependencies = [
  "nanobot-config",
  "nanobot-context",
  "nanobot-cron",
+ "nanobot-mcp",
  "nanobot-memory",
  "nanobot-provider",
  "nanobot-session",

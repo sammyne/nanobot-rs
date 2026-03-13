@@ -85,12 +85,16 @@ impl GatewayCmd {
         );
 
         // 创建 AgentLoop
-        let agent_loop = Arc::new(AgentLoop::new(
-            provider.clone(),
-            config.agents.defaults.clone(),
-            Some(cron_service.clone()),
-            Some(subagent_manager),
-        ));
+        let agent_loop = Arc::new(
+            AgentLoop::new(
+                provider.clone(),
+                config.agents.defaults.clone(),
+                Some(cron_service.clone()),
+                Some(subagent_manager),
+                config.tools.mcp_servers.clone(),
+            )
+            .await?,
+        );
 
         // 设置 cron 回调，复用同一个 AgentLoop
         self.setup_cron_callback(&cron_service, agent_loop.clone()).await;

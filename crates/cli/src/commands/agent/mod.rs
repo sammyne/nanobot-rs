@@ -71,13 +71,18 @@ impl AgentCmd {
     ) -> Result<()> {
         debug!("单次消息模式");
 
+        // 准备 MCP 配置
+        let mcp_configs = config.tools.mcp_servers.clone();
+
         // 创建 AgentLoop 实例（不使用子代理功能）
         let agent = AgentLoop::new_direct(
             provider,
             config.agents.defaults.clone(),
             Some(cron_service.clone()),
             None,
-        );
+            mcp_configs,
+        )
+        .await?;
 
         match agent.process_direct(input, &self.session, None, None).await {
             Ok(response) => {
@@ -124,13 +129,18 @@ impl AgentCmd {
             config.agents.defaults.max_tokens as u32,
         );
 
+        // 准备 MCP 配置
+        let mcp_configs = config.tools.mcp_servers.clone();
+
         // 创建 AgentLoop（不再传递通道）
         let agent_loop = AgentLoop::new(
             provider,
             config.agents.defaults.clone(),
             Some(cron_service.clone()),
             Some(subagent_manager),
-        );
+            mcp_configs,
+        )
+        .await?;
 
         // 打印欢迎信息
         println!("🤖 Nanobot Agent - 交互式 AI 助手");

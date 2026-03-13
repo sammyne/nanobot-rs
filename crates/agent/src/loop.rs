@@ -9,13 +9,14 @@
 use std::sync::Arc;
 
 use anyhow::Result;
-use nanobot_config::AgentDefaults;
+use nanobot_config::{AgentDefaults, McpServerConfig};
 use nanobot_context::ContextBuilder;
 use nanobot_cron::{CronService, CronTool};
+use nanobot_mcp::wrapper::connect;
 use nanobot_provider::{Message, Provider};
 use nanobot_session::SessionManager;
 use nanobot_subagent::{SpawnTool, SubagentManager};
-use nanobot_tools::{ToolContext, ToolRegistry};
+use nanobot_tools::{Tool, ToolContext, ToolRegistry};
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
 
@@ -56,18 +57,21 @@ impl<P: Provider + 'static> AgentLoop<P> {
     /// 创建新的 AgentLoop 实例
     ///
     /// tool_registry 会根据 config 中的 workspace 参数自动构造。
+    /// 如果提供了 mcp_configs，会自动连接 MCP 服务器并注册工具。
     ///
     /// # Arguments
     /// * `provider` - LLM 提供者实例
     /// * `config` - Agent 配置
     /// * `cron_service` - 可选的 Cron 服务实例
     /// * `subagent_manager` - 可选的子代理管理器
-    pub fn new(
+    /// * `mcp_configs` - 可选的 MCP 服务器配置
+    pub async fn new(
         mut provider: P,
         config: AgentDefaults,
         cron_service: Option<Arc<CronService>>,
         subagent_manager: Option<Arc<SubagentManager<P>>>,
-    ) -> Self {
+        mcp_configs: std::collections::HashMap<String, McpServerConfig>,
+    ) -> Result<Self> {
         info!(
             "初始化 AgentLoop: model={}, max_tool_iterations={}",
             config.model, config.max_tool_iterations
@@ -76,6 +80,26 @@ impl<P: Provider + 'static> AgentLoop<P> {
         // 基于 config 构造 tool_registry
         let workspace_str = config.workspace.to_string_lossy();
         let mut tool_registry = ToolRegistry::new(&workspace_str, None);
+
+        // 连接 MCP 服务器并注册工具
+        let mcp_server_count = mcp_configs.len();
+        let mut mcp_tool_count = 0;
+        if !mcp_configs.is_empty() {
+            info!("发现 {} 个 MCP 服务器配置", mcp_server_count);
+            match connect(mcp_configs).await {
+                Ok(mcp_tools) => {
+                    mcp_tool_count = mcp_tools.len();
+                    for tool in mcp_tools {
+                        let tool_name = tool.name().to_string();
+                        tool_registry.register(tool);
+                        info!("注册 MCP 工具: {}", tool_name);
+                    }
+                }
+                Err(e) => {
+                    error!("MCP 连接失败: {}，AgentLoop 将在无 MCP 工具的情况下继续初始化", e);
+                }
+            }
+        }
 
         // 如果提供了 cron_service，注册 CronTool
         if let Some(ref service) = cron_service {
@@ -93,7 +117,18 @@ impl<P: Provider + 'static> AgentLoop<P> {
 
         // 从 tool_registry 导出工具列表并绑定到 provider
         let definitions = tool_registry.get_definitions();
+        let tool_names = tool_registry.tool_names();
         provider.bind_tools(definitions);
+
+        // 记录初始化统计信息
+        info!(
+            "AgentLoop 初始化完成: MCP 服务器={}, 总工具={}",
+            mcp_server_count,
+            tool_names.len()
+        );
+        if mcp_server_count > 0 {
+            info!("已注册 {} 个 MCP 工具", mcp_tool_count);
+        }
 
         // Initialize SessionManager
         let sessions = Arc::new(SessionManager::new(config.workspace.clone()));
@@ -101,13 +136,13 @@ impl<P: Provider + 'static> AgentLoop<P> {
         // Initialize ContextBuilder (which contains MemoryStore)
         let context = ContextBuilder::new(config.workspace.clone()).expect("Failed to initialize ContextBuilder");
 
-        Self {
+        Ok(Self {
             provider,
             config,
             sessions,
             tool_registry,
             context,
-        }
+        })
     }
 
     /// 创建新的 AgentLoop 实例（单次消息模式）
@@ -119,13 +154,15 @@ impl<P: Provider + 'static> AgentLoop<P> {
     /// * `config` - Agent 配置
     /// * `cron_service` - 可选的 Cron 服务实例
     /// * `subagent_manager` - 可选的子代理管理器
-    pub fn new_direct(
+    /// * `mcp_configs` - MCP 服务器配置
+    pub async fn new_direct(
         provider: P,
         config: AgentDefaults,
         cron_service: Option<Arc<CronService>>,
         subagent_manager: Option<Arc<SubagentManager<P>>>,
-    ) -> Self {
-        Self::new(provider, config, cron_service, subagent_manager)
+        mcp_configs: std::collections::HashMap<String, McpServerConfig>,
+    ) -> Result<Self> {
+        Self::new(provider, config, cron_service, subagent_manager, mcp_configs).await
     }
 
     /// 获取或创建会话（与 Python 版本一致，返回 Session 对象）
