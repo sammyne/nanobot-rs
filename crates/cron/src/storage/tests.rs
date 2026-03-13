@@ -20,12 +20,7 @@ async fn storage_save_and_load() {
 
     let storage = CronStorage::new(path.clone());
 
-    let job = CronJob::new(
-        "Test".to_string(),
-        CronSchedule::Every { every_ms: 60000 },
-        CronPayload::default(),
-        false,
-    );
+    let job = CronJob::new("Test".to_string(), CronSchedule::Every { every_ms: 60000 }, CronPayload::default(), false);
 
     storage.add_job(job).await;
     storage.save().await.unwrap();
@@ -43,12 +38,7 @@ async fn storage_save_and_load() {
 async fn storage_remove_job() {
     let storage = CronStorage::new(PathBuf::from("/tmp/test_cron.json"));
 
-    let job = CronJob::new(
-        "Test".to_string(),
-        CronSchedule::Every { every_ms: 60000 },
-        CronPayload::default(),
-        false,
-    );
+    let job = CronJob::new("Test".to_string(), CronSchedule::Every { every_ms: 60000 }, CronPayload::default(), false);
 
     let job_id = job.id.clone();
     storage.add_job(job).await;

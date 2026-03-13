@@ -47,10 +47,7 @@ fn core_identity_contains_required_info() {
     assert!(identity.contains("## Workspace"), "Should include Workspace section");
     assert!(identity.contains("MEMORY.md"), "Should mention memory file");
     assert!(identity.contains("HISTORY.md"), "Should mention history file");
-    assert!(
-        identity.contains("Tool Call Guidelines"),
-        "Should include tool guidelines"
-    );
+    assert!(identity.contains("Tool Call Guidelines"), "Should include tool guidelines");
 }
 
 #[test]
@@ -85,16 +82,10 @@ fn runtime_context_injects_time() {
     let content = "Hello, assistant!";
     let result = ContextBuilder::inject_runtime_context(content, None, None);
 
-    assert!(
-        result.starts_with("Hello, assistant!"),
-        "Should preserve original content"
-    );
+    assert!(result.starts_with("Hello, assistant!"), "Should preserve original content");
     assert!(result.contains("[Runtime Context]"), "Should add runtime context block");
     assert!(result.contains("Current Time:"), "Should include current time");
-    assert!(
-        !result.contains("Channel:"),
-        "Should not include channel when not provided"
-    );
+    assert!(!result.contains("Channel:"), "Should not include channel when not provided");
 }
 
 #[test]
@@ -140,10 +131,7 @@ fn image_encoding_encodes_valid_image() {
     assert!(result.is_some(), "Should encode valid image");
 
     let data_url = result.unwrap();
-    assert!(
-        data_url.starts_with("data:image/png;base64,"),
-        "Should have correct MIME type"
-    );
+    assert!(data_url.starts_with("data:image/png;base64,"), "Should have correct MIME type");
 }
 
 #[test]
@@ -156,14 +144,8 @@ fn message_building_creates_system_and_user() {
     assert_eq!(messages.len(), 2, "Should have system and user messages");
     assert_eq!(messages[0].role(), "system", "First message should be system");
     assert_eq!(messages[1].role(), "user", "Second message should be user");
-    assert!(
-        messages[1].content().contains("Hello"),
-        "User message should contain original content"
-    );
-    assert!(
-        messages[1].content().contains("[Runtime Context]"),
-        "User message should have runtime context"
-    );
+    assert!(messages[1].content().contains("Hello"), "User message should contain original content");
+    assert!(messages[1].content().contains("[Runtime Context]"), "User message should have runtime context");
 }
 
 #[test]
@@ -171,23 +153,14 @@ fn message_building_includes_history() {
     let workspace = create_test_workspace(&[]);
     let builder = ContextBuilder::new(workspace.path().to_path_buf()).unwrap();
 
-    let history = vec![
-        Message::user("Previous question"),
-        Message::assistant("Previous answer"),
-    ];
+    let history = vec![Message::user("Previous question"), Message::assistant("Previous answer")];
 
-    let messages = builder
-        .build_messages(&history, "New question", None, None, None)
-        .unwrap();
+    let messages = builder.build_messages(&history, "New question", None, None, None).unwrap();
 
     assert_eq!(messages.len(), 4, "Should have system, history (2), and user messages");
     assert_eq!(messages[0].role(), "system", "First should be system");
     assert_eq!(messages[1].role(), "user", "Second should be user from history");
-    assert_eq!(
-        messages[2].role(),
-        "assistant",
-        "Third should be assistant from history"
-    );
+    assert_eq!(messages[2].role(), "assistant", "Third should be assistant from history");
     assert_eq!(messages[3].role(), "user", "Fourth should be current user");
 }
 
@@ -231,21 +204,12 @@ fn bootstrap_files_loads_all_files() {
     let bootstrap = builder.load_bootstrap_files();
 
     assert!(bootstrap.contains("## AGENTS.md"), "Should include AGENTS.md section");
-    assert!(
-        bootstrap.contains("This is the AGENTS.md content"),
-        "Should include AGENTS.md content"
-    );
+    assert!(bootstrap.contains("This is the AGENTS.md content"), "Should include AGENTS.md content");
     assert!(bootstrap.contains("## SOUL.md"), "Should include SOUL.md section");
-    assert!(
-        bootstrap.contains("This is the SOUL.md content"),
-        "Should include SOUL.md content"
-    );
+    assert!(bootstrap.contains("This is the SOUL.md content"), "Should include SOUL.md content");
     assert!(bootstrap.contains("## USER.md"), "Should include USER.md section");
     assert!(bootstrap.contains("## TOOLS.md"), "Should include TOOLS.md section");
-    assert!(
-        bootstrap.contains("## IDENTITY.md"),
-        "Should include IDENTITY.md section"
-    );
+    assert!(bootstrap.contains("## IDENTITY.md"), "Should include IDENTITY.md section");
 }
 
 #[test]
@@ -308,13 +272,7 @@ fn bootstrap_files_handles_io_errors() {
 
 #[test]
 fn bootstrap_files_maintains_order() {
-    let files = vec![
-        ("AGENTS.md", "1"),
-        ("SOUL.md", "2"),
-        ("USER.md", "3"),
-        ("TOOLS.md", "4"),
-        ("IDENTITY.md", "5"),
-    ];
+    let files = vec![("AGENTS.md", "1"), ("SOUL.md", "2"), ("USER.md", "3"), ("TOOLS.md", "4"), ("IDENTITY.md", "5")];
     let workspace = create_test_workspace(&files);
     let builder = ContextBuilder::new(workspace.path().to_path_buf()).unwrap();
 
@@ -420,16 +378,10 @@ fn system_prompt_assembly_order() {
 fn end_to_end_full_bootstrap_integration() {
     // Create a realistic set of bootstrap files
     let files = vec![
-        (
-            "AGENTS.md",
-            "# Agent Configuration\n\nYou are configured as a helpful assistant.",
-        ),
+        ("AGENTS.md", "# Agent Configuration\n\nYou are configured as a helpful assistant."),
         ("SOUL.md", "# Core Principles\n\nBe helpful, honest, and respectful."),
         ("USER.md", "# User Preferences\n\nUser prefers concise answers."),
-        (
-            "TOOLS.md",
-            "# Available Tools\n\n- read_file: Read file contents\n- write_file: Write file contents",
-        ),
+        ("TOOLS.md", "# Available Tools\n\n- read_file: Read file contents\n- write_file: Write file contents"),
         ("IDENTITY.md", "# Identity\n\nName: nanobot\nVersion: 1.0.0"),
     ];
     let workspace = create_test_workspace(&files);
@@ -437,11 +389,8 @@ fn end_to_end_full_bootstrap_integration() {
     // Create memory
     let memory_dir = workspace.path().join("memory");
     fs::create_dir_all(&memory_dir).expect("Failed to create memory dir");
-    fs::write(
-        memory_dir.join("MEMORY.md"),
-        "# Memory\n\nImportant information stored here.",
-    )
-    .expect("Failed to write memory");
+    fs::write(memory_dir.join("MEMORY.md"), "# Memory\n\nImportant information stored here.")
+        .expect("Failed to write memory");
 
     let builder = ContextBuilder::new(workspace.path().to_path_buf()).unwrap();
     let prompt = builder.build_system_prompt().unwrap();
@@ -454,30 +403,15 @@ fn end_to_end_full_bootstrap_integration() {
     assert!(prompt.contains("## IDENTITY.md"), "Should include IDENTITY.md section");
 
     // Verify bootstrap content is included
-    assert!(
-        prompt.contains("You are configured as a helpful assistant"),
-        "Should include AGENTS.md content"
-    );
-    assert!(
-        prompt.contains("Be helpful, honest, and respectful"),
-        "Should include SOUL.md content"
-    );
-    assert!(
-        prompt.contains("User prefers concise answers"),
-        "Should include USER.md content"
-    );
-    assert!(
-        prompt.contains("- read_file: Read file contents"),
-        "Should include TOOLS.md content"
-    );
+    assert!(prompt.contains("You are configured as a helpful assistant"), "Should include AGENTS.md content");
+    assert!(prompt.contains("Be helpful, honest, and respectful"), "Should include SOUL.md content");
+    assert!(prompt.contains("User prefers concise answers"), "Should include USER.md content");
+    assert!(prompt.contains("- read_file: Read file contents"), "Should include TOOLS.md content");
     assert!(prompt.contains("Name: nanobot"), "Should include IDENTITY.md content");
 
     // Verify order
     let parts: Vec<&str> = prompt.split("\n\n---\n\n").collect();
-    assert!(
-        parts.len() >= 3,
-        "Should have at least 3 parts (core, bootstrap, memory)"
-    );
+    assert!(parts.len() >= 3, "Should have at least 3 parts (core, bootstrap, memory)");
 
     // First part should be core identity
     assert!(parts[0].contains("# nanobot"), "First part should be core identity");
@@ -486,26 +420,11 @@ fn end_to_end_full_bootstrap_integration() {
     let bootstrap_start = prompt.find("## AGENTS.md").unwrap();
     let bootstrap_end = prompt.find("# Memory\n\n").unwrap();
     let bootstrap_content = &prompt[bootstrap_start..bootstrap_end];
-    assert!(
-        bootstrap_content.contains("## AGENTS.md"),
-        "Should contain bootstrap files"
-    );
-    assert!(
-        bootstrap_content.contains("## SOUL.md"),
-        "Should contain bootstrap files"
-    );
-    assert!(
-        bootstrap_content.contains("## USER.md"),
-        "Should contain bootstrap files"
-    );
-    assert!(
-        bootstrap_content.contains("## TOOLS.md"),
-        "Should contain bootstrap files"
-    );
-    assert!(
-        bootstrap_content.contains("## IDENTITY.md"),
-        "Should contain bootstrap files"
-    );
+    assert!(bootstrap_content.contains("## AGENTS.md"), "Should contain bootstrap files");
+    assert!(bootstrap_content.contains("## SOUL.md"), "Should contain bootstrap files");
+    assert!(bootstrap_content.contains("## USER.md"), "Should contain bootstrap files");
+    assert!(bootstrap_content.contains("## TOOLS.md"), "Should contain bootstrap files");
+    assert!(bootstrap_content.contains("## IDENTITY.md"), "Should contain bootstrap files");
 
     // Last parts should include memory
     assert!(prompt.contains("# Memory\n\n"), "Should include memory section");
@@ -541,8 +460,5 @@ fn end_to_output_format_consistency() {
     let bootstrap = builder.load_bootstrap_files();
 
     // Check format: should have header, double newline, then content
-    assert_eq!(
-        bootstrap, "## AGENTS.md\n\nTest content",
-        "Bootstrap format should match Python version"
-    );
+    assert_eq!(bootstrap, "## AGENTS.md\n\nTest content", "Bootstrap format should match Python version");
 }

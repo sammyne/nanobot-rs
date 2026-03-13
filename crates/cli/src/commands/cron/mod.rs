@@ -51,9 +51,7 @@ enum CronSubcommand {
 
 /// 获取默认数据目录
 fn get_data_dir() -> std::path::PathBuf {
-    dirs::data_local_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join("nanobot")
+    dirs::data_local_dir().unwrap_or_else(|| std::path::PathBuf::from(".")).join("nanobot")
 }
 
 /// 初始化 CronService（用于 CLI 命令）
@@ -65,10 +63,7 @@ async fn init_cron_service() -> Result<Arc<CronService>> {
 
     let cron_file = data_dir.join("cron_jobs.json");
 
-    CronService::new(cron_file)
-        .await
-        .context("初始化 CronService 失败")
-        .map(Arc::new)
+    CronService::new(cron_file).await.context("初始化 CronService 失败").map(Arc::new)
 }
 
 /// 格式化时间戳为可读字符串
@@ -125,10 +120,7 @@ impl ListCmd {
         println!();
         println!("定时任务列表 (共 {} 个):", jobs.len());
         println!();
-        println!(
-            "{:<8} {:<20} {:<25} {:<8} {:<22}",
-            "ID", "名称", "调度规则", "状态", "下次执行"
-        );
+        println!("{:<8} {:<20} {:<25} {:<8} {:<22}", "ID", "名称", "调度规则", "状态", "下次执行");
         println!("{}", "-".repeat(90));
 
         for job in jobs {
@@ -137,11 +129,7 @@ impl ListCmd {
             let schedule = format_schedule(&job.schedule);
 
             // 截断过长的名称
-            let name = if job.name.len() > 18 {
-                format!("{}...", &job.name[..15])
-            } else {
-                job.name.clone()
-            };
+            let name = if job.name.len() > 18 { format!("{}...", &job.name[..15]) } else { job.name.clone() };
 
             println!("{:<8} {:<20} {:<25} {:<8} {}", job.id, name, schedule, status, next_run);
         }
@@ -215,10 +203,8 @@ impl AddCmd {
 
     fn build_schedule(&self) -> Result<CronSchedule> {
         // 检查互斥参数
-        let schedule_count = [self.every.is_some(), self.cron.is_some(), self.at.is_some()]
-            .iter()
-            .filter(|&&x| x)
-            .count();
+        let schedule_count =
+            [self.every.is_some(), self.cron.is_some(), self.at.is_some()].iter().filter(|&&x| x).count();
 
         if schedule_count == 0 {
             anyhow::bail!("请指定调度方式：--every、--cron 或 --at");
@@ -237,23 +223,17 @@ impl AddCmd {
             if seconds == 0 {
                 anyhow::bail!("--every 值必须大于 0");
             }
-            return Ok(CronSchedule::Every {
-                every_ms: (seconds as i64) * 1000,
-            });
+            return Ok(CronSchedule::Every { every_ms: (seconds as i64) * 1000 });
         }
 
         if let Some(ref expr) = self.cron {
             // 验证 cron 表达式
-            if let Err(e) = nanobot_cron::validate_schedule(&CronSchedule::Cron {
-                expr: expr.clone(),
-                tz: self.tz.clone(),
-            }) {
+            if let Err(e) =
+                nanobot_cron::validate_schedule(&CronSchedule::Cron { expr: expr.clone(), tz: self.tz.clone() })
+            {
                 anyhow::bail!("无效的 cron 表达式: {e}");
             }
-            return Ok(CronSchedule::Cron {
-                expr: expr.clone(),
-                tz: self.tz.clone(),
-            });
+            return Ok(CronSchedule::Cron { expr: expr.clone(), tz: self.tz.clone() });
         }
 
         if let Some(ref time_str) = self.at {

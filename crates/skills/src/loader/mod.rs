@@ -42,10 +42,7 @@ impl SkillsLoader {
             tracing::warn!("Failed to initialize builtin skills: {}", e);
         }
 
-        Self {
-            workspace: skills_dir,
-            builtin: builtin_dir,
-        }
+        Self { workspace: skills_dir, builtin: builtin_dir }
     }
 
     /// Ensures builtin skills are properly initialized in the workspace.
@@ -172,11 +169,7 @@ impl SkillsLoader {
     /// Gets metadata from a skill's frontmatter.
     pub fn get_skill_metadata(&self, name: &str) -> Option<Skill> {
         let path = self.find_skill_path(name)?;
-        let source = if path.starts_with(&self.workspace) {
-            SkillSource::Workspace
-        } else {
-            SkillSource::Builtin
-        };
+        let source = if path.starts_with(&self.workspace) { SkillSource::Workspace } else { SkillSource::Builtin };
 
         match load_skill_file(&path) {
             Ok((meta, _content)) => {

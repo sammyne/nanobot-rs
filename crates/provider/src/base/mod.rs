@@ -32,11 +32,7 @@ pub struct ToolCall {
 impl ToolCall {
     /// 创建新的工具调用
     pub fn new(id: impl Into<String>, name: impl Into<String>, params: serde_json::Value) -> Self {
-        Self {
-            id: id.into(),
-            name: name.into(),
-            arguments: params.to_string(),
-        }
+        Self { id: id.into(), name: name.into(), arguments: params.to_string() }
     }
 
     /// 解析参数为 JSON Value
@@ -78,40 +74,27 @@ pub enum Message {
 impl Message {
     /// 创建用户消息
     pub fn user(content: impl Into<String>) -> Self {
-        Self::User {
-            content: content.into(),
-        }
+        Self::User { content: content.into() }
     }
 
     /// 创建助手消息
     pub fn assistant(content: impl Into<String>) -> Self {
-        Self::Assistant {
-            content: content.into(),
-            tool_calls: Vec::new(),
-        }
+        Self::Assistant { content: content.into(), tool_calls: Vec::new() }
     }
 
     /// 创建带工具调用的助手消息
     pub fn assistant_with_tools(content: impl Into<String>, tool_calls: Vec<ToolCall>) -> Self {
-        Self::Assistant {
-            content: content.into(),
-            tool_calls,
-        }
+        Self::Assistant { content: content.into(), tool_calls }
     }
 
     /// 创建系统消息
     pub fn system(content: impl Into<String>) -> Self {
-        Self::System {
-            content: content.into(),
-        }
+        Self::System { content: content.into() }
     }
 
     /// 创建工具消息
     pub fn tool(tool_call_id: impl Into<String>, content: impl Into<String>) -> Self {
-        Self::Tool {
-            tool_call_id: tool_call_id.into(),
-            content: content.into(),
-        }
+        Self::Tool { tool_call_id: tool_call_id.into(), content: content.into() }
     }
 
     /// 获取角色
@@ -165,10 +148,7 @@ pub struct Options {
 
 impl Default for Options {
     fn default() -> Self {
-        Self {
-            max_tokens: 4096,
-            temperature: 0.7,
-        }
+        Self { max_tokens: 4096, temperature: 0.7 }
     }
 }
 
@@ -184,18 +164,12 @@ pub struct ProviderResponse {
 impl ProviderResponse {
     /// 创建纯文本响应
     pub fn content(content: impl Into<String>) -> Self {
-        Self {
-            content: content.into(),
-            tool_calls: Vec::new(),
-        }
+        Self { content: content.into(), tool_calls: Vec::new() }
     }
 
     /// 创建带工具调用的响应
     pub fn with_tools(content: impl Into<String>, tool_calls: Vec<ToolCall>) -> Self {
-        Self {
-            content: content.into(),
-            tool_calls,
-        }
+        Self { content: content.into(), tool_calls }
     }
 }
 

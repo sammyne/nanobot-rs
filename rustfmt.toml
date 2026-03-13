@@ -8,3 +8,7 @@ group_imports = "StdExternalCrate"
 
 # 最后一级必须嵌套（如 use std::collections::{HashMap, HashSet};）
 imports_granularity = "Module"
+
+# 最大化单行内容
+# https://rust-lang.github.io/rustfmt/?version=v1.9.0&search=use_small_heuristics#use_small_heuristics
+use_small_heuristics = "Max"

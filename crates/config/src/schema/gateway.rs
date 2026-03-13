@@ -30,10 +30,7 @@ fn default_interval() -> u64 {
 
 impl Default for HeartbeatConfig {
     fn default() -> Self {
-        Self {
-            enabled: default_enabled(),
-            interval_s: default_interval(),
-        }
+        Self { enabled: default_enabled(), interval_s: default_interval() }
     }
 }
 
@@ -75,11 +72,7 @@ fn default_port() -> u16 {
 
 impl Default for GatewayConfig {
     fn default() -> Self {
-        Self {
-            host: default_host(),
-            port: default_port(),
-            heartbeat: HeartbeatConfig::default(),
-        }
+        Self { host: default_host(), port: default_port(), heartbeat: HeartbeatConfig::default() }
     }
 }
 
@@ -97,9 +90,7 @@ impl GatewayConfig {
         }
 
         // 验证 heartbeat 配置
-        self.heartbeat
-            .validate()
-            .map_err(|e| ConfigError::Validation(format!("gateway.heartbeat 配置错误: {e}")))?;
+        self.heartbeat.validate().map_err(|e| ConfigError::Validation(format!("gateway.heartbeat 配置错误: {e}")))?;
 
         Ok(())
     }

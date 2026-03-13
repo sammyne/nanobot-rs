@@ -88,9 +88,7 @@ async fn connect_stdio(
     let client_info = create_client_info();
 
     // 连接并初始化
-    serve_client(client_info, mcp_transport)
-        .await
-        .map_err(|e| McpError::InitializationFailed(e.to_string()))
+    serve_client(client_info, mcp_transport).await.map_err(|e| McpError::InitializationFailed(e.to_string()))
 }
 
 /// 通过 HTTP 方式连接 MCP 服务器
@@ -107,12 +105,7 @@ async fn connect_http(
     url: &str,
     headers: &HashMap<String, String>,
 ) -> Result<RunningService<RoleClient, ClientInfo>, McpError> {
-    debug!(
-        "Connecting to MCP server '{}' via HTTP: {} (headers: {})",
-        name,
-        url,
-        headers.len()
-    );
+    debug!("Connecting to MCP server '{}' via HTTP: {} (headers: {})", name, url, headers.len());
 
     // 创建 HTTP transport 配置
     let mut transport_config = StreamableHttpClientTransportConfig::with_uri(url);
@@ -133,10 +126,7 @@ async fn connect_http(
     let client_info = create_client_info();
 
     // 连接并初始化
-    client_info
-        .serve(transport)
-        .await
-        .map_err(|e| McpError::InitializationFailed(e.to_string()))
+    client_info.serve(transport).await.map_err(|e| McpError::InitializationFailed(e.to_string()))
 }
 
 /// 批量连接多个 MCP 服务器并获取所有工具包装器
@@ -159,21 +149,14 @@ pub async fn connect(configs: HashMap<String, McpServerConfig>) -> Result<Vec<Mc
         // 根据配置类型连接服务器
         let service = match &config {
             McpServerConfig::Stdio { command, args, env } => connect_stdio(&name, command, args, env).await?,
-            McpServerConfig::Http {
-                url,
-                headers,
-                tool_timeout: _,
-            } => connect_http(&name, url, headers).await?,
+            McpServerConfig::Http { url, headers, tool_timeout: _ } => connect_http(&name, url, headers).await?,
         };
 
         let service = Arc::new(service);
         let peer = service.peer().clone();
 
         // 列出工具
-        let tools = peer
-            .list_tools(Default::default())
-            .await
-            .map_err(|e| McpError::ToolListFailed(e.to_string()))?;
+        let tools = peer.list_tools(Default::default()).await.map_err(|e| McpError::ToolListFailed(e.to_string()))?;
 
         let tool_count = tools.tools.len();
         let tool_timeout = config.timeout_duration().as_secs();
@@ -187,10 +170,7 @@ pub async fn connect(configs: HashMap<String, McpServerConfig>) -> Result<Vec<Mc
         info!("Connected to MCP server '{}' and registered {} tools", name, tool_count);
     }
 
-    info!(
-        "Successfully connected to all MCP servers, total tools: {}",
-        all_tools.len()
-    );
+    info!("Successfully connected to all MCP servers, total tools: {}", all_tools.len());
 
     Ok(all_tools)
 }
@@ -220,10 +200,7 @@ impl Drop for McpToolWrapper {
             // 获取 cancellation token 并取消连接
             let token = self.service.cancellation_token();
             token.cancel();
-            debug!(
-                "Closed MCP server connection for '{}' (tool: {})",
-                self.server_name, self.wrapped_name
-            );
+            debug!("Closed MCP server connection for '{}' (tool: {})", self.server_name, self.wrapped_name);
         }
     }
 }
@@ -246,13 +223,7 @@ impl McpToolWrapper {
         let original_name = tool_def.name.to_string();
         let wrapped_name = format!("mcp_{server_name}_{original_name}");
 
-        Self {
-            service,
-            server_name,
-            tool_def,
-            tool_timeout: Duration::from_secs(tool_timeout),
-            wrapped_name,
-        }
+        Self { service, server_name, tool_def, tool_timeout: Duration::from_secs(tool_timeout), wrapped_name }
     }
 
     /// 获取原始工具名称
@@ -281,18 +252,10 @@ impl McpToolWrapper {
         match content.raw {
             RawContent::Text(text_content) => text_content.text,
             RawContent::Image(image_content) => {
-                format!(
-                    "[Image: {} ({} bytes)]",
-                    image_content.mime_type,
-                    image_content.data.len()
-                )
+                format!("[Image: {} ({} bytes)]", image_content.mime_type, image_content.data.len())
             }
             RawContent::Audio(audio_content) => {
-                format!(
-                    "[Audio: {} ({} bytes)]",
-                    audio_content.mime_type,
-                    audio_content.data.len()
-                )
+                format!("[Audio: {} ({} bytes)]", audio_content.mime_type, audio_content.data.len())
             }
             RawContent::Resource(embedded_resource) => {
                 // EmbeddedResource 是 Annotated<RawEmbeddedResource>，需要访问 .resource 字段
@@ -361,11 +324,7 @@ impl Tool for McpToolWrapper {
 
         // 构建调用请求
         let call_params = CallToolRequestParams::new(self.tool_def.name.clone());
-        let call_params = if let Some(args) = arguments {
-            call_params.with_arguments(args)
-        } else {
-            call_params
-        };
+        let call_params = if let Some(args) = arguments { call_params.with_arguments(args) } else { call_params };
 
         debug!(
             "Calling MCP tool '{}' on server '{}' with timeout {:?}",
@@ -391,14 +350,8 @@ impl Tool for McpToolWrapper {
                 Err(ToolError::execution(format!("MCP tool call failed: {e}")))
             }
             Err(_) => {
-                warn!(
-                    "MCP tool '{}' timed out after {:?}",
-                    self.wrapped_name, self.tool_timeout
-                );
-                Ok(format!(
-                    "(MCP tool call timed out after {}s)",
-                    self.tool_timeout.as_secs()
-                ))
+                warn!("MCP tool '{}' timed out after {:?}", self.wrapped_name, self.tool_timeout);
+                Ok(format!("(MCP tool call timed out after {}s)", self.tool_timeout.as_secs()))
             }
         }
     }

@@ -42,18 +42,12 @@ impl SessionManager {
         {
             warn!("Failed to create sessions directory: {}", e);
         }
-        Self {
-            workspace,
-            sessions_dir,
-            cache: RwLock::new(HashMap::new()),
-        }
+        Self { workspace, sessions_dir, cache: RwLock::new(HashMap::new()) }
     }
 
     /// Get the file path for a session.
     fn get_session_path(&self, key: &str) -> PathBuf {
-        let safe_key = key
-            .replace(':', "_")
-            .replace(|c: char| !c.is_alphanumeric() && c != '_', "_");
+        let safe_key = key.replace(':', "_").replace(|c: char| !c.is_alphanumeric() && c != '_', "_");
         self.sessions_dir.join(format!("{safe_key}.jsonl"))
     }
 
@@ -132,9 +126,7 @@ impl SessionManager {
                             }
                         }
                         if let Some(ca) = data.get("created_at").and_then(|c| c.as_str()) {
-                            created_at = chrono::DateTime::parse_from_rfc3339(ca)
-                                .map(|dt| dt.with_timezone(&Utc))
-                                .ok();
+                            created_at = chrono::DateTime::parse_from_rfc3339(ca).map(|dt| dt.with_timezone(&Utc)).ok();
                         }
                         last_consolidated =
                             data.get("last_consolidated").and_then(|lc| lc.as_u64()).unwrap_or(0) as usize;
@@ -267,12 +259,7 @@ impl SessionManager {
             .get("key")
             .and_then(|k| k.as_str())
             .map(|s| s.to_string())
-            .unwrap_or_else(|| {
-                path.file_stem()
-                    .and_then(|s| s.to_str())
-                    .unwrap_or("")
-                    .replace('_', ":")
-            });
+            .unwrap_or_else(|| path.file_stem().and_then(|s| s.to_str()).unwrap_or("").replace('_', ":"));
 
         let created_at = data
             .get("created_at")
@@ -286,12 +273,7 @@ impl SessionManager {
             .and_then(|c| chrono::DateTime::parse_from_rfc3339(c).ok())
             .map(|dt| dt.with_timezone(&Utc))?;
 
-        Some(SessionInfo {
-            key,
-            created_at,
-            updated_at,
-            path: path.to_string_lossy().to_string(),
-        })
+        Some(SessionInfo { key, created_at, updated_at, path: path.to_string_lossy().to_string() })
     }
 
     /// Get the workspace directory.

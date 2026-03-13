@@ -24,33 +24,23 @@ impl ToolRegistry {
 
         let read_tool = ReadFileTool::new(workspace, allowed_dir);
         info!("注册工具: {}", read_tool.name());
-        registry
-            .tools
-            .insert(read_tool.name().to_string(), Box::new(read_tool) as Box<dyn Tool>);
+        registry.tools.insert(read_tool.name().to_string(), Box::new(read_tool) as Box<dyn Tool>);
 
         let write_tool = WriteFileTool::new(workspace, allowed_dir);
         info!("注册工具: {}", write_tool.name());
-        registry
-            .tools
-            .insert(write_tool.name().to_string(), Box::new(write_tool) as Box<dyn Tool>);
+        registry.tools.insert(write_tool.name().to_string(), Box::new(write_tool) as Box<dyn Tool>);
 
         let edit_tool = EditFileTool::new(workspace, allowed_dir);
         info!("注册工具: {}", edit_tool.name());
-        registry
-            .tools
-            .insert(edit_tool.name().to_string(), Box::new(edit_tool) as Box<dyn Tool>);
+        registry.tools.insert(edit_tool.name().to_string(), Box::new(edit_tool) as Box<dyn Tool>);
 
         let list_tool = ListDirTool::new(workspace, allowed_dir);
         info!("注册工具: {}", list_tool.name());
-        registry
-            .tools
-            .insert(list_tool.name().to_string(), Box::new(list_tool) as Box<dyn Tool>);
+        registry.tools.insert(list_tool.name().to_string(), Box::new(list_tool) as Box<dyn Tool>);
 
         let shell_tool = ShellTool::new(workspace);
         info!("注册工具: {}", shell_tool.name());
-        registry
-            .tools
-            .insert(shell_tool.name().to_string(), Box::new(shell_tool) as Box<dyn Tool>);
+        registry.tools.insert(shell_tool.name().to_string(), Box::new(shell_tool) as Box<dyn Tool>);
 
         info!("已注册 {} 个默认工具", registry.tools.len());
 

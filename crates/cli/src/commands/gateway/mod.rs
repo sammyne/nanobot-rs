@@ -115,14 +115,7 @@ impl GatewayCmd {
 
         // 启动服务并等待关闭信号
         self.run_services(
-            ServicesContext {
-                agent_loop,
-                channel_manager,
-                cron_service,
-                heartbeat_service,
-                inbound_rx,
-                outbound_tx,
-            },
+            ServicesContext { agent_loop, channel_manager, cron_service, heartbeat_service, inbound_rx, outbound_tx },
             &config.gateway.heartbeat,
         )
         .await?;
@@ -159,12 +152,7 @@ impl GatewayCmd {
             println!("  ✓ 已启用的通道:");
             for s in status {
                 let status_icon = if s.running { "🟢" } else { "🔴" };
-                println!(
-                    "    {} {} ({})",
-                    status_icon,
-                    s.name,
-                    if s.running { "运行中" } else { "已停止" }
-                );
+                println!("    {} {} ({})", status_icon, s.name, if s.running { "运行中" } else { "已停止" });
             }
         }
 
@@ -210,9 +198,7 @@ impl GatewayCmd {
     /// 初始化 CronService
     async fn init_cron_service(&self) -> Result<Arc<CronService>> {
         // 获取数据目录
-        let data_dir = dirs::data_local_dir()
-            .unwrap_or_else(|| std::path::PathBuf::from("."))
-            .join("nanobot");
+        let data_dir = dirs::data_local_dir().unwrap_or_else(|| std::path::PathBuf::from(".")).join("nanobot");
 
         // 确保数据目录存在
         tokio::fs::create_dir_all(&data_dir).await.context("创建数据目录失败")?;
@@ -247,10 +233,7 @@ impl GatewayCmd {
         agent_loop: Arc<AgentLoop<OpenAILike>>,
         outbound_tx: mpsc::Sender<OutboundMessage>,
     ) -> Result<HeartbeatService<OpenAILike>> {
-        info!(
-            "设置 HeartbeatService: enabled={}, interval_s={}",
-            config.enabled, config.interval_s
-        );
+        info!("设置 HeartbeatService: enabled={}, interval_s={}", config.enabled, config.interval_s);
 
         // 转换配置格式
         let heartbeat_config = HeartbeatServiceConfig::with_values(config.enabled, config.interval_s);
@@ -282,10 +265,7 @@ impl GatewayCmd {
                     let session_key = "heartbeat";
 
                     // 调用 AgentLoop::process_direct
-                    match agent
-                        .process_direct(&task_summary, session_key, Some(&channel), Some(&chat_id))
-                        .await
-                    {
+                    match agent.process_direct(&task_summary, session_key, Some(&channel), Some(&chat_id)).await {
                         Ok(response) => {
                             info!("Heartbeat 任务执行成功");
                             Ok(response)
@@ -337,13 +317,8 @@ impl GatewayCmd {
         });
 
         // 创建 HeartbeatService（带回调）
-        let heartbeat_service = HeartbeatService::new(
-            workspace_path,
-            provider,
-            heartbeat_config,
-            Some(on_execute),
-            Some(on_notify),
-        );
+        let heartbeat_service =
+            HeartbeatService::new(workspace_path, provider, heartbeat_config, Some(on_execute), Some(on_notify));
 
         Ok(heartbeat_service)
     }
@@ -435,8 +410,7 @@ impl GatewayCmd {
         }
 
         // 优雅关闭
-        self.shutdown(agent_task, channel_manager, ctx.cron_service, heartbeat_service)
-            .await?;
+        self.shutdown(agent_task, channel_manager, ctx.cron_service, heartbeat_service).await?;
 
         println!("  ✓ 服务已停止");
         println!();

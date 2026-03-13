@@ -45,9 +45,7 @@ fn compute_cron_next_run(expr: &str, tz: Option<&String>, now_ms: i64) -> Option
         };
         Utc.timestamp_millis_opt(now_ms).single()?.with_timezone(&tz)
     } else {
-        Utc.timestamp_millis_opt(now_ms)
-            .single()?
-            .with_timezone(&chrono_tz::UTC)
+        Utc.timestamp_millis_opt(now_ms).single()?.with_timezone(&chrono_tz::UTC)
     };
 
     // Get the next scheduled time

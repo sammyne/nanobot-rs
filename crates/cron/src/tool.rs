@@ -73,20 +73,9 @@ impl CronTool {
 
         // Build schedule
         let (schedule, delete_after_run) = if let Some(every_seconds) = args.every_seconds {
-            (
-                CronSchedule::Every {
-                    every_ms: every_seconds * 1000,
-                },
-                false,
-            )
+            (CronSchedule::Every { every_ms: every_seconds * 1000 }, false)
         } else if let Some(ref cron_expr) = args.cron_expr {
-            (
-                CronSchedule::Cron {
-                    expr: cron_expr.clone(),
-                    tz: args.tz.clone(),
-                },
-                false,
-            )
+            (CronSchedule::Cron { expr: cron_expr.clone(), tz: args.tz.clone() }, false)
         } else if let Some(ref at) = args.at {
             // Parse ISO datetime
             let dt = chrono::DateTime::parse_from_rfc3339(at)
@@ -94,10 +83,7 @@ impl CronTool {
             let at_ms = dt.timestamp_millis();
             (CronSchedule::At { at_ms }, true)
         } else {
-            return Err(ToolError::validation(
-                "schedule",
-                "either every_seconds, cron_expr, or at is required",
-            ));
+            return Err(ToolError::validation("schedule", "either every_seconds, cron_expr, or at is required"));
         };
 
         // Add job
@@ -181,10 +167,7 @@ impl Tool for CronTool {
                 let job_id = args.job_id.unwrap_or_default();
                 self.handle_remove(&job_id).await
             }
-            _ => Err(ToolError::validation(
-                "action",
-                format!("Unknown action: {}", args.action),
-            )),
+            _ => Err(ToolError::validation("action", format!("Unknown action: {}", args.action))),
         }
     }
 }

@@ -91,12 +91,7 @@ where
         // Spawn the subagent
         self.manager
             .clone()
-            .spawn(
-                params.task,
-                params.label,
-                ctx.channel().to_string(),
-                ctx.chat_id().to_string(),
-            )
+            .spawn(params.task, params.label, ctx.channel().to_string(), ctx.chat_id().to_string())
             .await
             .map_err(|e| ToolError::execution(e.to_string()))
     }

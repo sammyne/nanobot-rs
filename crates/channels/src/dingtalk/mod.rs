@@ -109,10 +109,7 @@ impl DingTalk {
     /// 处理消息
     fn process_message(&self, msg: ChatbotMessage) {
         // 获取文本内容
-        let content = msg
-            .get_text_list()
-            .and_then(|list| list.into_iter().next())
-            .unwrap_or_default();
+        let content = msg.get_text_list().and_then(|list| list.into_iter().next()).unwrap_or_default();
 
         if content.trim().is_empty() {
             warn!("收到空消息");
@@ -120,10 +117,7 @@ impl DingTalk {
         }
 
         // 获取发送者信息
-        let sender_id = msg
-            .sender_staff_id
-            .clone()
-            .unwrap_or_else(|| msg.sender_id.clone().unwrap_or_default());
+        let sender_id = msg.sender_staff_id.clone().unwrap_or_else(|| msg.sender_id.clone().unwrap_or_default());
         let sender_nick = msg.sender_nick.clone().unwrap_or_default();
 
         // 权限检查
@@ -132,10 +126,7 @@ impl DingTalk {
             return;
         }
 
-        info!(
-            "收到钉钉消息，发送者: {} ({})，内容: {}",
-            sender_nick, sender_id, content
-        );
+        info!("收到钉钉消息，发送者: {} ({})，内容: {}", sender_nick, sender_id, content);
 
         // 获取聊天 ID（优先使用 conversation_id，其次使用 sender_id）
         let chat_id = msg.conversation_id.clone().unwrap_or_else(|| sender_id.clone());
@@ -272,11 +263,7 @@ impl Channel for DingTalk {
     }
 
     fn is_running(&self) -> bool {
-        if let Ok(running) = self.running.try_read() {
-            *running
-        } else {
-            false
-        }
+        if let Ok(running) = self.running.try_read() { *running } else { false }
     }
 
     fn name(&self) -> &str {

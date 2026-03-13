@@ -23,10 +23,7 @@ struct MockProvider {
 
 impl MockProvider {
     fn new(response: impl Into<String>) -> Self {
-        Self {
-            response: response.into(),
-            bound_tools: Vec::new(),
-        }
+        Self { response: response.into(), bound_tools: Vec::new() }
     }
 }
 
@@ -91,15 +88,10 @@ async fn process_direct_returns_expected_response() {
         let provider = MockProvider::new(case.expected_response);
         let config = test_config();
         let subagent_manager = test_subagent_manager(provider.clone());
-        let agent = AgentLoop::new_direct(
-            provider,
-            config,
-            None,
-            Some(subagent_manager),
-            std::collections::HashMap::new(),
-        )
-        .await
-        .expect("AgentLoop creation should succeed");
+        let agent =
+            AgentLoop::new_direct(provider, config, None, Some(subagent_manager), std::collections::HashMap::new())
+                .await
+                .expect("AgentLoop creation should succeed");
 
         let session_key = case.session_id.unwrap_or("cli:direct");
         let result = agent
@@ -117,20 +109,11 @@ async fn process_direct_handles_empty_message() {
     let provider = MockProvider::new("OK");
     let config = test_config();
     let subagent_manager = test_subagent_manager(provider.clone());
-    let agent = AgentLoop::new_direct(
-        provider,
-        config,
-        None,
-        Some(subagent_manager),
-        std::collections::HashMap::new(),
-    )
-    .await
-    .expect("AgentLoop creation should succeed");
-
-    let result = agent
-        .process_direct("", "cli:direct", None, None)
+    let agent = AgentLoop::new_direct(provider, config, None, Some(subagent_manager), std::collections::HashMap::new())
         .await
-        .expect("empty message should be handled");
+        .expect("AgentLoop creation should succeed");
+
+    let result = agent.process_direct("", "cli:direct", None, None).await.expect("empty message should be handled");
 
     assert_eq!(result, "OK");
 }
@@ -141,28 +124,17 @@ async fn config_returns_correct_reference() {
     let provider = MockProvider::new("test");
     let config = test_config();
     let subagent_manager = test_subagent_manager(provider.clone());
-    let agent = AgentLoop::new_direct(
-        provider,
-        config.clone(),
-        None,
-        Some(subagent_manager),
-        std::collections::HashMap::new(),
-    )
-    .await
-    .expect("AgentLoop creation should succeed");
+    let agent =
+        AgentLoop::new_direct(provider, config.clone(), None, Some(subagent_manager), std::collections::HashMap::new())
+            .await
+            .expect("AgentLoop creation should succeed");
 
     let returned_config = agent.config();
 
     assert_eq!(returned_config.model, config.model, "model should match");
-    assert_eq!(
-        returned_config.max_tool_iterations, config.max_tool_iterations,
-        "max_tool_iterations should match"
-    );
+    assert_eq!(returned_config.max_tool_iterations, config.max_tool_iterations, "max_tool_iterations should match");
     assert_eq!(returned_config.max_tokens, config.max_tokens, "max_tokens should match");
-    assert_eq!(
-        returned_config.temperature, config.temperature,
-        "temperature should match"
-    );
+    assert_eq!(returned_config.temperature, config.temperature, "temperature should match");
 }
 
 /// AgentDefaults 构造测试用例结构
@@ -233,11 +205,7 @@ async fn agent_loop_uses_custom_config_values() {
     for case in test_vector {
         let cfg = case.agent.config();
         assert_eq!(cfg.model, case.expect_model, "case[{}]: model mismatch", case.name);
-        assert_eq!(
-            cfg.max_tokens, case.expect_max_tokens,
-            "case[{}]: max_tokens mismatch",
-            case.name
-        );
+        assert_eq!(cfg.max_tokens, case.expect_max_tokens, "case[{}]: max_tokens mismatch", case.name);
     }
 }
 
@@ -291,17 +259,8 @@ fn outbound_message_progress_construct() {
     for case in test_vector {
         let msg = OutboundMessage::progress(case.content, case.is_tool_hint);
 
-        assert!(
-            msg.is_progress(),
-            "case[{}]: expected is_progress() to be true",
-            case.name
-        );
-        assert_eq!(
-            msg.is_tool_hint(),
-            case.expect_is_tool_hint,
-            "case[{}]: is_tool_hint() mismatch",
-            case.name
-        );
+        assert!(msg.is_progress(), "case[{}]: expected is_progress() to be true", case.name);
+        assert_eq!(msg.is_tool_hint(), case.expect_is_tool_hint, "case[{}]: is_tool_hint() mismatch", case.name);
         assert_eq!(msg.content, case.content, "case[{}]: content mismatch", case.name);
     }
 }
@@ -329,9 +288,7 @@ fn outbound_message_progress_detection() {
     assert!(!normal_msg.is_progress());
 
     // 手动添加进度标记
-    normal_msg
-        .metadata
-        .insert("_progress".to_string(), serde_json::json!(true));
+    normal_msg.metadata.insert("_progress".to_string(), serde_json::json!(true));
     assert!(normal_msg.is_progress());
 }
 

@@ -253,13 +253,7 @@ impl CronService {
         let mut job = CronJob::new(
             name.clone(),
             schedule,
-            CronPayload {
-                kind: "agent_turn".to_string(),
-                message,
-                deliver,
-                channel,
-                to,
-            },
+            CronPayload { kind: "agent_turn".to_string(), message, deliver, channel, to },
             delete_after_run,
         );
 

@@ -43,10 +43,7 @@ const DANGEROUS_PATTERNS: &[&str] = &[
 
 impl ShellTool {
     pub fn new(workspace: impl Into<String>) -> Self {
-        Self {
-            workspace: workspace.into(),
-            default_timeout_secs: 30,
-        }
+        Self { workspace: workspace.into(), default_timeout_secs: 30 }
     }
 
     /// 设置默认超时
@@ -71,11 +68,7 @@ impl ShellTool {
 
     /// 截断输出
     fn truncate_output(s: String, max_len: usize) -> String {
-        if s.len() > max_len {
-            format!("{}...(truncated, {} bytes total)", &s[..max_len], s.len())
-        } else {
-            s
-        }
+        if s.len() > max_len { format!("{}...(truncated, {} bytes total)", &s[..max_len], s.len()) } else { s }
     }
 }
 
@@ -137,10 +130,7 @@ impl Tool for ShellTool {
 
         let output = timeout(Duration::from_millis(timeout_ms), child.wait_with_output())
             .await
-            .map_err(|_| ToolError::Timeout {
-                limit: timeout_ms / 1000,
-                elapsed: Duration::from_millis(timeout_ms),
-            })?
+            .map_err(|_| ToolError::Timeout { limit: timeout_ms / 1000, elapsed: Duration::from_millis(timeout_ms) })?
             .map_err(|e| ToolError::execution(format!("命令等待失败: {e}")))?;
 
         let stdout = String::from_utf8_lossy(&output.stdout).to_string();
@@ -151,17 +141,9 @@ impl Tool for ShellTool {
         let stdout = Self::truncate_output(stdout, MAX_OUTPUT);
         let stderr = Self::truncate_output(stderr, MAX_OUTPUT);
 
-        info!(
-            "Shell 命令完成: {} (exit_code={})",
-            command,
-            output.status.code().unwrap_or(-1)
-        );
+        info!("Shell 命令完成: {} (exit_code={})", command, output.status.code().unwrap_or(-1));
 
-        let result = ShellResult {
-            exit_code: output.status.code().unwrap_or(-1),
-            stdout,
-            stderr,
-        };
+        let result = ShellResult { exit_code: output.status.code().unwrap_or(-1), stdout, stderr };
 
         Ok(serde_json::to_string_pretty(&result).unwrap_or_else(|_| "结果序列化失败".to_string()))
     }

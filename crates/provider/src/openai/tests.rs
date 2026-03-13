@@ -15,21 +15,9 @@ struct MessageCreationCase {
 #[test]
 fn message_creation() {
     let test_vector = vec![
-        MessageCreationCase {
-            name: "用户消息",
-            factory: |s| Message::user(s),
-            expected_role: "user",
-        },
-        MessageCreationCase {
-            name: "助手消息",
-            factory: |s| Message::assistant(s),
-            expected_role: "assistant",
-        },
-        MessageCreationCase {
-            name: "系统消息",
-            factory: |s| Message::system(s),
-            expected_role: "system",
-        },
+        MessageCreationCase { name: "用户消息", factory: |s| Message::user(s), expected_role: "user" },
+        MessageCreationCase { name: "助手消息", factory: |s| Message::assistant(s), expected_role: "assistant" },
+        MessageCreationCase { name: "系统消息", factory: |s| Message::system(s), expected_role: "system" },
     ];
 
     for case in test_vector {
@@ -83,10 +71,7 @@ fn provider_error_display() {
             error: ProviderError::Api("Connection failed".to_string()),
             expected: "LLM API 调用失败: Connection failed",
         },
-        ProviderErrorCase {
-            error: ProviderError::Timeout,
-            expected: "请求超时",
-        },
+        ProviderErrorCase { error: ProviderError::Timeout, expected: "请求超时" },
         ProviderErrorCase {
             error: ProviderError::Config("Missing key".to_string()),
             expected: "配置错误: Missing key",
@@ -120,11 +105,7 @@ fn tool_call_parse_arguments_ok() {
 
 #[test]
 fn tool_call_parse_arguments_invalid() {
-    let tool = ToolCall {
-        id: "call_1".to_string(),
-        name: "search".to_string(),
-        arguments: "invalid json".to_string(),
-    };
+    let tool = ToolCall { id: "call_1".to_string(), name: "search".to_string(), arguments: "invalid json".to_string() };
 
     assert!(tool.parse_arguments().is_err());
 }
@@ -178,11 +159,7 @@ struct OpenAINewCase {
 fn openai_new_with_default_base() {
     let test_vector = vec![OpenAINewCase {
         name: "使用默认 API base",
-        provider_config: ProviderConfig {
-            api_key: "test-key".to_string(),
-            api_base: None,
-            extra_headers: None,
-        },
+        provider_config: ProviderConfig { api_key: "test-key".to_string(), api_base: None, extra_headers: None },
         model: "gpt-4",
         expected_success: true,
     }];
@@ -213,11 +190,7 @@ fn openai_new_with_custom_base() {
 
 #[test]
 fn openai_new_with_timeout() {
-    let config = ProviderConfig {
-        api_key: "test-key".to_string(),
-        api_base: None,
-        extra_headers: None,
-    };
+    let config = ProviderConfig { api_key: "test-key".to_string(), api_base: None, extra_headers: None };
 
     let result = OpenAILike::new_with_timeout(&config, "gpt-4", 60);
     assert!(result.is_ok());
@@ -246,26 +219,10 @@ fn get_message_role(msg: &ChatCompletionRequestMessage) -> &'static str {
 #[test]
 fn try_from_message_basic() {
     let test_vector = vec![
-        TryFromCase {
-            name: "系统消息",
-            message: Message::system("你是一个助手"),
-            expected_role: "system",
-        },
-        TryFromCase {
-            name: "用户消息",
-            message: Message::user("Hello"),
-            expected_role: "user",
-        },
-        TryFromCase {
-            name: "助手消息",
-            message: Message::assistant("Hi there"),
-            expected_role: "assistant",
-        },
-        TryFromCase {
-            name: "工具消息",
-            message: Message::tool("call_1", "工具结果"),
-            expected_role: "tool",
-        },
+        TryFromCase { name: "系统消息", message: Message::system("你是一个助手"), expected_role: "system" },
+        TryFromCase { name: "用户消息", message: Message::user("Hello"), expected_role: "user" },
+        TryFromCase { name: "助手消息", message: Message::assistant("Hi there"), expected_role: "assistant" },
+        TryFromCase { name: "工具消息", message: Message::tool("call_1", "工具结果"), expected_role: "tool" },
     ];
 
     for case in test_vector {
@@ -273,12 +230,7 @@ fn try_from_message_basic() {
         assert!(result.is_ok(), "测试用例 {} 转换失败", case.name);
 
         let msg = result.unwrap();
-        assert_eq!(
-            get_message_role(&msg),
-            case.expected_role,
-            "测试用例 {} 角色不匹配",
-            case.name
-        );
+        assert_eq!(get_message_role(&msg), case.expected_role, "测试用例 {} 角色不匹配", case.name);
     }
 }
 
@@ -292,11 +244,7 @@ struct TryFromToolCallsCase {
 #[test]
 fn try_from_message_with_tool_calls() {
     let test_vector = vec![
-        TryFromToolCallsCase {
-            name: "无工具调用",
-            tool_calls: vec![],
-            expected_tool_call_count: 0,
-        },
+        TryFromToolCallsCase { name: "无工具调用", tool_calls: vec![], expected_tool_call_count: 0 },
         TryFromToolCallsCase {
             name: "单个工具调用",
             tool_calls: vec![ToolCall::new("call_1", "search", json!({"query": "rust"}))],
@@ -319,21 +267,12 @@ fn try_from_message_with_tool_calls() {
 
         let chat_msg = result.unwrap();
         // 验证是 Assistant 消息
-        assert_eq!(
-            get_message_role(&chat_msg),
-            "assistant",
-            "测试用例 {} 角色不匹配",
-            case.name
-        );
+        assert_eq!(get_message_role(&chat_msg), "assistant", "测试用例 {} 角色不匹配", case.name);
 
         // 检查工具调用数量
         if let ChatCompletionRequestMessage::Assistant(assistant) = chat_msg {
             let tool_calls_len = assistant.tool_calls.map(|tc| tc.len()).unwrap_or(0);
-            assert_eq!(
-                tool_calls_len, case.expected_tool_call_count,
-                "测试用例 {} 工具调用数量不匹配",
-                case.name
-            );
+            assert_eq!(tool_calls_len, case.expected_tool_call_count, "测试用例 {} 工具调用数量不匹配", case.name);
         } else {
             panic!("测试用例 {} 期望 Assistant 消息", case.name);
         }
@@ -415,19 +354,11 @@ fn bind_tools_ok() {
             ],
             expected_tool_count: 2,
         },
-        ToolBindingCase {
-            name: "空工具列表",
-            tools: vec![],
-            expected_tool_count: 0,
-        },
+        ToolBindingCase { name: "空工具列表", tools: vec![], expected_tool_count: 0 },
     ];
 
     for case in test_vector {
-        let config = ProviderConfig {
-            api_key: "test".to_string(),
-            api_base: None,
-            extra_headers: None,
-        };
+        let config = ProviderConfig { api_key: "test".to_string(), api_base: None, extra_headers: None };
         let _openai = OpenAILike::new(&config, "gpt-4").unwrap();
 
         // 验证 chat 方法可以接受工具列表
@@ -458,11 +389,7 @@ fn bind_tools_complex_schema() {
         }),
     };
 
-    let config = ProviderConfig {
-        api_key: "test".to_string(),
-        api_base: None,
-        extra_headers: None,
-    };
+    let config = ProviderConfig { api_key: "test".to_string(), api_base: None, extra_headers: None };
     let mut openai = OpenAILike::new(&config, "gpt-4").unwrap();
 
     openai.bind_tools(vec![complex_tool]);

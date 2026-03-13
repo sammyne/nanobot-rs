@@ -148,9 +148,7 @@ async fn write_file_success() {
     assert!(result.is_ok());
 
     // 验证文件内容
-    let written = tokio::fs::read_to_string(temp_dir.path().join("output.txt"))
-        .await
-        .unwrap();
+    let written = tokio::fs::read_to_string(temp_dir.path().join("output.txt")).await.unwrap();
     assert_eq!(written, content);
 }
 
@@ -187,9 +185,7 @@ async fn edit_file_success() {
     let original = "line1\nline2\nline3";
     let ctx = test_context();
 
-    tokio::fs::write(temp_dir.path().join("edit.txt"), original)
-        .await
-        .unwrap();
+    tokio::fs::write(temp_dir.path().join("edit.txt"), original).await.unwrap();
 
     let result = tool
         .execute(
@@ -204,9 +200,7 @@ async fn edit_file_success() {
 
     assert!(result.is_ok());
 
-    let content = tokio::fs::read_to_string(temp_dir.path().join("edit.txt"))
-        .await
-        .unwrap();
+    let content = tokio::fs::read_to_string(temp_dir.path().join("edit.txt")).await.unwrap();
     assert_eq!(content, "line1\nmodified_line2\nline3");
 }
 
@@ -217,9 +211,7 @@ async fn edit_file_no_match() {
     let tool = EditFileTool::new(temp_dir.path().to_str().unwrap(), None::<&str>);
     let ctx = test_context();
 
-    tokio::fs::write(temp_dir.path().join("edit.txt"), "some content")
-        .await
-        .unwrap();
+    tokio::fs::write(temp_dir.path().join("edit.txt"), "some content").await.unwrap();
 
     let result = tool
         .execute(
@@ -243,9 +235,7 @@ async fn edit_file_multiple_matches() {
     let tool = EditFileTool::new(temp_dir.path().to_str().unwrap(), None::<&str>);
     let ctx = test_context();
 
-    tokio::fs::write(temp_dir.path().join("edit.txt"), "abc abc abc")
-        .await
-        .unwrap();
+    tokio::fs::write(temp_dir.path().join("edit.txt"), "abc abc abc").await.unwrap();
 
     let result = tool
         .execute(

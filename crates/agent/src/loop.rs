@@ -72,10 +72,7 @@ impl<P: Provider + 'static> AgentLoop<P> {
         subagent_manager: Option<Arc<SubagentManager<P>>>,
         mcp_configs: std::collections::HashMap<String, McpServerConfig>,
     ) -> Result<Self> {
-        info!(
-            "初始化 AgentLoop: model={}, max_tool_iterations={}",
-            config.model, config.max_tool_iterations
-        );
+        info!("初始化 AgentLoop: model={}, max_tool_iterations={}", config.model, config.max_tool_iterations);
 
         // 基于 config 构造 tool_registry
         let workspace_str = config.workspace.to_string_lossy();
@@ -121,11 +118,7 @@ impl<P: Provider + 'static> AgentLoop<P> {
         provider.bind_tools(definitions);
 
         // 记录初始化统计信息
-        info!(
-            "AgentLoop 初始化完成: MCP 服务器={}, 总工具={}",
-            mcp_server_count,
-            tool_names.len()
-        );
+        info!("AgentLoop 初始化完成: MCP 服务器={}, 总工具={}", mcp_server_count, tool_names.len());
         if mcp_server_count > 0 {
             info!("已注册 {} 个 MCP 工具", mcp_tool_count);
         }
@@ -136,13 +129,7 @@ impl<P: Provider + 'static> AgentLoop<P> {
         // Initialize ContextBuilder (which contains MemoryStore)
         let context = ContextBuilder::new(config.workspace.clone()).expect("Failed to initialize ContextBuilder");
 
-        Ok(Self {
-            provider,
-            config,
-            sessions,
-            tool_registry,
-            context,
-        })
+        Ok(Self { provider, config, sessions, tool_registry, context })
     }
 
     /// 创建新的 AgentLoop 实例（单次消息模式）
@@ -190,10 +177,7 @@ impl<P: Provider + 'static> AgentLoop<P> {
                     } else {
                         content.clone()
                     };
-                    Message::Tool {
-                        content: truncated,
-                        tool_call_id: tool_call_id.clone(),
-                    }
+                    Message::Tool { content: truncated, tool_call_id: tool_call_id.clone() }
                 }
                 other => other.clone(),
             };
@@ -209,11 +193,7 @@ impl<P: Provider + 'static> AgentLoop<P> {
         let options = nanobot_provider::Options::default();
         let response = self.provider.chat(messages, &options).await?;
 
-        info!(
-            "收到 LLM 响应, 角色={}, 内容长度={} 字符",
-            response.role(),
-            response.content().len()
-        );
+        info!("收到 LLM 响应, 角色={}, 内容长度={} 字符", response.role(), response.content().len());
 
         Ok(response)
     }
@@ -237,11 +217,7 @@ impl<P: Provider + 'static> AgentLoop<P> {
         let mut iteration = 0;
         let mut tools_used: Vec<String> = Vec::new();
 
-        info!(
-            "启动 ReAct 循环: max_iterations={}, 可用工具={:?}",
-            max_iterations,
-            self.tool_registry.tool_names()
-        );
+        info!("启动 ReAct 循环: max_iterations={}, 可用工具={:?}", max_iterations, self.tool_registry.tool_names());
 
         while iteration < max_iterations {
             iteration += 1;
@@ -282,10 +258,7 @@ impl<P: Provider + 'static> AgentLoop<P> {
                     let args = match serde_json::from_str::<serde_json::Value>(&tool_call.arguments) {
                         Ok(v) => v,
                         Err(e) => {
-                            error!(
-                                "解析工具 {} 参数失败: {}, 参数内容: {}",
-                                tool_call.name, e, tool_call.arguments
-                            );
+                            error!("解析工具 {} 参数失败: {}, 参数内容: {}", tool_call.name, e, tool_call.arguments);
                             serde_json::Value::String(tool_call.arguments.clone())
                         }
                     };
@@ -312,17 +285,9 @@ impl<P: Provider + 'static> AgentLoop<P> {
                 // 将助手消息添加到历史
                 messages.push(Message::assistant(&final_content));
 
-                info!(
-                    "ReAct 循环完成: 迭代次数={}, 最终内容长度={} 字符",
-                    iteration,
-                    final_content.len()
-                );
+                info!("ReAct 循环完成: 迭代次数={}, 最终内容长度={} 字符", iteration, final_content.len());
 
-                return Ok(ReActResult {
-                    content: final_content,
-                    tools_used,
-                    messages,
-                });
+                return Ok(ReActResult { content: final_content, tools_used, messages });
             }
         }
 
@@ -334,11 +299,7 @@ impl<P: Provider + 'static> AgentLoop<P> {
 
         messages.push(Message::assistant(&warning_msg));
 
-        Ok(ReActResult {
-            content: warning_msg,
-            tools_used,
-            messages,
-        })
+        Ok(ReActResult { content: warning_msg, tools_used, messages })
     }
 
     /// 直接处理消息（单次调用模式）
@@ -456,27 +417,17 @@ impl<P: Provider + 'static> AgentLoop<P> {
     /// 注意：此方法总是返回 OutboundMessage，错误会被转换为错误消息内容
     async fn process_message(&self, inbound: InboundMessage, session_key: Option<&str>) -> OutboundMessage {
         // 获取或创建会话：优先使用传入的 session_key，否则从 inbound 获取
-        let session_key = session_key
-            .map(|s| s.to_string())
-            .unwrap_or_else(|| inbound.session_key());
+        let session_key = session_key.map(|s| s.to_string()).unwrap_or_else(|| inbound.session_key());
         let mut session = self.get_or_create_session(&session_key);
 
-        let InboundMessage {
-            channel,
-            sender_id: _,
-            chat_id,
-            content,
-            ..
-        } = inbound;
+        let InboundMessage { channel, sender_id: _, chat_id, content, .. } = inbound;
 
         // 获取历史消息
         let mut history = Vec::new();
         session.get_history(self.config.memory_window, &mut history);
 
         // 使用 ContextBuilder 构建消息列表
-        let messages = self
-            .context
-            .build_messages(&history, &content, None, Some(&channel), Some(&chat_id));
+        let messages = self.context.build_messages(&history, &content, None, Some(&channel), Some(&chat_id));
 
         match messages {
             Ok(messages) => {

@@ -18,9 +18,7 @@ pub fn parse_frontmatter(content: &str) -> Option<String> {
 
     // Find the closing ---
     let remaining = &content[3..];
-    remaining
-        .find("\n---")
-        .map(|end_pos| remaining[..end_pos].trim().to_string())
+    remaining.find("\n---").map(|end_pos| remaining[..end_pos].trim().to_string())
 }
 
 /// Extracts the content after the frontmatter.
@@ -51,11 +49,8 @@ pub fn parse_skill_meta(yaml_content: &str) -> SkillMeta {
 pub fn load_skill_file(path: &Path) -> Result<(SkillMeta, String)> {
     let content = fs::read_to_string(path)?;
 
-    let meta = if let Some(yaml) = parse_frontmatter(&content) {
-        parse_skill_meta(&yaml)
-    } else {
-        SkillMeta::default()
-    };
+    let meta =
+        if let Some(yaml) = parse_frontmatter(&content) { parse_skill_meta(&yaml) } else { SkillMeta::default() };
 
     Ok((meta, content))
 }

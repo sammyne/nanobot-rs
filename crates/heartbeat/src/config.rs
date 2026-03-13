@@ -18,10 +18,7 @@ pub struct HeartbeatConfig {
 
 impl Default for HeartbeatConfig {
     fn default() -> Self {
-        Self {
-            enabled: default_enabled(),
-            interval_seconds: default_interval_seconds(),
-        }
+        Self { enabled: default_enabled(), interval_seconds: default_interval_seconds() }
     }
 }
 
@@ -47,10 +44,7 @@ impl HeartbeatConfig {
 
     /// Create a new heartbeat config with custom values
     pub fn with_values(enabled: bool, interval_seconds: u64) -> Self {
-        Self {
-            enabled,
-            interval_seconds,
-        }
+        Self { enabled, interval_seconds }
     }
 }
 
@@ -64,11 +58,7 @@ fn default_interval_seconds() -> u64 {
 
 impl fmt::Display for HeartbeatConfig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "HeartbeatConfig {{ enabled: {}, interval_seconds: {} }}",
-            self.enabled, self.interval_seconds
-        )
+        write!(f, "HeartbeatConfig {{ enabled: {}, interval_seconds: {} }}", self.enabled, self.interval_seconds)
     }
 }
 

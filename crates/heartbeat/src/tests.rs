@@ -15,19 +15,13 @@ mod config_validation {
 
     #[tokio::test]
     async fn interval_must_be_greater_than_zero() {
-        let config = HeartbeatConfig {
-            interval_seconds: 0,
-            ..Default::default()
-        };
+        let config = HeartbeatConfig { interval_seconds: 0, ..Default::default() };
         assert!(config.validate().is_err());
     }
 
     #[tokio::test]
     async fn interval_can_be_one_second() {
-        let config = HeartbeatConfig {
-            interval_seconds: 1,
-            ..Default::default()
-        };
+        let config = HeartbeatConfig { interval_seconds: 1, ..Default::default() };
         assert!(config.validate().is_ok());
     }
 
@@ -46,10 +40,7 @@ mod config_serialization {
 
     #[tokio::test]
     async fn serialize_to_json() {
-        let config = HeartbeatConfig {
-            enabled: false,
-            interval_seconds: 3600,
-        };
+        let config = HeartbeatConfig { enabled: false, interval_seconds: 3600 };
 
         let json = serde_json::to_value(config).unwrap();
         assert_eq!(json["enabled"], false);
@@ -151,10 +142,7 @@ mod lifecycle_management {
 
     #[tokio::test]
     async fn service_cannot_start_when_disabled() {
-        let config = HeartbeatConfig {
-            enabled: false,
-            ..Default::default()
-        };
+        let config = HeartbeatConfig { enabled: false, ..Default::default() };
         let provider = MockProvider::new();
         let workspace = PathBuf::from("/tmp/test_workspace");
 
@@ -187,17 +175,13 @@ struct MockProvider {
 
 impl Clone for MockProvider {
     fn clone(&self) -> Self {
-        Self {
-            _marker: std::marker::PhantomData,
-        }
+        Self { _marker: std::marker::PhantomData }
     }
 }
 
 impl MockProvider {
     fn new() -> Self {
-        Self {
-            _marker: std::marker::PhantomData,
-        }
+        Self { _marker: std::marker::PhantomData }
     }
 }
 

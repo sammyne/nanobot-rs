@@ -22,18 +22,12 @@ fn test_format_schedule() {
     assert_eq!(result, "每 60 秒");
 
     // Cron without timezone
-    let schedule = CronSchedule::Cron {
-        expr: "0 0 9 * * *".to_string(),
-        tz: None,
-    };
+    let schedule = CronSchedule::Cron { expr: "0 0 9 * * *".to_string(), tz: None };
     let result = format_schedule(&schedule);
     assert_eq!(result, "Cron: 0 0 9 * * *");
 
     // Cron with timezone
-    let schedule = CronSchedule::Cron {
-        expr: "0 0 9 * * *".to_string(),
-        tz: Some("Asia/Shanghai".to_string()),
-    };
+    let schedule = CronSchedule::Cron { expr: "0 0 9 * * *".to_string(), tz: Some("Asia/Shanghai".to_string()) };
     let result = format_schedule(&schedule);
     assert_eq!(result, "Cron: 0 0 9 * * * (Asia/Shanghai)");
 }

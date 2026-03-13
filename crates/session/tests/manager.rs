@@ -124,10 +124,7 @@ fn session_info_fields() {
     let sessions = manager.list_sessions();
     assert!(!sessions.is_empty());
 
-    let info = sessions
-        .iter()
-        .find(|s| s.key == "test:info")
-        .expect("Session not found");
+    let info = sessions.iter().find(|s| s.key == "test:info").expect("Session not found");
     assert_eq!(info.key, "test:info");
     assert!(info.path.ends_with(".jsonl"));
 }

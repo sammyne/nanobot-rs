@@ -36,10 +36,7 @@ impl OnboardCmd {
             } else {
                 let config = Config::load()?;
                 config.save()?;
-                println!(
-                    "\x1b[32m✓\x1b[0m Config refreshed at {} (existing values preserved)",
-                    config_path.display()
-                );
+                println!("\x1b[32m✓\x1b[0m Config refreshed at {} (existing values preserved)", config_path.display());
                 config
             }
         } else {

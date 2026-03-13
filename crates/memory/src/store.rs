@@ -54,21 +54,14 @@ impl MemoryStore {
         let memory_file = memory_dir.join("MEMORY.md");
         let history_file = memory_dir.join("HISTORY.md");
 
-        Ok(Self {
-            memory_file,
-            history_file,
-        })
+        Ok(Self { memory_file, history_file })
     }
 
     /// Read long-term memory content from MEMORY.md.
     ///
     /// Returns an empty string if the file doesn't exist.
     pub fn read_long_term(&self) -> Result<String, MemoryError> {
-        if self.memory_file.exists() {
-            Ok(std::fs::read_to_string(&self.memory_file)?)
-        } else {
-            Ok(String::new())
-        }
+        if self.memory_file.exists() { Ok(std::fs::read_to_string(&self.memory_file)?) } else { Ok(String::new()) }
     }
 
     /// Write content to MEMORY.md file.
@@ -83,10 +76,7 @@ impl MemoryStore {
     pub fn append_history(&self, entry: &str) -> Result<(), MemoryError> {
         use std::io::Write;
 
-        let mut file = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&self.history_file)?;
+        let mut file = std::fs::OpenOptions::new().create(true).append(true).open(&self.history_file)?;
 
         writeln!(file, "{}\n", entry.trim_end())?;
         Ok(())
@@ -97,11 +87,7 @@ impl MemoryStore {
     /// Returns a string starting with "## Long-term Memory" header.
     pub fn get_memory_context(&self) -> Result<String, MemoryError> {
         let long_term = self.read_long_term()?;
-        if long_term.is_empty() {
-            Ok(String::new())
-        } else {
-            Ok(format!("## Long-term Memory\n{long_term}"))
-        }
+        if long_term.is_empty() { Ok(String::new()) } else { Ok(format!("## Long-term Memory\n{long_term}")) }
     }
 
     /// Check if memory consolidation should be triggered.
@@ -167,21 +153,10 @@ impl MemoryStore {
                 None => return Ok(last_consolidated),
             };
 
-        info!(
-            "Triggering memory consolidation: {} messages, last_consolidated={}",
-            messages.len(),
-            last_consolidated
-        );
+        info!("Triggering memory consolidation: {} messages, last_consolidated={}", messages.len(), last_consolidated);
 
         // Execute consolidation
-        self.consolidate_internal(
-            messages,
-            last_consolidated,
-            new_last_consolidated,
-            archive_all,
-            provider,
-        )
-        .await
+        self.consolidate_internal(messages, last_consolidated, new_last_consolidated, archive_all, provider).await
     }
 
     /// Internal consolidation logic (assumes checks already done).
@@ -234,11 +209,7 @@ impl MemoryStore {
 
 ## Conversation to Process
 {}"#,
-            if current_memory.is_empty() {
-                "(empty)"
-            } else {
-                &current_memory
-            },
+            if current_memory.is_empty() { "(empty)" } else { &current_memory },
             lines.join("\n")
         );
 
@@ -263,15 +234,11 @@ impl MemoryStore {
         }
 
         // Find save_memory tool call
-        let save_memory_call = tool_calls
-            .iter()
-            .find(|tc| tc.name == SAVE_MEMORY_TOOL)
-            .ok_or(MemoryError::NoToolCall)?;
+        let save_memory_call =
+            tool_calls.iter().find(|tc| tc.name == SAVE_MEMORY_TOOL).ok_or(MemoryError::NoToolCall)?;
 
         // Parse arguments
-        let args = save_memory_call
-            .parse_arguments()
-            .map_err(|e| MemoryError::ToolParse(e.to_string()))?;
+        let args = save_memory_call.parse_arguments().map_err(|e| MemoryError::ToolParse(e.to_string()))?;
 
         // Extract history_entry
         if let Some(entry) = args.get("history_entry") {
@@ -295,10 +262,7 @@ impl MemoryStore {
             }
         }
 
-        info!(
-            "Memory consolidation completed: new last_consolidated={}",
-            new_last_consolidated
-        );
+        info!("Memory consolidation completed: new last_consolidated={}", new_last_consolidated);
 
         Ok(new_last_consolidated)
     }
@@ -325,7 +289,6 @@ impl MemoryStore {
         archive_all: bool,
         memory_window: usize,
     ) -> Result<usize, MemoryError> {
-        self.try_consolidate(messages, last_consolidated, provider, archive_all, memory_window)
-            .await
+        self.try_consolidate(messages, last_consolidated, provider, archive_all, memory_window).await
     }
 }

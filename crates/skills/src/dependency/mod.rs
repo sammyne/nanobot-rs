@@ -7,11 +7,7 @@ use crate::models::Requires;
 
 /// Checks if a CLI tool is available in PATH.
 pub fn is_bin_available(bin: &str) -> bool {
-    Command::new("which")
-        .arg(bin)
-        .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false)
+    Command::new("which").arg(bin).output().map(|o| o.status.success()).unwrap_or(false)
 }
 
 /// Checks if an environment variable is set.
