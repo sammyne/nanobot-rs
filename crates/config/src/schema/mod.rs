@@ -16,6 +16,7 @@ use thiserror::Error;
 use tracing::{debug, info};
 
 pub mod gateway;
+pub mod mcp;
 
 pub use gateway::GatewayConfig;
 
