@@ -20,6 +20,7 @@ use nanobot_heartbeat::config::HeartbeatConfig as HeartbeatServiceConfig;
 use nanobot_heartbeat::{HeartbeatService, OnExecuteCallback, OnNotifyCallback};
 use nanobot_provider::{OpenAILike, Provider};
 use nanobot_session::SessionInfo;
+use nanobot_subagent::SubagentManager;
 use tokio::sync::mpsc;
 use tracing::{error, info, warn};
 
@@ -74,11 +75,21 @@ impl GatewayCmd {
         // 初始化 CronService（不设置回调，后续复用 AgentLoop）
         let cron_service = self.init_cron_service().await?;
 
+        // 创建 SubagentManager（使用 inbound_tx 用于子代理完成通知）
+        let subagent_manager = SubagentManager::new(
+            provider.clone(),
+            config.agents.defaults.workspace.clone(),
+            inbound_tx.clone(),
+            config.agents.defaults.temperature as f32,
+            config.agents.defaults.max_tokens as u32,
+        );
+
         // 创建 AgentLoop
         let agent_loop = Arc::new(AgentLoop::new(
             provider.clone(),
             config.agents.defaults.clone(),
             Some(cron_service.clone()),
+            Some(subagent_manager),
         ));
 
         // 设置 cron 回调，复用同一个 AgentLoop

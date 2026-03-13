@@ -11,6 +11,7 @@ use nanobot_agent::{AgentLoop, InboundMessage, OutboundMessage};
 use nanobot_config::Config;
 use nanobot_cron::CronService;
 use nanobot_provider::OpenAILike;
+use nanobot_subagent::SubagentManager;
 use tracing::{debug, error, info};
 /// 退出命令集合
 const EXIT_COMMANDS: &[&str] = &["exit", "quit", "/exit", "/quit", ":q"];
@@ -70,8 +71,13 @@ impl AgentCmd {
     ) -> Result<()> {
         debug!("单次消息模式");
 
-        // 创建 AgentLoop 实例（简单模式，直接调用）
-        let agent = AgentLoop::new_direct(provider, config.agents.defaults.clone(), Some(cron_service.clone()));
+        // 创建 AgentLoop 实例（不使用子代理功能）
+        let agent = AgentLoop::new_direct(
+            provider,
+            config.agents.defaults.clone(),
+            Some(cron_service.clone()),
+            None,
+        );
 
         match agent.process_direct(input, &self.session, None, None).await {
             Ok(response) => {
@@ -109,8 +115,22 @@ impl AgentCmd {
         let (inbound_tx, inbound_rx) = tokio::sync::mpsc::channel::<InboundMessage>(100);
         let (outbound_tx, mut outbound_rx) = tokio::sync::mpsc::channel::<OutboundMessage>(100);
 
+        // 创建 SubagentManager（使用 inbound_tx 用于子代理完成通知）
+        let subagent_manager = SubagentManager::new(
+            provider.clone(),
+            config.agents.defaults.workspace.clone(),
+            inbound_tx.clone(),
+            config.agents.defaults.temperature as f32,
+            config.agents.defaults.max_tokens as u32,
+        );
+
         // 创建 AgentLoop（不再传递通道）
-        let agent_loop = AgentLoop::new(provider, config.agents.defaults.clone(), Some(cron_service.clone()));
+        let agent_loop = AgentLoop::new(
+            provider,
+            config.agents.defaults.clone(),
+            Some(cron_service.clone()),
+            Some(subagent_manager),
+        );
 
         // 打印欢迎信息
         println!("🤖 Nanobot Agent - 交互式 AI 助手");

@@ -14,6 +14,7 @@ use nanobot_context::ContextBuilder;
 use nanobot_cron::{CronService, CronTool};
 use nanobot_provider::{Message, Provider};
 use nanobot_session::SessionManager;
+use nanobot_subagent::{SpawnTool, SubagentManager};
 use nanobot_tools::{ToolContext, ToolRegistry};
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
@@ -34,7 +35,7 @@ pub struct ReActResult {
 /// Agent 循环处理引擎
 ///
 /// 负责管理消息处理和 LLM 调用的完整生命周期。
-pub struct AgentLoop<P: Provider> {
+pub struct AgentLoop<P: Provider + 'static> {
     /// LLM 提供者实例
     provider: P,
 
@@ -60,7 +61,13 @@ impl<P: Provider + 'static> AgentLoop<P> {
     /// * `provider` - LLM 提供者实例
     /// * `config` - Agent 配置
     /// * `cron_service` - 可选的 Cron 服务实例
-    pub fn new(mut provider: P, config: AgentDefaults, _cron_service: Option<Arc<CronService>>) -> Self {
+    /// * `subagent_manager` - 可选的子代理管理器
+    pub fn new(
+        mut provider: P,
+        config: AgentDefaults,
+        cron_service: Option<Arc<CronService>>,
+        subagent_manager: Option<Arc<SubagentManager<P>>>,
+    ) -> Self {
         info!(
             "初始化 AgentLoop: model={}, max_tool_iterations={}",
             config.model, config.max_tool_iterations
@@ -71,10 +78,17 @@ impl<P: Provider + 'static> AgentLoop<P> {
         let mut tool_registry = ToolRegistry::new(&workspace_str, None);
 
         // 如果提供了 cron_service，注册 CronTool
-        if let Some(ref service) = _cron_service {
+        if let Some(ref service) = cron_service {
             let cron_tool = CronTool::new(Arc::clone(service));
             info!("注册 CronTool");
             tool_registry.register(cron_tool);
+        }
+
+        // 如果提供了 subagent_manager，注册 SpawnTool
+        if let Some(ref manager) = subagent_manager {
+            let spawn_tool = SpawnTool::new(Arc::clone(manager));
+            info!("注册 SpawnTool");
+            tool_registry.register(spawn_tool);
         }
 
         // 从 tool_registry 导出工具列表并绑定到 provider
@@ -104,8 +118,14 @@ impl<P: Provider + 'static> AgentLoop<P> {
     /// * `provider` - LLM 提供者实例
     /// * `config` - Agent 配置
     /// * `cron_service` - 可选的 Cron 服务实例
-    pub fn new_direct(provider: P, config: AgentDefaults, _cron_service: Option<Arc<CronService>>) -> Self {
-        Self::new(provider, config, _cron_service)
+    /// * `subagent_manager` - 可选的子代理管理器
+    pub fn new_direct(
+        provider: P,
+        config: AgentDefaults,
+        cron_service: Option<Arc<CronService>>,
+        subagent_manager: Option<Arc<SubagentManager<P>>>,
+    ) -> Self {
+        Self::new(provider, config, cron_service, subagent_manager)
     }
 
     /// 获取或创建会话（与 Python 版本一致，返回 Session 对象）

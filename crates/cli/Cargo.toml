@@ -12,6 +12,7 @@ nanobot-templates.workspace = true
 nanobot-cron.workspace = true
 nanobot-heartbeat.workspace = true
 nanobot-session.workspace = true
+nanobot-subagent.workspace = true
 clap.workspace = true
 tokio = { workspace = true, features = ["signal"] }
 anyhow.workspace = true
