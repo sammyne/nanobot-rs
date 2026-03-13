@@ -32,7 +32,7 @@ impl MockProvider {
 
 #[async_trait]
 impl Provider for MockProvider {
-    async fn chat(&self, _messages: &[Message]) -> anyhow::Result<Message> {
+    async fn chat(&self, _messages: &[Message], _options: &nanobot_provider::Options) -> anyhow::Result<Message> {
         Ok(Message::assistant(&self.response))
     }
 

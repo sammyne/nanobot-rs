@@ -153,13 +153,30 @@ impl Message {
     }
 }
 
+/// LLM 调用选项
+#[derive(Debug, Clone, Copy)]
+pub struct Options {
+    /// 最大生成 token 数
+    pub max_tokens: u16,
+
+    /// 温度参数（0.0-2.0）
+    pub temperature: f32,
+}
+
+impl Default for Options {
+    fn default() -> Self {
+        Self {
+            max_tokens: 4096,
+            temperature: 0.7,
+        }
+    }
+}
+
 /// LLM 响应结构
 #[derive(Debug, Clone, Default)]
 pub struct ProviderResponse {
     /// 响应内容
     pub content: String,
-    /// 是否有工具调用
-    pub has_tool_calls: bool,
     /// 工具调用列表
     pub tool_calls: Vec<ToolCall>,
 }
@@ -169,7 +186,6 @@ impl ProviderResponse {
     pub fn content(content: impl Into<String>) -> Self {
         Self {
             content: content.into(),
-            has_tool_calls: false,
             tool_calls: Vec::new(),
         }
     }
@@ -178,7 +194,6 @@ impl ProviderResponse {
     pub fn with_tools(content: impl Into<String>, tool_calls: Vec<ToolCall>) -> Self {
         Self {
             content: content.into(),
-            has_tool_calls: !tool_calls.is_empty(),
             tool_calls,
         }
     }
@@ -186,9 +201,9 @@ impl ProviderResponse {
 
 /// LLM 提供者 trait
 #[async_trait::async_trait]
-pub trait Provider: Send + Sync + Clone {
+pub trait Provider: Send + Sync + Clone + 'static {
     /// 发送聊天请求
-    async fn chat(&self, messages: &[Message]) -> Result<Message>;
+    async fn chat(&self, messages: &[Message], options: &Options) -> Result<Message>;
 
     /// 绑定可用工具列表（在调用 `chat` 之前设置）
     ///

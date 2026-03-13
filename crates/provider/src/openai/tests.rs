@@ -136,7 +136,6 @@ fn provider_response_content_only() {
     let response = ProviderResponse::content("Hello world");
 
     assert_eq!(response.content, "Hello world");
-    assert!(!response.has_tool_calls);
     assert!(response.tool_calls.is_empty());
 }
 
@@ -150,7 +149,7 @@ fn provider_response_with_tools() {
     let response = ProviderResponse::with_tools("结果如下", tool_calls.clone());
 
     assert_eq!(response.content, "结果如下");
-    assert!(response.has_tool_calls);
+    assert!(!response.tool_calls.is_empty());
     assert_eq!(response.tool_calls.len(), 2);
     assert_eq!(response.tool_calls[0].id, "call_1");
     assert_eq!(response.tool_calls[1].id, "call_2");
@@ -161,7 +160,6 @@ fn provider_response_default() {
     let response: ProviderResponse = Default::default();
 
     assert_eq!(response.content, "");
-    assert!(!response.has_tool_calls);
     assert!(response.tool_calls.is_empty());
 }
 

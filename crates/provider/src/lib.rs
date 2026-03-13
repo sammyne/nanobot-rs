@@ -5,5 +5,5 @@
 mod base;
 mod openai;
 
-pub use base::{Message, Provider, ProviderError, ProviderResponse, ToolCall};
+pub use base::{Message, Options, Provider, ProviderError, ProviderResponse, ToolCall};
 pub use openai::OpenAILike;
