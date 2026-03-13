@@ -91,7 +91,15 @@ async fn process_direct_returns_expected_response() {
         let provider = MockProvider::new(case.expected_response);
         let config = test_config();
         let subagent_manager = test_subagent_manager(provider.clone());
-        let agent = AgentLoop::new_direct(provider, config, None, Some(subagent_manager));
+        let agent = AgentLoop::new_direct(
+            provider,
+            config,
+            None,
+            Some(subagent_manager),
+            std::collections::HashMap::new(),
+        )
+        .await
+        .expect("AgentLoop creation should succeed");
 
         let session_key = case.session_id.unwrap_or("cli:direct");
         let result = agent
@@ -109,7 +117,15 @@ async fn process_direct_handles_empty_message() {
     let provider = MockProvider::new("OK");
     let config = test_config();
     let subagent_manager = test_subagent_manager(provider.clone());
-    let agent = AgentLoop::new_direct(provider, config, None, Some(subagent_manager));
+    let agent = AgentLoop::new_direct(
+        provider,
+        config,
+        None,
+        Some(subagent_manager),
+        std::collections::HashMap::new(),
+    )
+    .await
+    .expect("AgentLoop creation should succeed");
 
     let result = agent
         .process_direct("", "cli:direct", None, None)
@@ -120,12 +136,20 @@ async fn process_direct_handles_empty_message() {
 }
 
 /// 验证 config 方法返回正确的配置引用
-#[test]
-fn config_returns_correct_reference() {
+#[tokio::test]
+async fn config_returns_correct_reference() {
     let provider = MockProvider::new("test");
     let config = test_config();
     let subagent_manager = test_subagent_manager(provider.clone());
-    let agent = AgentLoop::new_direct(provider, config.clone(), None, Some(subagent_manager));
+    let agent = AgentLoop::new_direct(
+        provider,
+        config.clone(),
+        None,
+        Some(subagent_manager),
+        std::collections::HashMap::new(),
+    )
+    .await
+    .expect("AgentLoop creation should succeed");
 
     let returned_config = agent.config();
 
@@ -150,8 +174,8 @@ struct DefaultsCase {
 }
 
 /// 验证 AgentLoop 能正确存储和使用不同的配置值
-#[test]
-fn agent_loop_uses_custom_config_values() {
+#[tokio::test]
+async fn agent_loop_uses_custom_config_values() {
     let custom_defaults1 = AgentDefaults {
         workspace: PathBuf::from("/tmp/test1"),
         model: "custom-model-1".to_string(),
@@ -178,13 +202,29 @@ fn agent_loop_uses_custom_config_values() {
     let test_vector = [
         DefaultsCase {
             name: "自定义配置 1",
-            agent: AgentLoop::new_direct(provider1, custom_defaults1, None, Some(subagent_manager1)),
+            agent: AgentLoop::new_direct(
+                provider1,
+                custom_defaults1,
+                None,
+                Some(subagent_manager1),
+                std::collections::HashMap::new(),
+            )
+            .await
+            .expect("AgentLoop creation should succeed"),
             expect_model: "custom-model-1",
             expect_max_tokens: 2048,
         },
         DefaultsCase {
             name: "自定义配置 2",
-            agent: AgentLoop::new_direct(provider2, custom_defaults2, None, Some(subagent_manager2)),
+            agent: AgentLoop::new_direct(
+                provider2,
+                custom_defaults2,
+                None,
+                Some(subagent_manager2),
+                std::collections::HashMap::new(),
+            )
+            .await
+            .expect("AgentLoop creation should succeed"),
             expect_model: "custom-model-2",
             expect_max_tokens: 4096,
         },

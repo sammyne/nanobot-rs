@@ -12,6 +12,7 @@ use async_trait::async_trait;
 use http::{HeaderName, HeaderValue};
 use nanobot_config::McpServerConfig;
 use nanobot_tools::{Tool, ToolContext, ToolError, ToolResult};
+use rmcp::ServiceExt;
 use rmcp::model::{
     CallToolRequestParams, CallToolResult, ClientCapabilities, ClientInfo, Content, Implementation, RawContent,
     Tool as McpTool,
@@ -119,9 +120,9 @@ async fn connect_http(
     // 添加自定义 HTTP 头部
     for (key, value) in headers {
         let header_name = HeaderName::try_from(key)
-            .map_err(|e| McpError::InvalidConfig(format!("Invalid header name '{}': {}", key, e)))?;
+            .map_err(|e| McpError::InvalidConfig(format!("Invalid header name '{key}': {e}")))?;
         let header_value = HeaderValue::try_from(value)
-            .map_err(|e| McpError::InvalidConfig(format!("Invalid header value for '{}': {}", key, e)))?;
+            .map_err(|e| McpError::InvalidConfig(format!("Invalid header value for '{key}': {e}")))?;
         transport_config.custom_headers.insert(header_name, header_value);
     }
 
@@ -132,7 +133,8 @@ async fn connect_http(
     let client_info = create_client_info();
 
     // 连接并初始化
-    serve_client(client_info, transport)
+    client_info
+        .serve(transport)
         .await
         .map_err(|e| McpError::InitializationFailed(e.to_string()))
 }
@@ -147,8 +149,8 @@ async fn connect_http(
 ///
 /// # Returns
 /// 成功返回所有工具包装器的集合，失败返回 McpError
-pub async fn connect(configs: HashMap<String, McpServerConfig>) -> Result<Vec<Box<dyn Tool>>, McpError> {
-    let mut all_tools: Vec<Box<dyn Tool>> = Vec::new();
+pub async fn connect(configs: HashMap<String, McpServerConfig>) -> Result<Vec<McpToolWrapper>, McpError> {
+    let mut all_tools: Vec<McpToolWrapper> = Vec::new();
 
     // 连接每个服务器并获取工具
     for (name, config) in configs {
@@ -179,7 +181,7 @@ pub async fn connect(configs: HashMap<String, McpServerConfig>) -> Result<Vec<Bo
         // 为每个工具创建包装器
         for tool in tools.tools {
             let wrapper = McpToolWrapper::new(service.clone(), name.clone(), tool, tool_timeout);
-            all_tools.push(Box::new(wrapper));
+            all_tools.push(wrapper);
         }
 
         info!("Connected to MCP server '{}' and registered {} tools", name, tool_count);

@@ -6,4 +6,6 @@ mod schema;
 
 pub use schema::gateway::HeartbeatConfig;
 pub use schema::mcp::McpServerConfig;
-pub use schema::{AgentDefaults, ChannelsConfig, Config, ConfigError, DingTalkConfig, GatewayConfig, ProviderConfig};
+pub use schema::{
+    AgentDefaults, ChannelsConfig, Config, ConfigError, DingTalkConfig, GatewayConfig, ProviderConfig, ToolsConfig,
+};

@@ -1,6 +1,107 @@
 //! 配置管理模块
 //!
 //! 负责加载、保存和验证 nanobot 的配置文件。
+//!
+//! # 配置文件格式
+//!
+//! 配置文件位于 `~/.nanobot/config.json`，采用 JSON 格式。
+//!
+//! # 配置示例
+//!
+//! ```json
+//! {
+//!   "providers": {
+//!     "custom": {
+//!       "apiKey": "sk-your-api-key",
+//!       "apiBase": "https://api.example.com/v1"
+//!     }
+//!   },
+//!   "agents": {
+//!     "defaults": {
+//!       "workspace": "~/nanobot/workspace",
+//!       "model": "anthropic/claude-opus-4-5",
+//!       "maxTokens": 8192,
+//!       "temperature": 0.1
+//!     }
+//!   },
+//!   "channels": {
+//!     "dingtalk": {
+//!       "enabled": true,
+//!       "clientId": "your-client-id",
+//!       "clientSecret": "your-client-secret",
+//!       "allowFrom": ["user1", "user2"]
+//!     }
+//!   },
+//!   "gateway": {
+//!     "host": "0.0.0.0",
+//!     "port": 18790
+//!   },
+//!   "tools": {
+//!     "mcpServers": {
+//!       "filesystem": {
+//!         "command": "npx",
+//!         "args": ["@modelcontextprotocol/server-filesystem", "/path/to/allowed/directory"],
+//!         "env": {
+//!           "NODE_ENV": "production"
+//!         }
+//!       },
+//!       "remote-mcp": {
+//!         "url": "https://mcp-server.example.com/sse",
+//!         "headers": {
+//!           "Authorization": "Bearer your-token"
+//!         },
+//!         "toolTimeout": 30
+//!       }
+//!     }
+//!   }
+//! }
+//! ```
+//!
+//! # MCP 服务器配置
+//!
+//! MCP（Model Context Protocol）服务器配置位于 `tools.mcpServers` 字段中。
+//!
+//! ## Stdio 类型（本地进程）
+//!
+//! ```json
+//! {
+//!   "command": "npx",
+//!   "args": ["@modelcontextprotocol/server-filesystem", "/path/to/dir"],
+//!   "env": {
+//!     "NODE_ENV": "production"
+//!   }
+//! }
+//! ```
+//!
+//! - `command`: 要执行的命令（必需）
+//! - `args`: 命令行参数数组（可选）
+//! - `env`: 环境变量键值对（可选）
+//!
+//! ## HTTP 类型（远程服务）
+//!
+//! ```json
+//! {
+//!   "url": "https://mcp-server.example.com/sse",
+//!   "headers": {
+//!     "Authorization": "Bearer your-token"
+//!   },
+//!   "toolTimeout": 30
+//! }
+//! ```
+//!
+//! - `url`: 服务器 URL（必需）
+//! - `headers`: HTTP 请求头键值对（可选）
+//! - `toolTimeout`: 工具调用超时时间，单位秒（可选，默认 30）
+//!
+//! # 配置验证
+//!
+//! 配置加载时会自动验证：
+//! - `apiKey` 长度必须大于等于 3
+//! - `workspace` 不能为空
+//! - `model` 不能为空
+//! - `maxTokens` 必须大于 0
+//! - 如果 `apiBase` 不为空，必须以 `http://` 或 `https://` 开头
+//! - 如果启用的钉钉通道必须配置 `clientId` 和 `clientSecret`
 
 use std::io::{
     Write, {self},
@@ -121,6 +222,15 @@ pub struct ChannelsConfig {
     pub dingtalk: Option<DingTalkConfig>,
 }
 
+/// 工具配置集合
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolsConfig {
+    /// MCP 服务器配置
+    #[serde(default)]
+    pub mcp_servers: std::collections::HashMap<String, mcp::McpServerConfig>,
+}
+
 /// 应用配置（兼容 HKUDS 版本）
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
@@ -138,6 +248,10 @@ pub struct Config {
     /// 网关配置
     #[serde(default)]
     pub gateway: GatewayConfig,
+
+    /// 工具配置
+    #[serde(default)]
+    pub tools: ToolsConfig,
 }
 
 /// Providers 配置段
@@ -253,6 +367,7 @@ impl Config {
             agents: AgentsSection::default(),
             channels: ChannelsConfig::default(),
             gateway: GatewayConfig::default(),
+            tools: ToolsConfig::default(),
         }
     }
 
