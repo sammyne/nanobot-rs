@@ -208,7 +208,11 @@ impl nanobot_provider::Provider for MockProvider {
         // Mock implementation
     }
 
-    async fn chat(&self, _messages: &[nanobot_provider::Message]) -> Result<nanobot_provider::Message, anyhow::Error> {
+    async fn chat(
+        &self,
+        _messages: &[nanobot_provider::Message],
+        _options: &nanobot_provider::Options,
+    ) -> Result<nanobot_provider::Message, anyhow::Error> {
         // Mock implementation - return an empty assistant response
         Ok(nanobot_provider::Message::assistant(String::new()))
     }

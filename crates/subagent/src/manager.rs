@@ -172,7 +172,8 @@ where
             );
 
             // 调用LLM
-            let response = match self.provider.chat(&messages).await {
+            let options = nanobot_provider::Options::default();
+            let response = match self.provider.chat(&messages, &options).await {
                 Ok(r) => r,
                 Err(e) => {
                     tracing::error!(

@@ -246,11 +246,12 @@ impl MemoryStore {
         provider.bind_tools(vec![create_save_memory_tool()]);
 
         // Send LLM request
+        let options = nanobot_provider::Options::default();
         let response = provider
             .chat(&[
                 Message::system("You are a memory consolidation agent. Call the save_memory tool with your consolidation of the conversation."),
                 Message::user(&prompt),
-            ])
+            ], &options)
             .await
             .map_err(|e| MemoryError::LlmApi(e.to_string()))?;
 

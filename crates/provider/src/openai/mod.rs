@@ -15,7 +15,7 @@ use nanobot_config::{Config as NanobotConfig, ProviderConfig};
 use nanobot_tools::ToolDefinition;
 use tracing::{debug, info};
 
-use crate::{Message, Provider, ProviderError, ToolCall};
+use crate::{Message, Options, Provider, ProviderError, ToolCall};
 
 /// OpenAI 提供者
 #[derive(Clone)]
@@ -110,7 +110,7 @@ impl TryFrom<&Message> for ChatCompletionRequestMessage {
 
 #[async_trait::async_trait]
 impl Provider for OpenAILike {
-    async fn chat(&self, messages: &[Message]) -> Result<Message> {
+    async fn chat(&self, messages: &[Message], options: &Options) -> Result<Message> {
         use crate::ToolCall;
 
         // 工具已经由 bind_tools 转换为 OpenAI 格式，直接使用
@@ -130,18 +130,18 @@ impl Provider for OpenAILike {
             messages.iter().map(TryInto::try_into).collect::<Result<_>>()?;
 
         // 构建请求（带工具支持）
-        let request = if !chat_tools.is_empty() {
-            CreateChatCompletionRequestArgs::default()
-                .model(&self.model)
-                .messages(chat_messages)
-                .tools(chat_tools)
-                .build()?
-        } else {
-            CreateChatCompletionRequestArgs::default()
-                .model(&self.model)
-                .messages(chat_messages)
-                .build()?
-        };
+        let mut builder = CreateChatCompletionRequestArgs::default();
+        builder
+            .model(&self.model)
+            .messages(chat_messages)
+            .max_tokens(options.max_tokens)
+            .temperature(options.temperature);
+
+        if !chat_tools.is_empty() {
+            builder.tools(chat_tools);
+        }
+
+        let request = builder.build()?;
 
         // 发送请求（带超时）
         let response = tokio::time::timeout(Duration::from_secs(self.timeout), self.client.chat().create(request))

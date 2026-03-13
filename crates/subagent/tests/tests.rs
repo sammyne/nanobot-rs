@@ -40,7 +40,7 @@ impl MockProvider {
 
 #[async_trait::async_trait]
 impl Provider for MockProvider {
-    async fn chat(&self, _messages: &[Message]) -> anyhow::Result<Message> {
+    async fn chat(&self, _messages: &[Message], _options: &nanobot_provider::Options) -> anyhow::Result<Message> {
         let index = self.response_index.fetch_add(1, Ordering::SeqCst);
         if index < self.responses.len() {
             Ok(self.responses[index].clone())
@@ -194,7 +194,7 @@ async fn error_handling() {
 
     #[async_trait::async_trait]
     impl Provider for FailingProvider {
-        async fn chat(&self, _messages: &[Message]) -> anyhow::Result<Message> {
+        async fn chat(&self, _messages: &[Message], _options: &nanobot_provider::Options) -> anyhow::Result<Message> {
             anyhow::bail!("LLM call failed")
         }
 
@@ -306,7 +306,7 @@ async fn maximum_iterations_limit() {
 
     #[async_trait::async_trait]
     impl Provider for InfiniteToolProvider {
-        async fn chat(&self, _messages: &[Message]) -> anyhow::Result<Message> {
+        async fn chat(&self, _messages: &[Message], _options: &nanobot_provider::Options) -> anyhow::Result<Message> {
             Ok(Message::assistant_with_tools(
                 "Calling tool",
                 vec![nanobot_provider::ToolCall::new(

@@ -281,9 +281,10 @@ where
         ];
 
         // Call provider (tools are already bound during initialization)
+        let options = nanobot_provider::Options::default();
         let response = self
             .provider
-            .chat(&messages)
+            .chat(&messages, &options)
             .await
             .map_err(HeartbeatError::ProviderError)?;
 
