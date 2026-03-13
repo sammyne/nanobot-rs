@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use async_trait::async_trait;
 use nanobot_config::AgentDefaults;
 use nanobot_provider::{Message, Provider};
+use nanobot_subagent::SubagentManager;
 use nanobot_tools::ToolDefinition;
 
 use super::*;
@@ -52,6 +53,14 @@ fn test_config() -> AgentDefaults {
     }
 }
 
+/// 创建测试用 SubagentManager
+fn test_subagent_manager<P: Provider + Clone + Send + Sync + 'static>(
+    provider: P,
+) -> std::sync::Arc<SubagentManager<P>> {
+    let (tx, _rx) = tokio::sync::mpsc::channel(100);
+    SubagentManager::new(provider.clone(), PathBuf::from("/tmp/test"), tx, 0.5, 1024)
+}
+
 /// process_direct 测试用例结构
 struct ProcessDirectCase {
     name: &'static str,
@@ -81,7 +90,8 @@ async fn process_direct_returns_expected_response() {
     for case in test_vector {
         let provider = MockProvider::new(case.expected_response);
         let config = test_config();
-        let agent = AgentLoop::new_direct(provider, config, None);
+        let subagent_manager = test_subagent_manager(provider.clone());
+        let agent = AgentLoop::new_direct(provider, config, None, Some(subagent_manager));
 
         let session_key = case.session_id.unwrap_or("cli:direct");
         let result = agent
@@ -98,7 +108,8 @@ async fn process_direct_returns_expected_response() {
 async fn process_direct_handles_empty_message() {
     let provider = MockProvider::new("OK");
     let config = test_config();
-    let agent = AgentLoop::new_direct(provider, config, None);
+    let subagent_manager = test_subagent_manager(provider.clone());
+    let agent = AgentLoop::new_direct(provider, config, None, Some(subagent_manager));
 
     let result = agent
         .process_direct("", "cli:direct", None, None)
@@ -113,7 +124,8 @@ async fn process_direct_handles_empty_message() {
 fn config_returns_correct_reference() {
     let provider = MockProvider::new("test");
     let config = test_config();
-    let agent = AgentLoop::new_direct(provider, config.clone(), None);
+    let subagent_manager = test_subagent_manager(provider.clone());
+    let agent = AgentLoop::new_direct(provider, config.clone(), None, Some(subagent_manager));
 
     let returned_config = agent.config();
 
@@ -158,16 +170,21 @@ fn agent_loop_uses_custom_config_values() {
         memory_window: 25,
     };
 
+    let provider1 = MockProvider::new("test");
+    let subagent_manager1 = test_subagent_manager(provider1.clone());
+    let provider2 = MockProvider::new("test");
+    let subagent_manager2 = test_subagent_manager(provider2.clone());
+
     let test_vector = [
         DefaultsCase {
             name: "自定义配置 1",
-            agent: AgentLoop::new_direct(MockProvider::new("test"), custom_defaults1, None),
+            agent: AgentLoop::new_direct(provider1, custom_defaults1, None, Some(subagent_manager1)),
             expect_model: "custom-model-1",
             expect_max_tokens: 2048,
         },
         DefaultsCase {
             name: "自定义配置 2",
-            agent: AgentLoop::new_direct(MockProvider::new("test"), custom_defaults2, None),
+            agent: AgentLoop::new_direct(provider2, custom_defaults2, None, Some(subagent_manager2)),
             expect_model: "custom-model-2",
             expect_max_tokens: 4096,
         },
