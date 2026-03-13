@@ -1,0 +1,21 @@
+[package]
+name = "nanobot-mcp"
+version = "0.1.0"
+edition = "2024"
+authors = ["nanobot contributors"]
+description = "MCP (Model Context Protocol) client and tool wrapper for nanobot"
+
+[dependencies]
+async-trait.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["rt", "macros", "process", "time"] }
+tracing.workspace = true
+schemars.workspace = true
+rmcp.workspace = true
+nanobot-config.workspace = true
+nanobot-tools.workspace = true
+http.workspace = true
+
+[dev-dependencies]
+serde_yaml.workspace = true

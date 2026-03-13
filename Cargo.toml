@@ -19,12 +19,14 @@ walkdir = "2"
 tokio-test = "0.4"
 tempfile = "3"
 futures = "0.3"
+http = "1"
 
 # Internal crates
 nanobot-config.path = "crates/config"
 nanobot-provider.path = "crates/provider"
 nanobot-agent.path = "crates/agent"
 nanobot-tools.path = "crates/tools"
+nanobot-mcp.path = "crates/mcp"
 nanobot-session.path = "crates/session"
 nanobot-memory.path = "crates/memory"
 nanobot-context.path = "crates/context"
@@ -74,3 +76,7 @@ version = "0.7"
 
 [workspace.dependencies.dingtalk-stream]
 version = "0.1"
+
+[workspace.dependencies.rmcp]
+version = "1.2"
+features = ["client", "client-side-sse", "transport-child-process", "transport-streamable-http-client-reqwest"]

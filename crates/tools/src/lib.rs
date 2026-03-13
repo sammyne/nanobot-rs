@@ -1,6 +1,8 @@
 //! Nanobot Tools - AI Agent 工具实现
 //!
 //! 提供文件系统工具（read_file, write_file, edit_file, list_dir）、Shell 执行工具和 Cron 调度工具。
+//!
+//! MCP (Model Context Protocol) 相关功能已移至 nanobot-mcp crate。
 
 pub mod core;
 pub mod fs;
