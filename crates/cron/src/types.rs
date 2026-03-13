@@ -58,13 +58,7 @@ fn default_payload_kind() -> String {
 
 impl Default for CronPayload {
     fn default() -> Self {
-        CronPayload {
-            kind: default_payload_kind(),
-            message: String::new(),
-            deliver: false,
-            channel: None,
-            to: None,
-        }
+        CronPayload { kind: default_payload_kind(), message: String::new(), deliver: false, channel: None, to: None }
     }
 }
 
@@ -154,10 +148,7 @@ fn default_version() -> i32 {
 
 impl Default for CronStore {
     fn default() -> Self {
-        CronStore {
-            version: default_version(),
-            jobs: Vec::new(),
-        }
+        CronStore { version: default_version(), jobs: Vec::new() }
     }
 }
 

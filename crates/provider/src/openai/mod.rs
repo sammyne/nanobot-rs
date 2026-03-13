@@ -46,19 +46,12 @@ impl OpenAILike {
         info!("初始化 OpenAI 提供者: model={}, base_url={}", model, api_base);
 
         // 创建自定义配置
-        let openai_config = OpenAIConfig::new()
-            .with_api_base(api_base)
-            .with_api_key(&config.api_key);
+        let openai_config = OpenAIConfig::new().with_api_base(api_base).with_api_key(&config.api_key);
 
         // 创建客户端
         let client = Client::with_config(openai_config);
 
-        Ok(Self {
-            client,
-            model: model.to_string(),
-            timeout,
-            tools: Arc::new(Vec::new()),
-        })
+        Ok(Self { client, model: model.to_string(), timeout, tools: Arc::new(Vec::new()) })
     }
 
     /// 从应用配置创建
@@ -76,19 +69,14 @@ impl TryFrom<&Message> for ChatCompletionRequestMessage {
     fn try_from(msg: &Message) -> Result<Self, Self::Error> {
         let chat_msg = match msg {
             Message::System { content } => ChatCompletionRequestMessage::System(
-                ChatCompletionRequestSystemMessageArgs::default()
-                    .content(content.as_str())
-                    .build()?,
+                ChatCompletionRequestSystemMessageArgs::default().content(content.as_str()).build()?,
             ),
             Message::User { content } => ChatCompletionRequestMessage::User(
-                ChatCompletionRequestUserMessageArgs::default()
-                    .content(content.as_str())
-                    .build()?,
+                ChatCompletionRequestUserMessageArgs::default().content(content.as_str()).build()?,
             ),
             Message::Assistant { content, tool_calls } => {
-                let mut assistant_msg = ChatCompletionRequestAssistantMessageArgs::default()
-                    .content(content.as_str())
-                    .build()?;
+                let mut assistant_msg =
+                    ChatCompletionRequestAssistantMessageArgs::default().content(content.as_str()).build()?;
 
                 // 如果有工具调用，添加到消息中
                 if !tool_calls.is_empty() {
@@ -114,16 +102,9 @@ impl Provider for OpenAILike {
         use crate::ToolCall;
 
         // 工具已经由 bind_tools 转换为 OpenAI 格式，直接使用
-        let chat_tools: Vec<ChatCompletionTool> = if self.tools.is_empty() {
-            Vec::new()
-        } else {
-            (*self.tools).clone()
-        };
-        debug!(
-            "发送聊天请求, 消息数量: {}, 工具数量: {}",
-            messages.len(),
-            chat_tools.len()
-        );
+        let chat_tools: Vec<ChatCompletionTool> =
+            if self.tools.is_empty() { Vec::new() } else { (*self.tools).clone() };
+        debug!("发送聊天请求, 消息数量: {}, 工具数量: {}", messages.len(), chat_tools.len());
 
         // 转换消息格式
         let chat_messages: Vec<ChatCompletionRequestMessage> =
@@ -150,11 +131,8 @@ impl Provider for OpenAILike {
             .map_err(|e| ProviderError::Api(e.to_string()))?;
 
         // 消耗 choices，取出第一个 ChatChoice，避免后续拷贝
-        let choice = response
-            .choices
-            .into_iter()
-            .next()
-            .ok_or_else(|| ProviderError::Api("响应中没有选择".to_string()))?;
+        let choice =
+            response.choices.into_iter().next().ok_or_else(|| ProviderError::Api("响应中没有选择".to_string()))?;
 
         // 提取回复内容（转移所有权，避免 clone）
         let content = choice.message.content.unwrap_or_default();
@@ -165,11 +143,7 @@ impl Provider for OpenAILike {
         {
             let converted_tool_calls: Vec<ToolCall> = tool_calls.into_iter().map(Into::into).collect();
 
-            info!(
-                "收到 LLM 响应(带工具调用): {} 个工具调用, 内容长度: {}",
-                converted_tool_calls.len(),
-                content.len()
-            );
+            info!("收到 LLM 响应(带工具调用): {} 个工具调用, 内容长度: {}", converted_tool_calls.len(), content.len());
 
             // 构造包含工具调用的响应
             return Ok(Message::assistant_with_tools(content, converted_tool_calls));
@@ -206,11 +180,7 @@ mod tests;
 /// 将 OpenAI 的工具调用格式转换为内部 ToolCall 类型
 impl From<ChatCompletionMessageToolCall> for ToolCall {
     fn from(tc: ChatCompletionMessageToolCall) -> Self {
-        Self::new(
-            tc.id,
-            tc.function.name,
-            serde_json::from_str(&tc.function.arguments).unwrap_or_default(),
-        )
+        Self::new(tc.id, tc.function.name, serde_json::from_str(&tc.function.arguments).unwrap_or_default())
     }
 }
 

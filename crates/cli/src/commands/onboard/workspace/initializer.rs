@@ -42,10 +42,7 @@ impl WorkspaceInitializer {
         if !self.workspace_path.exists() {
             fs::create_dir_all(&self.workspace_path)
                 .with_context(|| format!("创建工作空间目录失败: {:?}", self.workspace_path))?;
-            println!(
-                "\x1b[32m✓\x1b[0m Created workspace at {}",
-                self.workspace_path.display()
-            );
+            println!("\x1b[32m✓\x1b[0m Created workspace at {}", self.workspace_path.display());
         } else {
             debug!("工作空间目录已存在: {:?}", self.workspace_path);
         }

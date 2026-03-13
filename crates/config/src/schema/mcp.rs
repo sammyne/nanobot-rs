@@ -44,20 +44,12 @@ fn default_tool_timeout() -> u64 {
 impl McpServerConfig {
     /// 创建 Stdio 类型的配置
     pub fn stdio(command: impl Into<String>) -> Self {
-        Self::Stdio {
-            command: command.into(),
-            args: Vec::new(),
-            env: HashMap::new(),
-        }
+        Self::Stdio { command: command.into(), args: Vec::new(), env: HashMap::new() }
     }
 
     /// 创建 HTTP 类型的配置
     pub fn http(url: impl Into<String>) -> Self {
-        Self::Http {
-            url: url.into(),
-            headers: HashMap::new(),
-            tool_timeout: default_tool_timeout(),
-        }
+        Self::Http { url: url.into(), headers: HashMap::new(), tool_timeout: default_tool_timeout() }
     }
 
     /// 设置命令行参数（仅对 Stdio 类型有效）
@@ -86,11 +78,7 @@ impl McpServerConfig {
 
     /// 设置工具调用超时时间（秒），仅对 HTTP 类型有效
     pub fn with_timeout(mut self, timeout: u64) -> Self {
-        if let Self::Http {
-            tool_timeout: ref mut t,
-            ..
-        } = self
-        {
+        if let Self::Http { tool_timeout: ref mut t, .. } = self {
             *t = timeout;
         }
         self

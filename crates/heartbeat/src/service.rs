@@ -282,11 +282,7 @@ where
 
         // Call provider (tools are already bound during initialization)
         let options = nanobot_provider::Options::default();
-        let response = self
-            .provider
-            .chat(&messages, &options)
-            .await
-            .map_err(HeartbeatError::ProviderError)?;
+        let response = self.provider.chat(&messages, &options).await.map_err(HeartbeatError::ProviderError)?;
 
         // Parse response - Message may contain tool_calls
         let tool_calls = response.tool_calls();
@@ -311,16 +307,9 @@ where
             .parse_arguments()
             .map_err(|e| HeartbeatError::ParseError(format!("Failed to parse tool arguments: {e}")))?;
 
-        let action = args
-            .get("action")
-            .and_then(|v: &serde_json::Value| v.as_str())
-            .unwrap_or("skip")
-            .to_string();
+        let action = args.get("action").and_then(|v: &serde_json::Value| v.as_str()).unwrap_or("skip").to_string();
 
-        let tasks = args
-            .get("tasks")
-            .and_then(|v: &serde_json::Value| v.as_str())
-            .map(|s: &str| s.to_string());
+        let tasks = args.get("tasks").and_then(|v: &serde_json::Value| v.as_str()).map(|s: &str| s.to_string());
 
         Ok(Some((action, tasks)))
     }

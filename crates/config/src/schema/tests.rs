@@ -114,18 +114,12 @@ fn load_hkuds_config() {
 
     // 验证可以反序列化为 HKUDS 格式
     let config: Config = serde_json::from_str(hkuds_json).unwrap();
-    assert_eq!(
-        config.providers.custom.as_ref().unwrap().api_key,
-        "ms-9b01b6f2-1336-4f0d-ac2b-7922f1d66119"
-    );
+    assert_eq!(config.providers.custom.as_ref().unwrap().api_key, "ms-9b01b6f2-1336-4f0d-ac2b-7922f1d66119");
     assert_eq!(config.agents.defaults.model, "MiniMax/MiniMax-M2.5");
 
     // 验证 provider() 方法
     let provider = config.provider();
-    assert_eq!(
-        provider.api_base,
-        Some("https://api-inference.modelscope.cn/v1".to_string())
-    );
+    assert_eq!(provider.api_base, Some("https://api-inference.modelscope.cn/v1".to_string()));
     assert_eq!(provider.api_key, "ms-9b01b6f2-1336-4f0d-ac2b-7922f1d66119");
 }
 
@@ -197,10 +191,7 @@ fn load_config_with_all_fields_present() {
 
     // 验证使用的是提供的值而非默认值
     assert_eq!(config.providers.custom.as_ref().unwrap().api_key, "sk-custom-key");
-    assert_eq!(
-        config.providers.custom.as_ref().unwrap().api_base,
-        Some("https://custom.api.com/v1".to_string())
-    );
+    assert_eq!(config.providers.custom.as_ref().unwrap().api_base, Some("https://custom.api.com/v1".to_string()));
     assert_eq!(
         config.providers.custom.as_ref().unwrap().extra_headers,
         Some({
@@ -342,10 +333,7 @@ fn gateway_config_validate_success() {
 #[test]
 fn gateway_config_validate_zero_port() {
     // 测试 port 为 0 时验证失败
-    let gateway = GatewayConfig {
-        port: 0,
-        ..Default::default()
-    };
+    let gateway = GatewayConfig { port: 0, ..Default::default() };
     let result = gateway.validate();
     assert!(result.is_err());
     let err = result.unwrap_err();
@@ -355,10 +343,7 @@ fn gateway_config_validate_zero_port() {
 #[test]
 fn gateway_config_validate_empty_host() {
     // 测试 host 为空时验证失败
-    let gateway = GatewayConfig {
-        host: String::new(),
-        ..Default::default()
-    };
+    let gateway = GatewayConfig { host: String::new(), ..Default::default() };
     let result = gateway.validate();
     assert!(result.is_err());
     let err = result.unwrap_err();

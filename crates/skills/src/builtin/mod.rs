@@ -38,10 +38,7 @@ fn extract_dir(dir: &Dir, target: &Path) -> io::Result<()> {
 /// This function extracts builtin skills from embedded resources
 /// to the target builtin-skills directory.
 pub fn initialize_builtin_skills(builtin_dir: &Path) -> Result<()> {
-    debug!(
-        "Initializing builtin skills from embedded resources to {:?}",
-        builtin_dir
-    );
+    debug!("Initializing builtin skills from embedded resources to {:?}", builtin_dir);
 
     // Create target directory if it doesn't exist
     fs::create_dir_all(builtin_dir).with_context(|| format!("Failed to create directory: {builtin_dir:?}"))?;
@@ -117,10 +114,7 @@ pub fn ensure_builtin_skills(builtin_dir: &Path) -> Result<()> {
         crate::version::write_version_file(&version_file, current_version)
             .with_context(|| format!("Failed to write VERSION file: {version_file:?}"))?;
 
-        debug!(
-            "Successfully initialized builtin skills with version {}",
-            current_version
-        );
+        debug!("Successfully initialized builtin skills with version {}", current_version);
     }
 
     Ok(())

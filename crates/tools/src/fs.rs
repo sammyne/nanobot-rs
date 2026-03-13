@@ -18,11 +18,7 @@ fn resolve_path(path: &str, workspace: &str, allowed_dir: Option<&str>) -> Resul
     let path_obj = Path::new(path);
 
     // 解析为绝对路径
-    let absolute = if path_obj.is_absolute() {
-        path_obj.to_path_buf()
-    } else {
-        Path::new(workspace).join(path_obj)
-    };
+    let absolute = if path_obj.is_absolute() { path_obj.to_path_buf() } else { Path::new(workspace).join(path_obj) };
 
     // 规范化路径
     let canonical = absolute.canonicalize().unwrap_or_else(|_| absolute.clone());
@@ -31,10 +27,7 @@ fn resolve_path(path: &str, workspace: &str, allowed_dir: Option<&str>) -> Resul
     if let Some(allowed) = allowed_dir {
         let allowed_path = Path::new(allowed);
         if !canonical.starts_with(allowed_path) {
-            return Err(ToolError::PermissionDenied {
-                path: path.to_string(),
-                allowed: Some(allowed.to_string()),
-            });
+            return Err(ToolError::PermissionDenied { path: path.to_string(), allowed: Some(allowed.to_string()) });
         }
     }
 
@@ -71,10 +64,7 @@ impl ReadFileTool {
     /// * `workspace` - 工作目录
     /// * `allowed_dir` - 允许访问的目录限制（可选）
     pub fn new(workspace: impl Into<String>, allowed_dir: Option<impl Into<String>>) -> Self {
-        Self {
-            workspace: workspace.into(),
-            allowed_dir: allowed_dir.map(|v| v.into()),
-        }
+        Self { workspace: workspace.into(), allowed_dir: allowed_dir.map(|v| v.into()) }
     }
 }
 
@@ -128,10 +118,7 @@ impl WriteFileTool {
     /// * `workspace` - 工作目录
     /// * `allowed_dir` - 允许访问的目录限制（可选）
     pub fn new(workspace: impl Into<String>, allowed_dir: Option<impl Into<String>>) -> Self {
-        Self {
-            workspace: workspace.into(),
-            allowed_dir: allowed_dir.map(|v| v.into()),
-        }
+        Self { workspace: workspace.into(), allowed_dir: allowed_dir.map(|v| v.into()) }
     }
 }
 
@@ -199,10 +186,7 @@ impl EditFileTool {
     /// * `workspace` - 工作目录
     /// * `allowed_dir` - 允许访问的目录限制（可选）
     pub fn new(workspace: impl Into<String>, allowed_dir: Option<impl Into<String>>) -> Self {
-        Self {
-            workspace: workspace.into(),
-            allowed_dir: allowed_dir.map(|v| v.into()),
-        }
+        Self { workspace: workspace.into(), allowed_dir: allowed_dir.map(|v| v.into()) }
     }
 
     /// 查找文本匹配位置，统计匹配次数
@@ -270,9 +254,7 @@ impl Tool for EditFileTool {
         match matches.len() {
             0 => {
                 // 无匹配，返回错误和上下文
-                Err(ToolError::execution(
-                    "未找到匹配的文本。请确保 old_text 与文件内容完全匹配。".to_string(),
-                ))
+                Err(ToolError::execution("未找到匹配的文本。请确保 old_text 与文件内容完全匹配。".to_string()))
             }
             1 => {
                 // 唯一匹配，执行替换
@@ -284,9 +266,7 @@ impl Tool for EditFileTool {
             }
             n => {
                 // 多次匹配，警告用户
-                Err(ToolError::execution(format!(
-                    "找到 {n} 处匹配，无法确定唯一位置。请提供更多上下文。"
-                )))
+                Err(ToolError::execution(format!("找到 {n} 处匹配，无法确定唯一位置。请提供更多上下文。")))
             }
         }
     }
@@ -307,20 +287,13 @@ impl ListDirTool {
     /// * `workspace` - 工作目录
     /// * `allowed_dir` - 允许访问的目录限制（可选）
     pub fn new(workspace: impl Into<String>, allowed_dir: Option<impl Into<String>>) -> Self {
-        Self {
-            workspace: workspace.into(),
-            allowed_dir: allowed_dir.map(|v| v.into()),
-        }
+        Self { workspace: workspace.into(), allowed_dir: allowed_dir.map(|v| v.into()) }
     }
 
     /// 格式化目录条目
     fn format_entry(path: &Path, metadata: &std::fs::Metadata) -> String {
         let name = path.file_name().unwrap_or_default().to_string_lossy();
-        let size = if metadata.is_file() {
-            format!(" ({} bytes)", metadata.len())
-        } else {
-            String::new()
-        };
+        let size = if metadata.is_file() { format!(" ({} bytes)", metadata.len()) } else { String::new() };
         let kind = if metadata.is_dir() { "[DIR]" } else { "[FILE]" };
         format!("{kind} {name}{size}")
     }
@@ -372,10 +345,7 @@ impl Tool for ListDirTool {
 
         if recursive {
             // 递归遍历
-            let mut entries: Vec<_> = walkdir::WalkDir::new(&path)
-                .into_iter()
-                .filter_map(|e| e.ok())
-                .collect();
+            let mut entries: Vec<_> = walkdir::WalkDir::new(&path).into_iter().filter_map(|e| e.ok()).collect();
             entries.sort_by(|a, b| a.path().cmp(b.path()));
 
             for entry in entries {

@@ -22,10 +22,7 @@ fn check_requirements_empty() {
 
 #[test]
 fn check_requirements_missing_bin() {
-    let requires = Requires {
-        bins: vec!["definitely_not_a_real_command_12345".to_string()],
-        env: vec![],
-    };
+    let requires = Requires { bins: vec!["definitely_not_a_real_command_12345".to_string()], env: vec![] };
     assert!(!check_requirements(&requires));
 }
 
@@ -38,10 +35,7 @@ fn get_missing_requirements_empty() {
 
 #[test]
 fn get_missing_requirements_with_missing() {
-    let requires = Requires {
-        bins: vec!["fake_cmd_xyz".to_string()],
-        env: vec!["FAKE_ENV_XYZ".to_string()],
-    };
+    let requires = Requires { bins: vec!["fake_cmd_xyz".to_string()], env: vec!["FAKE_ENV_XYZ".to_string()] };
     let missing = get_missing_requirements(&requires);
     assert_eq!(missing.len(), 2);
     assert!(missing[0].contains("fake_cmd_xyz"));

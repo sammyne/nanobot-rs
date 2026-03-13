@@ -20,10 +20,7 @@ fn test_at_schedule_deserialization() {
 
 #[test]
 fn test_cron_schedule_with_timezone() {
-    let schedule = CronSchedule::Cron {
-        expr: "0 9 * * *".to_string(),
-        tz: Some("America/Vancouver".to_string()),
-    };
+    let schedule = CronSchedule::Cron { expr: "0 9 * * *".to_string(), tz: Some("America/Vancouver".to_string()) };
     let json = serde_json::to_string(&schedule).unwrap();
     assert!(json.contains("cron"));
     assert!(json.contains("0 9 * * *"));
@@ -33,10 +30,7 @@ fn test_cron_schedule_with_timezone() {
 #[test]
 fn test_job_creation() {
     let schedule = CronSchedule::Every { every_ms: 60000 };
-    let payload = CronPayload {
-        message: "Test message".to_string(),
-        ..Default::default()
-    };
+    let payload = CronPayload { message: "Test message".to_string(), ..Default::default() };
     let job = CronJob::new("Test".to_string(), schedule, payload, false);
 
     assert!(!job.id.is_empty());

@@ -33,15 +33,7 @@ async fn add_job() {
 
     let schedule = CronSchedule::Every { every_ms: 60000 };
     let job = service
-        .add_job(
-            "Test".to_string(),
-            schedule,
-            "Test message".to_string(),
-            false,
-            None,
-            None,
-            false,
-        )
+        .add_job("Test".to_string(), schedule, "Test message".to_string(), false, None, None, false)
         .await
         .unwrap();
 
@@ -61,15 +53,7 @@ async fn remove_job() {
 
     let schedule = CronSchedule::Every { every_ms: 60000 };
     let job = service
-        .add_job(
-            "Test".to_string(),
-            schedule,
-            "Test message".to_string(),
-            false,
-            None,
-            None,
-            false,
-        )
+        .add_job("Test".to_string(), schedule, "Test message".to_string(), false, None, None, false)
         .await
         .unwrap();
 

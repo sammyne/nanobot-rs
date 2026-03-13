@@ -229,10 +229,7 @@ impl ChannelManager {
         let mut status_list = Vec::new();
 
         for (name, channel) in &self.channels {
-            status_list.push(ChannelStatus {
-                name: name.clone(),
-                running: channel.is_running(),
-            });
+            status_list.push(ChannelStatus { name: name.clone(), running: channel.is_running() });
         }
 
         status_list
@@ -244,10 +241,7 @@ impl ChannelManager {
     ///
     /// * `name` - 通道名称
     pub async fn get_channel_status(&self, name: &str) -> Option<ChannelStatus> {
-        self.channels.get(name).map(|channel| ChannelStatus {
-            name: name.to_string(),
-            running: channel.is_running(),
-        })
+        self.channels.get(name).map(|channel| ChannelStatus { name: name.to_string(), running: channel.is_running() })
     }
 
     /// 获取已启用的通道名称列表

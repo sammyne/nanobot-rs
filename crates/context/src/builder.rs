@@ -43,10 +43,7 @@ impl ContextBuilder {
     /// Returns `ContextError::InvalidPath` if the workspace path doesn't exist.
     pub fn new(workspace: PathBuf) -> Result<Self, ContextError> {
         if !workspace.exists() {
-            return Err(ContextError::InvalidPath(format!(
-                "Workspace does not exist: {}",
-                workspace.display()
-            )));
+            return Err(ContextError::InvalidPath(format!("Workspace does not exist: {}", workspace.display())));
         }
 
         let memory = MemoryStore::new(workspace.clone())?;
@@ -54,11 +51,7 @@ impl ContextBuilder {
 
         info!("ContextBuilder initialized for workspace: {}", workspace.display());
 
-        Ok(Self {
-            workspace,
-            memory,
-            skills,
-        })
+        Ok(Self { workspace, memory, skills })
     }
 
     /// Get a reference to the underlying memory store.

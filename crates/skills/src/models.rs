@@ -126,21 +126,12 @@ pub struct Skill {
 impl Skill {
     /// Creates a new skill with the given name and path.
     pub fn new(name: String, path: PathBuf, source: SkillSource) -> Self {
-        Self {
-            name,
-            path,
-            source,
-            meta: SkillMeta::default(),
-        }
+        Self { name, path, source, meta: SkillMeta::default() }
     }
 
     /// Returns the skill description, falling back to the name if not set.
     pub fn description(&self) -> &str {
-        if self.meta.description.is_empty() {
-            &self.name
-        } else {
-            &self.meta.description
-        }
+        if self.meta.description.is_empty() { &self.name } else { &self.meta.description }
     }
 
     /// Checks if this skill should always be loaded into context.

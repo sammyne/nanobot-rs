@@ -44,10 +44,7 @@ pub enum ToolError {
 impl ToolError {
     /// 创建参数验证错误
     pub fn validation(field: impl Into<String>, message: impl Into<String>) -> Self {
-        Self::Validation {
-            field: field.into(),
-            message: message.into(),
-        }
+        Self::Validation { field: field.into(), message: message.into() }
     }
 
     /// 创建执行错误
@@ -80,10 +77,7 @@ pub struct ToolContext {
 impl ToolContext {
     /// 创建新的工具上下文
     pub fn new(channel: impl Into<String>, chat_id: impl Into<String>) -> Self {
-        Self {
-            channel: channel.into(),
-            chat_id: chat_id.into(),
-        }
+        Self { channel: channel.into(), chat_id: chat_id.into() }
     }
 
     /// 获取通道名称

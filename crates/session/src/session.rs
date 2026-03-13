@@ -76,16 +76,10 @@ impl Session {
 
         // Calculate start index considering max_messages limit
         let available = total - start_unconsolidated;
-        let start = if available > max_messages {
-            total - max_messages
-        } else {
-            start_unconsolidated
-        };
+        let start = if available > max_messages { total - max_messages } else { start_unconsolidated };
 
         // Find first user message to avoid orphaned tool_result blocks
-        let first_user_idx = self.messages[start..]
-            .iter()
-            .position(|m| matches!(m, Message::User { .. }));
+        let first_user_idx = self.messages[start..].iter().position(|m| matches!(m, Message::User { .. }));
 
         let final_start = match first_user_idx {
             Some(idx) => start + idx,

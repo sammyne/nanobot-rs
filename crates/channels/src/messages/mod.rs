@@ -114,29 +114,17 @@ impl OutboundMessage {
         if is_tool_hint {
             metadata.insert("_tool_hint".to_string(), serde_json::Value::Bool(true));
         }
-        Self {
-            channel: String::new(),
-            chat_id: String::new(),
-            content: content.into(),
-            media: Vec::new(),
-            metadata,
-        }
+        Self { channel: String::new(), chat_id: String::new(), content: content.into(), media: Vec::new(), metadata }
     }
 
     /// 检查是否为进度消息
     pub fn is_progress(&self) -> bool {
-        self.metadata
-            .get("_progress")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false)
+        self.metadata.get("_progress").and_then(|v| v.as_bool()).unwrap_or(false)
     }
 
     /// 检查是否为工具提示
     pub fn is_tool_hint(&self) -> bool {
-        self.metadata
-            .get("_tool_hint")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false)
+        self.metadata.get("_tool_hint").and_then(|v| v.as_bool()).unwrap_or(false)
     }
 
     /// 添加媒体文件

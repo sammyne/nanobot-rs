@@ -52,11 +52,7 @@ fn fallback_to_builtin_when_workspace_missing() {
     create_builtin_skill(workspace.path(), "builtin-only", builtin_content);
 
     // Create a VERSION file to prevent reinitialization
-    std::fs::write(
-        workspace.path().join("builtin-skills/VERSION"),
-        nanobot_skills::version::crate_version(),
-    )
-    .unwrap();
+    std::fs::write(workspace.path().join("builtin-skills/VERSION"), nanobot_skills::version::crate_version()).unwrap();
 
     let loader = SkillsLoader::new(workspace.path().to_path_buf());
 
@@ -74,11 +70,7 @@ fn filter_unavailable_skills() {
     let workspace = TempDir::new().unwrap();
 
     // Create available skill
-    create_workspace_skill(
-        workspace.path(),
-        "available",
-        "---\ndescription: Available\n---\n# Content",
-    );
+    create_workspace_skill(workspace.path(), "available", "---\ndescription: Available\n---\n# Content");
 
     // Create unavailable skill with missing CLI requirement
     let unavailable_content = r#"---
@@ -94,10 +86,8 @@ requires:
 
     // Without filter - should include workspace skills and builtin skills
     let all_skills = loader.list_skills(false).unwrap();
-    let workspace_skills: Vec<_> = all_skills
-        .iter()
-        .filter(|s| s.name == "available" || s.name == "unavailable")
-        .collect();
+    let workspace_skills: Vec<_> =
+        all_skills.iter().filter(|s| s.name == "available" || s.name == "unavailable").collect();
     assert_eq!(workspace_skills.len(), 2);
 
     // With filter
@@ -136,11 +126,7 @@ fn always_skill_detection() {
     let workspace = TempDir::new().unwrap();
 
     // Create always skill (in frontmatter)
-    create_workspace_skill(
-        workspace.path(),
-        "always-skill",
-        "---\ndescription: Always\nalways: true\n---\n# Content",
-    );
+    create_workspace_skill(workspace.path(), "always-skill", "---\ndescription: Always\nalways: true\n---\n# Content");
 
     // Create always skill (in metadata.nanobot)
     let nanobot_always = r#"---
@@ -151,11 +137,7 @@ metadata: {"nanobot": {"always": true}}
     create_workspace_skill(workspace.path(), "nanobot-always", nanobot_always);
 
     // Create normal skill
-    create_workspace_skill(
-        workspace.path(),
-        "normal-skill",
-        "---\ndescription: Normal\n---\n# Content",
-    );
+    create_workspace_skill(workspace.path(), "normal-skill", "---\ndescription: Normal\n---\n# Content");
 
     let loader = SkillsLoader::new(workspace.path().to_path_buf());
     let always_skills = loader.get_always_skills().unwrap();
@@ -222,11 +204,7 @@ fn invalid_yaml_returns_default_metadata() {
     let workspace = TempDir::new().unwrap();
 
     // Create skill with invalid YAML
-    create_workspace_skill(
-        workspace.path(),
-        "invalid",
-        "---\ninvalid yaml content :::\n---\n# Content",
-    );
+    create_workspace_skill(workspace.path(), "invalid", "---\ninvalid yaml content :::\n---\n# Content");
 
     let loader = SkillsLoader::new(workspace.path().to_path_buf());
     let skills = loader.list_skills(false).unwrap();
@@ -245,11 +223,7 @@ fn skill_without_frontmatter() {
     let workspace = TempDir::new().unwrap();
 
     // Create skill without frontmatter
-    create_workspace_skill(
-        workspace.path(),
-        "no-frontmatter",
-        "# Just Markdown\n\nNo frontmatter here.",
-    );
+    create_workspace_skill(workspace.path(), "no-frontmatter", "# Just Markdown\n\nNo frontmatter here.");
 
     let loader = SkillsLoader::new(workspace.path().to_path_buf());
     let skills = loader.list_skills(false).unwrap();

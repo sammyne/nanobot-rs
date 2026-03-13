@@ -147,10 +147,7 @@ fn serde_enum_json() {
     }
 
     // Serialization test
-    let meta = TestEnum::Nanobot(TestMeta {
-        emoji: Some("🦞".to_string()),
-        always: true,
-    });
+    let meta = TestEnum::Nanobot(TestMeta { emoji: Some("🦞".to_string()), always: true });
     let serialized = serde_json::to_string(&meta).unwrap();
     println!("JSON Serialized: {serialized}");
 
@@ -227,10 +224,7 @@ always: true"#;
     println!("Untagged Result: {result:?}");
 
     // Check serialization
-    let meta = TestEnum::Nanobot(NanobotMeta {
-        emoji: Some("🦞".to_string()),
-        always: true,
-    });
+    let meta = TestEnum::Nanobot(NanobotMeta { emoji: Some("🦞".to_string()), always: true });
     let serialized = serde_yaml::to_string(&meta).unwrap();
     println!("Untagged Serialized:\n{serialized}");
 }

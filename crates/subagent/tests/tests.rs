@@ -23,10 +23,7 @@ struct MockProvider {
 
 impl MockProvider {
     fn new(responses: Vec<Message>) -> Self {
-        Self {
-            responses,
-            response_index: Arc::new(AtomicUsize::new(0)),
-        }
+        Self { responses, response_index: Arc::new(AtomicUsize::new(0)) }
     }
 
     fn simple_response(content: &str) -> Self {
@@ -89,11 +86,7 @@ async fn subagent_creation_and_management() {
     assert!(result.contains("started"));
 
     // 验证运行计数为 1
-    assert_eq!(
-        manager.get_running_count(),
-        1,
-        "Running count should be 1 after task creation"
-    );
+    assert_eq!(manager.get_running_count(), 1, "Running count should be 1 after task creation");
 
     // 等待任务完成
     tokio::time::timeout(tokio::time::Duration::from_secs(5), async {
@@ -163,9 +156,7 @@ async fn task_execution_with_tools() {
     let file_path = temp_dir.path().join("test_file.txt");
     assert!(file_path.exists(), "File should be created");
 
-    let content = tokio::fs::read_to_string(&file_path)
-        .await
-        .expect("Failed to read file");
+    let content = tokio::fs::read_to_string(&file_path).await.expect("Failed to read file");
     assert_eq!(content, "Hello, subagent!", "File content should match");
 
     // 验证收到完成消息
@@ -201,20 +192,11 @@ async fn error_handling() {
         fn bind_tools(&mut self, _tools: Vec<ToolDefinition>) {}
     }
 
-    let manager = SubagentManager::new(
-        FailingProvider,
-        std::path::PathBuf::from("/tmp/workspace"),
-        sender,
-        0.7,
-        4096,
-    );
+    let manager = SubagentManager::new(FailingProvider, std::path::PathBuf::from("/tmp/workspace"), sender, 0.7, 4096);
 
     // 创建任务 - clone Arc for spawn
-    let _result = manager
-        .clone()
-        .spawn("Failing task", None, "test_channel", "chat_789")
-        .await
-        .expect("Failed to spawn task");
+    let _result =
+        manager.clone().spawn("Failing task", None, "test_channel", "chat_789").await.expect("Failed to spawn task");
 
     // 等待任务完成（应该失败）
     tokio::time::timeout(tokio::time::Duration::from_secs(5), async {
@@ -254,22 +236,13 @@ async fn multiple_concurrent_tasks() {
     for i in 0..task_count {
         let _result = manager
             .clone()
-            .spawn(
-                format!("Concurrent task {i}"),
-                None,
-                "test_channel",
-                format!("chat_{i}"),
-            )
+            .spawn(format!("Concurrent task {i}"), None, "test_channel", format!("chat_{i}"))
             .await
             .expect("Failed to spawn task");
     }
 
     // 验证运行计数
-    assert_eq!(
-        manager.get_running_count(),
-        task_count,
-        "Running count should match task count"
-    );
+    assert_eq!(manager.get_running_count(), task_count, "Running count should match task count");
 
     // 等待所有任务完成
     let mut completed_count = 0;
@@ -320,13 +293,8 @@ async fn maximum_iterations_limit() {
         fn bind_tools(&mut self, _tools: Vec<ToolDefinition>) {}
     }
 
-    let manager = SubagentManager::new(
-        InfiniteToolProvider,
-        std::path::PathBuf::from("/tmp/workspace"),
-        sender,
-        0.7,
-        4096,
-    );
+    let manager =
+        SubagentManager::new(InfiniteToolProvider, std::path::PathBuf::from("/tmp/workspace"), sender, 0.7, 4096);
 
     // 创建任务 - clone Arc for spawn
     let _result = manager

@@ -203,9 +203,7 @@ impl DingTalkConfig {
                 return Err(ConfigError::Validation("启用的钉钉通道必须配置 client_id".to_string()));
             }
             if self.client_secret.is_empty() {
-                return Err(ConfigError::Validation(
-                    "启用的钉钉通道必须配置 client_secret".to_string(),
-                ));
+                return Err(ConfigError::Validation("启用的钉钉通道必须配置 client_secret".to_string()));
             }
         }
 
@@ -373,11 +371,7 @@ impl Config {
 
     /// 获取 ProviderConfig（兼容简化版接口）
     pub fn provider(&self) -> ProviderConfig {
-        if let Some(custom) = &self.providers.custom {
-            custom.clone()
-        } else {
-            ProviderConfig::default()
-        }
+        if let Some(custom) = &self.providers.custom { custom.clone() } else { ProviderConfig::default() }
     }
 
     /// 获取配置文件路径
@@ -395,9 +389,7 @@ impl Config {
         let path = Self::config_path()?;
 
         if !path.exists() {
-            return Err(ConfigError::NotFound(
-                "配置文件不存在，请运行 'nanobot onboard' 进行配置".to_string(),
-            ));
+            return Err(ConfigError::NotFound("配置文件不存在，请运行 'nanobot onboard' 进行配置".to_string()));
         }
 
         debug!("从 {:?} 加载配置", path);
@@ -442,11 +434,7 @@ impl Config {
 
     /// 检查配置文件是否存在
     pub fn exists() -> bool {
-        if let Ok(path) = Self::config_path() {
-            path.exists()
-        } else {
-            false
-        }
+        if let Ok(path) = Self::config_path() { path.exists() } else { false }
     }
 
     /// 验证配置
@@ -477,9 +465,7 @@ impl Config {
                 && !api_base.starts_with("http://")
                 && !api_base.starts_with("https://")
             {
-                return Err(ConfigError::Validation(
-                    "api_base 必须以 http:// 或 https:// 开头".to_string(),
-                ));
+                return Err(ConfigError::Validation("api_base 必须以 http:// 或 https:// 开头".to_string()));
             }
 
             // api_key 可以是 None（某些 OAuth 提供者不需要）

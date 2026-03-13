@@ -17,10 +17,7 @@ pub struct CronStorage {
 impl CronStorage {
     /// Create a new storage instance.
     pub fn new(store_path: PathBuf) -> Self {
-        CronStorage {
-            store_path,
-            store: Arc::new(RwLock::new(CronStore::default())),
-        }
+        CronStorage { store_path, store: Arc::new(RwLock::new(CronStore::default())) }
     }
 
     /// Load jobs from disk.

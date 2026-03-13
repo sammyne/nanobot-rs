@@ -128,9 +128,7 @@ where
             manager.announce_result(&task_obj, result).await;
         });
 
-        Ok(format!(
-            "Subagent [{label}] started (id: {task_id}). I'll notify you when it completes."
-        ))
+        Ok(format!("Subagent [{label}] started (id: {task_id}). I'll notify you when it completes."))
     }
 
     /// 获取当前运行中的子代理数量
@@ -189,10 +187,7 @@ where
             let tool_calls = response.tool_calls();
             if !tool_calls.is_empty() {
                 // 添加助手消息（包含工具调用）到上下文
-                messages.push(Message::assistant_with_tools(
-                    response.content().to_string(),
-                    tool_calls.to_vec(),
-                ));
+                messages.push(Message::assistant_with_tools(response.content().to_string(), tool_calls.to_vec()));
 
                 // 执行每个工具调用
                 for tool_call in tool_calls {

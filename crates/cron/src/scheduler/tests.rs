@@ -54,10 +54,7 @@ fn validate_schedule_invalid_every() {
 
 #[test]
 fn validate_schedule_invalid_cron() {
-    let schedule = CronSchedule::Cron {
-        expr: "invalid".to_string(),
-        tz: None,
-    };
+    let schedule = CronSchedule::Cron { expr: "invalid".to_string(), tz: None };
     assert!(validate_schedule(&schedule).is_err());
 }
 
