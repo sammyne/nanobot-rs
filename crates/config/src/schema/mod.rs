@@ -141,6 +141,9 @@ pub enum ConfigError {
 
     #[error("JSON 序列化错误: {0}")]
     Json(String),
+
+    #[error("环境变量解析错误: {0}")]
+    Environment(String),
 }
 
 impl From<serde_json::Error> for ConfigError {
@@ -384,24 +387,63 @@ impl Config {
         Ok(HOME.join(CONFIG_DIR_NAME))
     }
 
-    /// 从文件加载配置
-    pub fn load() -> Result<Self, ConfigError> {
-        let path = Self::config_path()?;
-
+    /// 从指定路径加载配置（内部实现）
+    ///
+    /// 统一的配置加载逻辑，供测试和生产环境共用。
+    fn load_from_path(path: &Path) -> Result<Self, ConfigError> {
         if !path.exists() {
             return Err(ConfigError::NotFound("配置文件不存在，请运行 'nanobot onboard' 进行配置".to_string()));
         }
 
         debug!("从 {:?} 加载配置", path);
 
-        let content = fs::read_to_string(&path)?;
-        let config: Config =
-            serde_json::from_str(&content).map_err(|e| ConfigError::Parse(format!("配置文件格式错误: {e}")))?;
+        // 使用 config 库统一从文件和环境变量加载配置
+        // 环境变量使用 convert_case 将 snake_case 转换为 camelCase，与 JSON 文件的 key 匹配
+        let mut config: Config = config::Config::builder()
+            .add_source(config::File::from(path).format(config::FileFormat::Json))
+            .add_source(
+                config::Environment::with_prefix("NANOBOT")
+                    .prefix_separator("_")
+                    .separator("__")
+                    .convert_case(config::Case::Camel)
+                    .ignore_empty(true),
+            )
+            .build()
+            .map_err(|e| ConfigError::Parse(format!("配置加载失败: {e}")))?
+            .try_deserialize()
+            .map_err(|e| ConfigError::Parse(format!("配置反序列化失败: {e}")))?;
+
+        // 处理路径中的 ~ 展开
+        config.agents.defaults.workspace = expand_tilde(&config.agents.defaults.workspace);
 
         config.validate()?;
         info!("配置加载成功");
 
         Ok(config)
+    }
+
+    /// 从文件加载配置
+    ///
+    /// 配置加载顺序：
+    /// 1. 从 `~/.nanobot/config.json` 加载基础配置
+    /// 2. 从环境变量覆盖配置项（环境变量优先级更高）
+    ///
+    /// # 环境变量命名规范
+    ///
+    /// - 前缀：`NANOBOT_`（单下划线）
+    /// - 层级分隔符：双下划线 `__`
+    /// - 字段命名：snake_case（如 `API_KEY` 而非 `APIKEY`）
+    ///
+    /// ## 示例
+    ///
+    /// | 配置路径 | 环境变量 |
+    /// |---------|---------|
+    /// | `providers.custom.apiKey` | `NANOBOT_PROVIDERS__CUSTOM__API_KEY` |
+    /// | `agents.defaults.model` | `NANOBOT_AGENTS__DEFAULTS__MODEL` |
+    /// | `gateway.port` | `NANOBOT_GATEWAY__PORT` |
+    pub fn load() -> Result<Self, ConfigError> {
+        let path = Self::config_path()?;
+        Self::load_from_path(&path)
     }
 
     /// 保存配置到文件

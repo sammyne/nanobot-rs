@@ -392,3 +392,200 @@ fn config_gateway_serialization() {
     assert!(json.contains("host"));
     assert!(json.contains("port"));
 }
+
+// ==================== 环境变量覆盖测试 ====================
+
+#[test]
+fn env_override_string_field() {
+    // 测试环境变量覆盖字符串字段
+
+    let temp_dir = tempfile::tempdir().unwrap();
+    let config_path = temp_dir.path().join("config.json");
+
+    // 创建基础配置文件
+    let config_content = r#"{
+        "providers": {
+            "custom": {
+                "apiKey": "original-key"
+            }
+        }
+    }"#;
+    std::fs::write(&config_path, config_content).unwrap();
+
+    // 设置环境变量覆盖
+    // 前缀 NANOBOT_（由 with_prefix("NANOBOT") + prefix_separator("_") 组成）
+    // 层级分隔符 __（separator("__")）
+    // 使用 snake_case（API_KEY），config 库会将其转换为 camelCase（apiKey）
+    temp_env::with_var("NANOBOT_PROVIDERS__CUSTOM__API_KEY", Some("env-override-key"), || {
+        let result = Config::load_from_path(&config_path).unwrap();
+
+        // 验证环境变量覆盖了配置文件中的值
+        assert_eq!(result.providers.custom.as_ref().unwrap().api_key, "env-override-key");
+    });
+}
+
+#[test]
+fn env_override_number_field() {
+    // 测试环境变量覆盖数字字段
+
+    let temp_dir = tempfile::tempdir().unwrap();
+    let config_path = temp_dir.path().join("config.json");
+
+    let config_content = r#"{
+        "gateway": {
+            "port": 18790
+        }
+    }"#;
+    std::fs::write(&config_path, config_content).unwrap();
+
+    // 设置环境变量覆盖
+    // config 库会将 PORT 转换为 port（全小写）
+    temp_env::with_var("NANOBOT_GATEWAY__PORT", Some("8080"), || {
+        let result = Config::load_from_path(&config_path).unwrap();
+
+        // 验证环境变量覆盖了配置文件中的值
+        assert_eq!(result.gateway.port, 8080);
+    });
+}
+
+#[test]
+fn env_override_boolean_field() {
+    // 测试环境变量覆盖布尔字段
+
+    let temp_dir = tempfile::tempdir().unwrap();
+    let config_path = temp_dir.path().join("config.json");
+
+    let config_content = r#"{
+        "channels": {
+            "dingtalk": {
+                "enabled": false,
+                "clientId": "test-client-id",
+                "clientSecret": "test-client-secret"
+            }
+        }
+    }"#;
+    std::fs::write(&config_path, config_content).unwrap();
+
+    // 设置环境变量覆盖
+    // 使用 snake_case（ENABLED），config 库会保持为 enabled
+    temp_env::with_var("NANOBOT_CHANNELS__DINGTALK__ENABLED", Some("true"), || {
+        let result = Config::load_from_path(&config_path).unwrap();
+
+        // 验证环境变量覆盖了配置文件中的值
+        assert!(result.channels.dingtalk.as_ref().unwrap().enabled);
+    });
+}
+
+#[test]
+fn env_override_nested_field() {
+    // 测试环境变量覆盖嵌套字段
+
+    let temp_dir = tempfile::tempdir().unwrap();
+    let config_path = temp_dir.path().join("config.json");
+
+    let config_content = r#"{
+        "agents": {
+            "defaults": {
+                "model": "original-model"
+            }
+        }
+    }"#;
+    std::fs::write(&config_path, config_content).unwrap();
+
+    // 设置环境变量覆盖
+    // config 库会将 MODEL 转换为 model（全小写）
+    temp_env::with_var("NANOBOT_AGENTS__DEFAULTS__MODEL", Some("gpt-4"), || {
+        let result = Config::load_from_path(&config_path).unwrap();
+
+        // 验证环境变量覆盖了配置文件中的值
+        assert_eq!(result.agents.defaults.model, "gpt-4");
+    });
+}
+
+#[test]
+fn env_no_override_when_not_set() {
+    // 测试环境变量未设置时使用配置文件中的值
+
+    let temp_dir = tempfile::tempdir().unwrap();
+    let config_path = temp_dir.path().join("config.json");
+
+    let config_content = r#"{
+        "providers": {
+            "custom": {
+                "apiKey": "file-key"
+            }
+        }
+    }"#;
+    std::fs::write(&config_path, config_content).unwrap();
+
+    // 不设置环境变量
+    temp_env::with_var_unset("NANOBOT_PROVIDERS__CUSTOM__API_KEY", || {
+        let result = Config::load_from_path(&config_path).unwrap();
+
+        // 验证使用配置文件中的值
+        assert_eq!(result.providers.custom.as_ref().unwrap().api_key, "file-key");
+    });
+}
+
+#[test]
+fn env_override_multiple_fields() {
+    // 测试同时覆盖多个字段
+
+    let temp_dir = tempfile::tempdir().unwrap();
+    let config_path = temp_dir.path().join("config.json");
+
+    let config_content = r#"{
+        "providers": {
+            "custom": {
+                "apiKey": "original-key",
+                "apiBase": "https://original.api.com"
+            }
+        },
+        "gateway": {
+            "port": 18790
+        }
+    }"#;
+    std::fs::write(&config_path, config_content).unwrap();
+
+    // 设置多个环境变量
+    // 使用 snake_case（API_KEY），config 库会转换为 camelCase（apiKey）
+    temp_env::with_vars(
+        [("NANOBOT_PROVIDERS__CUSTOM__API_KEY", Some("new-key")), ("NANOBOT_GATEWAY__PORT", Some("9000"))],
+        || {
+            let result = Config::load_from_path(&config_path).unwrap();
+
+            // 验证所有环境变量都生效
+            assert_eq!(result.providers.custom.as_ref().unwrap().api_key, "new-key");
+            assert_eq!(
+                result.providers.custom.as_ref().unwrap().api_base,
+                Some("https://original.api.com".to_string())
+            ); // 未被覆盖
+            assert_eq!(result.gateway.port, 9000);
+        },
+    );
+}
+
+#[test]
+fn env_empty_value_ignored() {
+    // 测试空环境变量值被忽略，使用配置文件中的值
+
+    let temp_dir = tempfile::tempdir().unwrap();
+    let config_path = temp_dir.path().join("config.json");
+
+    let config_content = r#"{
+        "providers": {
+            "custom": {
+                "apiKey": "file-key"
+            }
+        }
+    }"#;
+    std::fs::write(&config_path, config_content).unwrap();
+
+    // 设置空环境变量
+    temp_env::with_var("NANOBOT_PROVIDERS__CUSTOM__API_KEY", Some(""), || {
+        let result = Config::load_from_path(&config_path).unwrap();
+
+        // 验证空值被忽略，使用配置文件中的值
+        assert_eq!(result.providers.custom.as_ref().unwrap().api_key, "file-key");
+    });
+}
