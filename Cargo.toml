@@ -64,6 +64,13 @@ features = ["serde"]
 [workspace.dependencies.chrono-tz]
 version = "0.10"
 
+[workspace.dependencies.config]
+version = "0.15"
+features = ["json", "convert-case"]
+
+[workspace.dependencies.temp-env]
+version = "0.3"
+
 [workspace.dependencies.cron]
 version = "0.15"
 

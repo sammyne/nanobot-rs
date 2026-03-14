@@ -10,6 +10,8 @@ anyhow.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 schemars.workspace = true
+config.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+temp-env.workspace = true
