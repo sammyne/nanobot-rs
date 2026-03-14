@@ -1,11 +1,11 @@
 //! Cron 命令 - 管理定时任务
 
-use std::sync::Arc;
-
 use anyhow::{Context, Result};
 use chrono::{TimeZone, Utc};
 use clap::{Args, Subcommand};
-use nanobot_cron::{CronSchedule, CronService};
+use nanobot_cron::CronSchedule;
+
+use crate::utils::init_cron_service;
 
 /// Cron 命令
 #[derive(Args, Debug)]
@@ -48,23 +48,6 @@ enum CronSubcommand {
 }
 
 // ========== Helper Functions ==========
-
-/// 获取默认数据目录
-fn get_data_dir() -> std::path::PathBuf {
-    dirs::data_local_dir().unwrap_or_else(|| std::path::PathBuf::from(".")).join("nanobot")
-}
-
-/// 初始化 CronService（用于 CLI 命令）
-async fn init_cron_service() -> Result<Arc<CronService>> {
-    let data_dir = get_data_dir();
-
-    // 确保数据目录存在
-    tokio::fs::create_dir_all(&data_dir).await.context("创建数据目录失败")?;
-
-    let cron_file = data_dir.join("cron_jobs.json");
-
-    CronService::new(cron_file).await.context("初始化 CronService 失败").map(Arc::new)
-}
 
 /// 格式化时间戳为可读字符串
 fn format_time(ts_ms: Option<i64>) -> String {
