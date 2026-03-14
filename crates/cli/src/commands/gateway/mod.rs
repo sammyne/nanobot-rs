@@ -24,6 +24,8 @@ use nanobot_subagent::SubagentManager;
 use tokio::sync::mpsc;
 use tracing::{error, info, warn};
 
+use crate::utils::init_cron_service;
+
 /// Gateway 命令
 #[derive(Args, Debug)]
 pub struct GatewayCmd {
@@ -73,7 +75,7 @@ impl GatewayCmd {
         let (outbound_tx, outbound_rx) = mpsc::channel::<OutboundMessage>(100);
 
         // 初始化 CronService（不设置回调，后续复用 AgentLoop）
-        let cron_service = self.init_cron_service().await?;
+        let cron_service = init_cron_service().await?;
 
         // 创建 SubagentManager（使用 inbound_tx 用于子代理完成通知）
         let subagent_manager = SubagentManager::new(
@@ -193,23 +195,6 @@ impl GatewayCmd {
         );
 
         OpenAILike::from_config(config).context("初始化 LLM Provider 失败")
-    }
-
-    /// 初始化 CronService
-    async fn init_cron_service(&self) -> Result<Arc<CronService>> {
-        // 获取数据目录
-        let data_dir = dirs::data_local_dir().unwrap_or_else(|| std::path::PathBuf::from(".")).join("nanobot");
-
-        // 确保数据目录存在
-        tokio::fs::create_dir_all(&data_dir).await.context("创建数据目录失败")?;
-
-        let cron_file = data_dir.join("cron_jobs.json");
-        info!("CronService 数据文件: {:?}", cron_file);
-
-        // 创建 CronService
-        let cron_service = Arc::new(CronService::new(cron_file).await.context("初始化 CronService 失败")?);
-
-        Ok(cron_service)
     }
 
     /// 设置 HeartbeatService（包含回调）
