@@ -60,6 +60,10 @@ pub struct GatewayConfig {
     /// 心跳配置
     #[serde(default)]
     pub heartbeat: HeartbeatConfig,
+
+    /// 健康检查服务端口（可选）
+    #[serde(default)]
+    pub health_check_port: Option<u16>,
 }
 
 fn default_host() -> String {
@@ -72,7 +76,12 @@ fn default_port() -> u16 {
 
 impl Default for GatewayConfig {
     fn default() -> Self {
-        Self { host: default_host(), port: default_port(), heartbeat: HeartbeatConfig::default() }
+        Self {
+            host: default_host(),
+            port: default_port(),
+            heartbeat: HeartbeatConfig::default(),
+            health_check_port: None,
+        }
     }
 }
 
@@ -91,6 +100,13 @@ impl GatewayConfig {
 
         // 验证 heartbeat 配置
         self.heartbeat.validate().map_err(|e| ConfigError::Validation(format!("gateway.heartbeat 配置错误: {e}")))?;
+
+        // 验证 health_check_port 配置
+        if let Some(port) = self.health_check_port
+            && port == 0
+        {
+            return Err(ConfigError::Validation("gateway.health_check_port 必须大于 0".to_string()));
+        }
 
         Ok(())
     }
