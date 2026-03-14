@@ -8,6 +8,8 @@
 //! - 启动 CronService 管理定时任务
 //! - 提供优雅的启动和关闭机制
 
+mod health_check;
+
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
@@ -32,6 +34,10 @@ pub struct GatewayCmd {
     /// 服务端口（默认使用配置文件的 gateway.port，若未配置则使用 18790）
     #[arg(short, long)]
     pub port: Option<u16>,
+
+    /// 健康检查服务端口（默认使用配置文件的 gateway.healthCheck.port，若未配置则使用 7860）
+    #[arg(long)]
+    pub health_check_port: Option<u16>,
 }
 
 /// 服务运行时的上下文
@@ -61,6 +67,9 @@ impl GatewayCmd {
             Some(port) => (port, "命令行"),
             None => (config.gateway.port, "配置文件"),
         };
+
+        // 确定健康检查端口：命令行参数优先，否则使用配置文件值
+        let health_check_port = self.health_check_port.or(config.gateway.health_check_port);
 
         info!("启动 nanobot gateway (port={})", actual_port);
 
@@ -115,10 +124,16 @@ impl GatewayCmd {
             outbound_tx.clone(),
         )?;
 
+        // 启动健康检查服务（后台任务运行）
+        if let Some(port) = health_check_port {
+            tokio::spawn(health_check::serve(port));
+        }
+
         // 启动服务并等待关闭信号
         self.run_services(
             ServicesContext { agent_loop, channel_manager, cron_service, heartbeat_service, inbound_rx, outbound_tx },
             &config.gateway.heartbeat,
+            health_check_port,
         )
         .await?;
 
@@ -138,7 +153,12 @@ impl GatewayCmd {
     }
 
     /// 显示服务启动状态
-    async fn print_service_status(&self, channel_manager: &ChannelManager, heartbeat_config: &GatewayHeartbeatConfig) {
+    async fn print_service_status(
+        &self,
+        channel_manager: &ChannelManager,
+        heartbeat_config: &GatewayHeartbeatConfig,
+        health_check_port: Option<u16>,
+    ) {
         println!();
         println!("  ┌─────────────────────────────────────┐");
         println!("  │           服务状态                   │");
@@ -163,6 +183,13 @@ impl GatewayCmd {
             println!("  ✓ HeartbeatService: 已启用 (间隔: {}s)", heartbeat_config.interval_s);
         } else {
             println!("  ✓ HeartbeatService: 已禁用");
+        }
+
+        // 显示健康检查服务状态
+        if let Some(port) = health_check_port {
+            println!("  ✓ 健康检查服务: 已启用 (端口: {port})");
+        } else {
+            println!("  ✓ 健康检查服务: 未配置");
         }
 
         println!();
@@ -346,6 +373,7 @@ impl GatewayCmd {
         &self,
         ctx: ServicesContext<OpenAILike>,
         heartbeat_config: &GatewayHeartbeatConfig,
+        health_check_port: Option<u16>,
     ) -> Result<()> {
         // 启动 AgentLoop 后台任务（传递通道给 run）
         let agent_task = tokio::spawn(async move {
@@ -377,8 +405,10 @@ impl GatewayCmd {
             }
         }
 
+        // HealthCheckService 已在 run 方法中启动
+
         // 显示服务状态（在启动所有通道后）
-        self.print_service_status(&channel_manager, heartbeat_config).await;
+        self.print_service_status(&channel_manager, heartbeat_config, health_check_port).await;
 
         println!("  ✓ 服务已启动，按 Ctrl+C 停止");
         println!();
