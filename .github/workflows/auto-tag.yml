@@ -152,6 +152,7 @@ jobs:
       
       # 7. 创建并推送 tag（带重试机制）
       - name: Create and push tag
+        id: push-tag
         if: steps.version-info.outputs.matched == 'true'
         run: |
           VERSION="${{ steps.version-info.outputs.version }}"
@@ -177,7 +178,7 @@ jobs:
             echo ""
             echo "正在推送 tag（尝试 ${RETRY_COUNT}/${MAX_RETRIES}）..."
             
-            if git push origin "${VERSION}" 2>&1; then
+          if git push origin "${VERSION}" 2>&1; then
               echo ""
               echo "=========================================="
               echo "✅ Tag 推送成功！"
@@ -186,6 +187,9 @@ jobs:
               echo "Commit SHA: ${COMMIT_SHA}"
               echo "查看地址: ${{ github.server_url }}/${{ github.repository }}/releases/tag/${VERSION}"
               echo "=========================================="
+              
+              # 保存 tag 名称供后续步骤使用
+              echo "tag_name=${VERSION}" >> $GITHUB_OUTPUT
               exit 0
             else
               if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
@@ -207,3 +211,33 @@ jobs:
           echo "  - 仓库 Settings > Actions > General > Workflow permissions"
           echo "  - 确保选择了 'Read and write permissions' 或工作流具有 'contents: write' 权限"
           exit 1
+      
+      # 8. 触发 release workflow
+      - name: Trigger release workflow
+        if: steps.version-info.outputs.matched == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const version = '${{ steps.version-info.outputs.version }}';
+            
+            console.log('==========================================');
+            console.log('触发 release workflow');
+            console.log('==========================================');
+            console.log('Tag 版本:', version);
+            console.log('==========================================');
+            
+            try {
+              await github.rest.actions.createWorkflowDispatch({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                workflow_id: 'release.yml',
+                ref: version,
+                inputs: {
+                  tag: version
+                }
+              });
+              console.log('✅ release workflow 触发成功');
+            } catch (error) {
+              console.error('❌ 触发 release workflow 失败:', error.message);
+              throw error;
+            }
