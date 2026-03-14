@@ -1,0 +1,134 @@
+name: dockerize
+
+on:
+  # Git Tag 推送触发
+  push:
+    tags:
+      - '*'
+  
+  # 手动触发
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '镜像标签前缀（未填写则使用 latest）'
+        required: false
+        default: 'latest'
+
+env:
+  # 启用 BuildKit
+  DOCKER_BUILDKIT: 1
+  # 镜像仓库地址
+  REGISTRY: registry.cn-hangzhou.aliyuncs.com
+  IMAGE_NAME: sammyne/nanobot
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    
+    steps:
+      # 1. 检出代码
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      # 2. 预检查 Secrets 配置
+      - name: Check Secrets configuration
+        run: |
+          if [ -z "${{ secrets.ACR_PASSWORD }}" ]; then
+            echo "::error::ACR_PASSWORD Secret 未配置！"
+            echo ""
+            echo "请在 GitHub 仓库设置中配置以下 Secret："
+            echo "  路径: Settings > Secrets and variables > Actions > New repository secret"
+            echo "  名称: ACR_PASSWORD"
+            echo "  值: 阿里云容器镜像服务密码"
+            echo ""
+            echo "参考文档: https://help.github.com/en/actions/security-guides/encrypted-secrets"
+            exit 1
+          fi
+          echo "✅ ACR_PASSWORD 已配置"
+      
+      # 3. 获取 Git 提交短哈希
+      - name: Get Git commit short SHA
+        id: git-info
+        run: |
+          COMMIT_SHA=$(git rev-parse --short HEAD)
+          if [ -z "$COMMIT_SHA" ]; then
+            echo "::error::无法获取 Git commit ID"
+            exit 1
+          fi
+          echo "commit_sha=${COMMIT_SHA}" >> $GITHUB_OUTPUT
+          echo "✅ Git Commit ID: ${COMMIT_SHA}"
+      
+      # 4. 确定镜像标签
+      - name: Determine image tag
+        id: image-tag
+        run: |
+          # 根据触发方式确定 tag 前缀
+          if [ "${{ github.event_name }}" = "push" ]; then
+            # Tag 触发：从 ref 中提取 tag 名称（去除 refs/tags/ 前缀）
+            TAG_PREFIX="${GITHUB_REF#refs/tags/}"
+          else
+            # 手动触发：使用输入参数，未填写则默认为 latest
+            TAG_PREFIX="${{ github.event.inputs.tag }}"
+            if [ -z "$TAG_PREFIX" ]; then
+              TAG_PREFIX="latest"
+            fi
+          fi
+          
+          # 组合完整标签：${tag}-${commit-id}
+          IMAGE_TAG="${TAG_PREFIX}-${{ steps.git-info.outputs.commit_sha }}"
+          
+          echo "tag_prefix=${TAG_PREFIX}" >> $GITHUB_OUTPUT
+          echo "image_tag=${IMAGE_TAG}" >> $GITHUB_OUTPUT
+          echo "full_image=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${IMAGE_TAG}" >> $GITHUB_OUTPUT
+          
+          echo "=========================================="
+          echo "镜像构建信息"
+          echo "=========================================="
+          echo "Tag 前缀: ${TAG_PREFIX}"
+          echo "Commit ID: ${{ steps.git-info.outputs.commit_sha }}"
+          echo "镜像标签: ${IMAGE_TAG}"
+          echo "完整镜像: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${IMAGE_TAG}"
+          echo "=========================================="
+      
+      # 5. 登录阿里云镜像仓库
+      - name: Login to Alibaba Cloud Container Registry
+        run: |
+          echo "${{ secrets.ACR_PASSWORD }}" | docker login \
+            --username "黎康鲤" \
+            --password-stdin \
+            ${{ env.REGISTRY }}
+      
+      # 6. 设置 Docker Buildx（支持高级缓存特性）
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      # 7. 构建并推送镜像
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.image-tag.outputs.image_tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      
+      # 8. 登出镜像仓库（清理凭证）
+      - name: Logout from Container Registry
+        if: always()
+        run: docker logout ${{ env.REGISTRY }}
+      
+      # 9. 输出构建结果
+      - name: Build summary
+        if: success()
+        run: |
+          echo ""
+          echo "=========================================="
+          echo "✅ 构建成功！"
+          echo "=========================================="
+          echo "镜像已推送至："
+          echo "  ${{ steps.image-tag.outputs.full_image }}"
+          echo ""
+          echo "拉取命令："
+          echo "  docker pull ${{ steps.image-tag.outputs.full_image }}"
+          echo "=========================================="
