@@ -101,7 +101,47 @@ jobs:
           echo "✅ Tag ${VERSION} 不存在，可以创建"
           echo "=========================================="
       
-      # 5. 配置 Git 用户信息
+      # 5. 校验 tag 版本与 Cargo.toml 一致性
+      - name: Validate version consistency with Cargo.toml
+        id: cargo-validate
+        if: steps.version-info.outputs.matched == 'true'
+        run: |
+          VERSION="${{ steps.version-info.outputs.version }}"
+          # 去掉 v 前缀，获取纯版本号
+          VERSION_NUMBER="${VERSION#v}"
+          
+          echo "=========================================="
+          echo "Cargo.toml 版本一致性校验"
+          echo "=========================================="
+          
+          # 从 crates/cli/Cargo.toml 提取版本号
+          CARGO_VERSION=$(grep -m 1 '^version = ' crates/cli/Cargo.toml | sed 's/version = "\(.*\)"/\1/')
+          
+          if [ -z "$CARGO_VERSION" ]; then
+            echo "::error::无法从 crates/cli/Cargo.toml 提取版本号"
+            exit 1
+          fi
+          
+          echo "Tag 版本号: ${VERSION_NUMBER}"
+          echo "Cargo.toml 版本号: ${CARGO_VERSION}"
+          
+          if [ "$VERSION_NUMBER" != "$CARGO_VERSION" ]; then
+            echo ""
+            echo "::error::版本号不一致！"
+            echo ""
+            echo "Tag 版本 (${VERSION_NUMBER}) 与 crates/cli/Cargo.toml 中的版本 (${CARGO_VERSION}) 不匹配"
+            echo ""
+            echo "请确保提交消息中的版本号与 Cargo.toml 中的版本一致："
+            echo "  1. 更新 crates/cli/Cargo.toml 中的 version = \"${VERSION_NUMBER}\""
+            echo "  2. 或者使用正确的版本号: bump v${CARGO_VERSION}"
+            exit 1
+          fi
+          
+          echo ""
+          echo "✅ 版本一致性校验通过"
+          echo "=========================================="
+      
+      # 6. 配置 Git 用户信息
       - name: Configure Git user
         if: steps.version-info.outputs.matched == 'true'
         run: |
@@ -112,7 +152,7 @@ jobs:
           echo "  用户名: github-actions[bot]"
           echo "  邮箱: github-actions[bot]@users.noreply.github.com"
       
-      # 6. 创建并推送 tag（带重试机制）
+      # 7. 创建并推送 tag（带重试机制）
       - name: Create and push tag
         if: steps.version-info.outputs.matched == 'true'
         run: |
