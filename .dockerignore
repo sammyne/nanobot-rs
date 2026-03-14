@@ -1,0 +1,41 @@
+# Rust 编译产物
+target/
+
+# Git 相关文件
+.git/
+.gitignore
+.github/
+
+# IDE 和编辑器配置
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Codebuddy 计划和配置
+.codebuddy/
+
+# Python 辅助项目（非 Rust 构建所需）
+_nanobot/
+
+# XML 配置文件
+_xml/
+
+# Shell 脚本
+*.sh
+
+# 开发文档
+AGENTS.md
+CODEBUDDY.md
+README.md
+
+# Docker 相关（避免递归）
+Dockerfile*
+docker-compose*.yml
+.docker/
+
+# 其他无关文件
+*.log
+*.tmp
+.DS_Store
