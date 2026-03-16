@@ -20,6 +20,7 @@ use nanobot_tools::{Tool, ToolContext, ToolRegistry};
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
 
+use crate::utils::parse_system_message_target;
 use crate::{InboundMessage, OutboundMessage};
 
 /// ReAct 运行结果
@@ -355,6 +356,65 @@ impl<P: Provider + 'static> AgentLoop<P> {
         Ok(())
     }
 
+    /// 处理系统消息
+    /// 处理系统消息
+    ///
+    /// 系统消息是一种特殊的消息类型，其 `chat_id` 字段包含实际的目标通道和聊天 ID。
+    /// 此方法解析目标路由信息，并返回带有正确路由信息的 OutboundMessage。
+    ///
+    /// # Arguments
+    /// * `inbound` - 入站的系统消息
+    ///
+    /// # Returns
+    /// 带有解析后目标路由信息的 OutboundMessage
+    async fn process_system_message(&self, inbound: InboundMessage) -> OutboundMessage {
+        info!("处理系统消息: sender_id={}", inbound.sender_id);
+
+        // 解析目标路由信息
+        let (target_channel, target_chat_id, session_key) = parse_system_message_target(&inbound.chat_id);
+
+        // 获取或创建会话
+        let mut session = self.sessions.get_or_create(&session_key);
+
+        // 获取历史消息
+        let mut history = Vec::new();
+        session.get_history(self.config.memory_window, &mut history);
+
+        // 使用 ContextBuilder 构建消息列表
+        let messages =
+            self.context.build_messages(&history, &inbound.content, None, Some(target_channel), Some(target_chat_id));
+
+        match messages {
+            Ok(messages) => {
+                let skip = messages.len() - 1;
+
+                // 执行 ReAct 循环
+                match self.re_act(messages, target_channel, target_chat_id).await {
+                    Ok(result) => {
+                        // 保存本回合消息
+                        session.save_turn(&result.messages, skip);
+                        // 持久化会话
+                        if let Err(e) = self.sessions.save(&session) {
+                            error!("Failed to save session: {}", e);
+                        }
+
+                        OutboundMessage::new(target_channel, target_chat_id, result.content)
+                    }
+                    Err(e) => {
+                        error!("处理系统消息失败: {}", e);
+                        let error_msg = format!("处理失败: {e}");
+                        OutboundMessage::new(target_channel, target_chat_id, &error_msg)
+                    }
+                }
+            }
+            Err(e) => {
+                error!("构建系统消息失败: {}", e);
+                let error_msg = format!("构建消息失败: {e}");
+                OutboundMessage::new(target_channel, target_chat_id, &error_msg)
+            }
+        }
+    }
+
     /// 处理入站消息并返回待发送的响应
     ///
     /// # Arguments
@@ -363,6 +423,11 @@ impl<P: Provider + 'static> AgentLoop<P> {
     ///
     /// 注意：此方法总是返回 OutboundMessage，错误会被转换为错误消息内容
     async fn process_message(&self, inbound: InboundMessage, session_key: Option<&str>) -> OutboundMessage {
+        // 系统消息：从 chat_id 解析目标路由（格式为 "channel:chat_id"）
+        if inbound.channel == "system" {
+            return self.process_system_message(inbound).await;
+        }
+
         // 获取或创建会话：优先使用传入的 session_key，否则从 inbound 获取
         let session_key = session_key.map(|s| s.to_string()).unwrap_or_else(|| inbound.session_key());
         let mut session = self.sessions.get_or_create(&session_key);
@@ -391,6 +456,7 @@ impl<P: Provider + 'static> AgentLoop<P> {
                         }
 
                         // 记忆整合（在消息处理完成后）
+                        // TODO: 移除这里的逻辑
                         if let Err(e) = self.try_consolidate(&mut session).await {
                             error!("Memory consolidation failed: {}", e);
                         }
@@ -417,3 +483,6 @@ impl<P: Provider + 'static> AgentLoop<P> {
         &self.config
     }
 }
+
+#[cfg(test)]
+mod tests;
