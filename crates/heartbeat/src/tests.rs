@@ -89,16 +89,16 @@ mod error_types {
         let _ = HeartbeatError::NotRunning;
         let _ = HeartbeatError::Disabled;
         let _ = HeartbeatError::InvalidConfig("test".to_string());
-        let _ = HeartbeatError::FileReadError(std::io::Error::new(std::io::ErrorKind::NotFound, "not found"));
-        let _ = HeartbeatError::ProviderError(anyhow::anyhow!("provider error"));
-        let _ = HeartbeatError::ParseError("parse error".to_string());
-        let _ = HeartbeatError::ExecuteError(anyhow::anyhow!("execute error"));
-        let _ = HeartbeatError::NotifyError(anyhow::anyhow!("notify error"));
+        let _ = HeartbeatError::FileRead(std::io::Error::new(std::io::ErrorKind::NotFound, "not found"));
+        let _ = HeartbeatError::Provider(anyhow::anyhow!("provider error"));
+        let _ = HeartbeatError::Parse("parse error".to_string());
+        let _ = HeartbeatError::Execute(anyhow::anyhow!("execute error"));
+        let _ = HeartbeatError::Notify(anyhow::anyhow!("notify error"));
     }
 
     #[test]
     fn error_implements_std_error() {
-        let error = HeartbeatError::ParseError("test".to_string());
+        let error = HeartbeatError::Parse("test".to_string());
         assert_eq!(error.to_string(), "failed to parse LLM response: test");
     }
 }
