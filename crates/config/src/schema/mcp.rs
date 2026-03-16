@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 ///
 /// 定义 MCP 服务器的连接方式，支持 Stdio（本地进程）和 HTTP/SSE（远程服务）两种方式。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(untagged, rename_all = "lowercase")]
+#[serde(untagged, rename_all = "camelCase")]
 pub enum McpServerConfig {
     /// Stdio 方式：启动本地进程并通过标准输入/输出通信
     Stdio {

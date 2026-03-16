@@ -197,10 +197,17 @@ impl GatewayCmd {
 
     /// 加载配置
     fn load_config(&self) -> Result<Config> {
-        Config::load().context(
-            "加载配置失败。请先运行 'nanobot onboard' 进行配置，\
-             或检查 ~/.nanobot/config.json 文件是否存在。",
-        )
+        Config::load()
+            .context(
+                "加载配置失败。请先运行 'nanobot onboard' 进行配置，\
+                 或检查 ~/.nanobot/config.json 文件是否存在。",
+            )?
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "配置文件不存在。请先运行 'nanobot onboard' 进行配置，\
+                     或检查 ~/.nanobot/config.json 文件是否存在。"
+                )
+            })
     }
 
     /// 初始化 LLM Provider

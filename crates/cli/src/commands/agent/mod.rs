@@ -35,7 +35,7 @@ impl AgentCmd {
 
         // 加载配置
         let config =
-            Config::load().map_err(|e| anyhow::anyhow!("加载配置失败: {e}。请先运行 'nanobot onboard' 进行配置。"))?;
+            Config::load()?.ok_or_else(|| anyhow::anyhow!("配置文件不存在。请先运行 'nanobot onboard' 进行配置。"))?;
 
         let provider_config = config.provider();
 

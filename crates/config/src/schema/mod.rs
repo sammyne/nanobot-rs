@@ -103,26 +103,32 @@
 //! - 如果 `apiBase` 不为空，必须以 `http://` 或 `https://` 开头
 //! - 如果启用的钉钉通道必须配置 `clientId` 和 `clientSecret`
 
-use std::io::{
-    Write, {self},
-};
+use std::fs;
+use std::io::{self, Write};
 use std::os::unix::fs::PermissionsExt;
-use std::path::{Path, PathBuf};
-use std::sync::LazyLock;
-use std::{env, fs};
+use std::path::Path;
 
 use anyhow::Result;
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use tracing::{debug, info};
 
-pub mod gateway;
-pub mod mcp;
+use crate::{CONFIG_PATH, NANOBOT_HOME_DIR};
 
-pub use gateway::GatewayConfig;
+mod agent;
+mod channel;
+mod gateway;
+mod mcp;
+mod provider;
+mod tools;
 
-/// 用户主目录路径，获取失败时直接 panic
-pub static HOME: LazyLock<PathBuf> = LazyLock::new(|| env::home_dir().expect("无法获取用户主目录"));
+pub use agent::{AgentDefaults, AgentsConfig};
+pub use channel::{ChannelsConfig, DingTalkConfig};
+pub use gateway::{GatewayConfig, HeartbeatConfig};
+pub use mcp::McpServerConfig;
+pub use provider::{ProviderConfig, ProvidersConfig};
+pub use tools::ToolsConfig;
+
+pub use crate::utils::expand_tilde;
 
 /// 配置相关错误
 #[derive(Error, Debug)]
@@ -152,95 +158,15 @@ impl From<serde_json::Error> for ConfigError {
     }
 }
 
-/// 配置文件名称
-pub const CONFIG_FILE_NAME: &str = "config.json";
-
-/// 配置目录名称
-pub const CONFIG_DIR_NAME: &str = ".nanobot";
-
-/// LLM 提供者配置
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
-pub struct ProviderConfig {
-    /// API Key
-    #[serde(default)]
-    pub api_key: String,
-
-    /// API Base URL
-    #[serde(default)]
-    pub api_base: Option<String>,
-
-    /// 自定义请求头（例如 AiHubMix 的 APP-Code）
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub extra_headers: Option<std::collections::HashMap<String, String>>,
-}
-
-/// 钉钉通道配置
-///
-/// 钉钉通道的配置字段。
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
-pub struct DingTalkConfig {
-    /// 是否启用此通道
-    #[serde(default)]
-    pub enabled: bool,
-
-    /// Client ID (AppKey)
-    #[serde(default)]
-    pub client_id: String,
-
-    /// Client Secret (AppSecret)
-    #[serde(default)]
-    pub client_secret: String,
-
-    /// 允许的用户列表（为空则允许所有用户）
-    #[serde(default)]
-    pub allow_from: Vec<String>,
-}
-
-impl DingTalkConfig {
-    /// 验证配置
-    pub fn validate(&self) -> Result<(), ConfigError> {
-        if self.enabled {
-            if self.client_id.is_empty() {
-                return Err(ConfigError::Validation("启用的钉钉通道必须配置 client_id".to_string()));
-            }
-            if self.client_secret.is_empty() {
-                return Err(ConfigError::Validation("启用的钉钉通道必须配置 client_secret".to_string()));
-            }
-        }
-
-        Ok(())
-    }
-}
-
-/// 所有通道的配置集合
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
-pub struct ChannelsConfig {
-    /// 钉钉通道配置
-    #[serde(default)]
-    pub dingtalk: Option<DingTalkConfig>,
-}
-
-/// 工具配置集合
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
-pub struct ToolsConfig {
-    /// MCP 服务器配置
-    #[serde(default)]
-    pub mcp_servers: std::collections::HashMap<String, mcp::McpServerConfig>,
-}
-
 /// 应用配置（兼容 HKUDS 版本）
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct Config {
     #[serde(default)]
-    pub providers: ProvidersSection,
+    pub providers: ProvidersConfig,
 
     #[serde(default)]
-    pub agents: AgentsSection,
+    pub agents: AgentsConfig,
 
     /// 通道配置
     #[serde(default)]
@@ -255,117 +181,12 @@ pub struct Config {
     pub tools: ToolsConfig,
 }
 
-/// Providers 配置段
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
-pub struct ProvidersSection {
-    #[serde(default)]
-    pub custom: Option<ProviderConfig>,
-}
-
-/// Agents 配置段
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
-pub struct AgentsSection {
-    #[serde(default)]
-    pub defaults: AgentDefaults,
-}
-
-/// Agent 默认配置
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AgentDefaults {
-    /// 工作目录路径
-    #[serde(default = "default_workspace", deserialize_with = "deserialize_path_with_tilde")]
-    pub workspace: PathBuf,
-
-    /// 模型名称
-    #[serde(default = "default_model")]
-    pub model: String,
-
-    /// 最大 token 数
-    #[serde(default = "default_max_tokens")]
-    pub max_tokens: usize,
-
-    /// 温度参数
-    #[serde(default = "default_temperature")]
-    pub temperature: f64,
-
-    /// 最大工具迭代次数
-    #[serde(default = "default_max_tool_iterations")]
-    pub max_tool_iterations: usize,
-
-    /// 记忆窗口大小
-    #[serde(default = "default_memory_window")]
-    pub memory_window: usize,
-}
-
-fn default_workspace() -> PathBuf {
-    HOME.join(CONFIG_DIR_NAME).join("workspace")
-}
-
-fn default_model() -> String {
-    "anthropic/claude-opus-4-5".to_string()
-}
-
-fn default_max_tokens() -> usize {
-    8192
-}
-
-fn default_temperature() -> f64 {
-    0.1
-}
-
-fn default_max_tool_iterations() -> usize {
-    40
-}
-
-fn default_memory_window() -> usize {
-    100
-}
-
-/// 反序列化路径，将 ~ 替换为用户主目录
-fn deserialize_path_with_tilde<'de, D>(deserializer: D) -> Result<PathBuf, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let path: PathBuf = Deserialize::deserialize(deserializer)?;
-    Ok(expand_tilde(&path))
-}
-
-/// 将路径中的 ~ 替换为用户主目录
-fn expand_tilde(path: &Path) -> PathBuf {
-    if let Some(first) = path.iter().next()
-        && first == "~"
-    {
-        let mut new_path = HOME.clone();
-        for component in path.iter().skip(1) {
-            new_path.push(component);
-        }
-        return new_path;
-    }
-    path.to_path_buf()
-}
-
-impl Default for AgentDefaults {
-    fn default() -> Self {
-        Self {
-            workspace: default_workspace(),
-            model: default_model(),
-            max_tokens: default_max_tokens(),
-            temperature: default_temperature(),
-            max_tool_iterations: default_max_tool_iterations(),
-            memory_window: default_memory_window(),
-        }
-    }
-}
-
 impl Config {
     /// 创建新配置
     pub fn new(provider: ProviderConfig) -> Self {
         Self {
-            providers: ProvidersSection { custom: Some(provider) },
-            agents: AgentsSection::default(),
+            providers: ProvidersConfig { custom: Some(provider) },
+            agents: AgentsConfig::default(),
             channels: ChannelsConfig::default(),
             gateway: GatewayConfig::default(),
             tools: ToolsConfig::default(),
@@ -377,25 +198,20 @@ impl Config {
         if let Some(custom) = &self.providers.custom { custom.clone() } else { ProviderConfig::default() }
     }
 
-    /// 获取配置文件路径
-    pub fn config_path() -> Result<PathBuf, ConfigError> {
-        Ok(HOME.join(CONFIG_DIR_NAME).join(CONFIG_FILE_NAME))
-    }
-
-    /// 获取配置目录路径
-    pub fn config_dir() -> Result<PathBuf, ConfigError> {
-        Ok(HOME.join(CONFIG_DIR_NAME))
-    }
-
     /// 从指定路径加载配置（内部实现）
     ///
     /// 统一的配置加载逻辑，供测试和生产环境共用。
-    fn load_from_path(path: &Path) -> Result<Self, ConfigError> {
+    /// 从指定路径加载配置
+    ///
+    /// # 返回值
+    ///
+    /// - `Ok(Some(config))` - 配置文件存在且加载成功
+    /// - `Ok(None)` - 配置文件不存在
+    /// - `Err(e)` - 配置加载或验证失败
+    fn load_from_path(path: &Path) -> Result<Option<Self>, ConfigError> {
         if !path.exists() {
-            return Err(ConfigError::NotFound("配置文件不存在，请运行 'nanobot onboard' 进行配置".to_string()));
+            return Ok(None);
         }
-
-        debug!("从 {:?} 加载配置", path);
 
         // 使用 config 库统一从文件和环境变量加载配置
         // 环境变量使用 convert_case 将 snake_case 转换为 camelCase，与 JSON 文件的 key 匹配
@@ -417,9 +233,8 @@ impl Config {
         config.agents.defaults.workspace = expand_tilde(&config.agents.defaults.workspace);
 
         config.validate()?;
-        info!("配置加载成功");
 
-        Ok(config)
+        Ok(Some(config))
     }
 
     /// 从文件加载配置
@@ -441,20 +256,25 @@ impl Config {
     /// | `providers.custom.apiKey` | `NANOBOT_PROVIDERS__CUSTOM__API_KEY` |
     /// | `agents.defaults.model` | `NANOBOT_AGENTS__DEFAULTS__MODEL` |
     /// | `gateway.port` | `NANOBOT_GATEWAY__PORT` |
-    pub fn load() -> Result<Self, ConfigError> {
-        let path = Self::config_path()?;
+    ///
+    /// # 返回值
+    ///
+    /// - `Ok(Some(config))` - 配置文件存在且加载成功
+    /// - `Ok(None)` - 配置文件不存在
+    /// - `Err(e)` - 配置加载或验证失败
+    pub fn load() -> Result<Option<Self>, ConfigError> {
+        let path = CONFIG_PATH.clone();
         Self::load_from_path(&path)
     }
 
     /// 保存配置到文件
     pub fn save(&self) -> Result<(), ConfigError> {
-        let config_dir = Self::config_dir()?;
-        let config_path = Self::config_path()?;
+        let config_dir = NANOBOT_HOME_DIR.clone();
+        let config_path = CONFIG_PATH.clone();
 
         // 创建配置目录（如果不存在）
         if !config_dir.exists() {
             fs::create_dir_all(&config_dir)?;
-            debug!("创建配置目录: {:?}", config_dir);
         }
 
         // 序列化配置为 JSON
@@ -469,14 +289,7 @@ impl Config {
         file.write_all(content.as_bytes())?;
         file.sync_all()?;
 
-        info!("配置保存到 {:?}", config_path);
-
         Ok(())
-    }
-
-    /// 检查配置文件是否存在
-    pub fn exists() -> bool {
-        if let Ok(path) = Self::config_path() { path.exists() } else { false }
     }
 
     /// 验证配置
@@ -525,7 +338,6 @@ impl Config {
         // 验证 gateway 配置
         self.gateway.validate()?;
 
-        debug!("配置验证通过");
         Ok(())
     }
 
