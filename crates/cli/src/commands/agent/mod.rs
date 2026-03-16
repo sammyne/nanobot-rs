@@ -75,14 +75,9 @@ impl AgentCmd {
         let mcp_configs = config.tools.mcp_servers.clone();
 
         // 创建 AgentLoop 实例（不使用子代理功能）
-        let agent = AgentLoop::new_direct(
-            provider,
-            config.agents.defaults.clone(),
-            Some(cron_service.clone()),
-            None,
-            mcp_configs,
-        )
-        .await?;
+        let agent =
+            AgentLoop::new(provider, config.agents.defaults.clone(), Some(cron_service.clone()), None, mcp_configs)
+                .await?;
 
         match agent.process_direct(input, &self.session, None, None).await {
             Ok(response) => {
