@@ -102,6 +102,35 @@ impl Session {
     pub fn touch(&mut self) {
         self.updated_at = Utc::now();
     }
+
+    /// Maximum characters for tool result before truncation.
+    const TOOL_RESULT_MAX_CHARS: usize = 500;
+
+    /// Save messages from a conversation turn (incremental append).
+    ///
+    /// Truncates tool results exceeding `TOOL_RESULT_MAX_CHARS` to prevent
+    /// excessively long messages from being persisted.
+    ///
+    /// # Arguments
+    /// * `messages` - All messages from the conversation turn
+    /// * `skip` - Number of messages to skip (already persisted in history)
+    pub fn save_turn(&mut self, messages: &[Message], skip: usize) {
+        for msg in messages.iter().skip(skip) {
+            let msg_to_save = match msg {
+                Message::Tool { content, tool_call_id } => {
+                    let truncated = if content.len() > Self::TOOL_RESULT_MAX_CHARS {
+                        format!("{}\n... (truncated)", &content[..Self::TOOL_RESULT_MAX_CHARS])
+                    } else {
+                        content.clone()
+                    };
+                    Message::Tool { content: truncated, tool_call_id: tool_call_id.clone() }
+                }
+                other => other.clone(),
+            };
+            self.add_message(msg_to_save);
+        }
+        self.touch();
+    }
 }
 
 /// Metadata line in JSONL file.

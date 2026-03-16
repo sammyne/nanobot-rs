@@ -132,60 +132,6 @@ impl<P: Provider + 'static> AgentLoop<P> {
         Ok(Self { provider, config, sessions, tool_registry, context })
     }
 
-    /// 创建新的 AgentLoop 实例（单次消息模式）
-    ///
-    /// 直接复用 new 函数的逻辑，无需通道。
-    ///
-    /// # Arguments
-    /// * `provider` - LLM 提供者实例
-    /// * `config` - Agent 配置
-    /// * `cron_service` - 可选的 Cron 服务实例
-    /// * `subagent_manager` - 可选的子代理管理器
-    /// * `mcp_configs` - MCP 服务器配置
-    pub async fn new_direct(
-        provider: P,
-        config: AgentDefaults,
-        cron_service: Option<Arc<CronService>>,
-        subagent_manager: Option<Arc<SubagentManager<P>>>,
-        mcp_configs: std::collections::HashMap<String, McpServerConfig>,
-    ) -> Result<Self> {
-        Self::new(provider, config, cron_service, subagent_manager, mcp_configs).await
-    }
-
-    /// 获取或创建会话（与 Python 版本一致，返回 Session 对象）
-    fn get_or_create_session(&self, session_key: &str) -> nanobot_session::Session {
-        self.sessions.get_or_create(session_key)
-    }
-
-    /// 工具结果最大字符数（与 Python 版本一致）
-    const TOOL_RESULT_MAX_CHARS: usize = 500;
-
-    /// 保存本回合的消息到 session（增量追加，与 Python 版本的 _save_turn 一致）
-    ///
-    /// # Arguments
-    /// * `session` - 会话对象
-    /// * `messages` - 所有消息列表
-    /// * `skip` - 跳过的消息数量（已存在于历史中的消息）
-    fn save_turn(&self, session: &mut nanobot_session::Session, messages: &[Message], skip: usize) {
-        // 只追加新消息
-        for msg in messages.iter().skip(skip) {
-            let msg_to_save = match msg {
-                Message::Tool { content, tool_call_id } => {
-                    // 截断过长的工具结果
-                    let truncated = if content.len() > Self::TOOL_RESULT_MAX_CHARS {
-                        format!("{}\n... (truncated)", &content[..Self::TOOL_RESULT_MAX_CHARS])
-                    } else {
-                        content.clone()
-                    };
-                    Message::Tool { content: truncated, tool_call_id: tool_call_id.clone() }
-                }
-                other => other.clone(),
-            };
-            session.add_message(msg_to_save);
-        }
-        session.touch();
-    }
-
     /// 调用 LLM 并返回响应消息
     async fn call_llm(&self, messages: &[Message]) -> Result<Message> {
         debug!("调用 LLM: 消息数量={}", messages.len());
@@ -322,11 +268,11 @@ impl<P: Provider + 'static> AgentLoop<P> {
         info!("直接处理消息: {}", content);
 
         // 使用独立参数或默认值
-        let channel = channel.unwrap_or("cli").to_string();
-        let chat_id = chat_id.unwrap_or("direct").to_string();
+        let channel = channel.unwrap_or("cli");
+        let chat_id = chat_id.unwrap_or("direct");
 
         // 构造入站消息并复用 process_message
-        let inbound = InboundMessage::new(&channel, "user", &chat_id, content);
+        let inbound = InboundMessage::new(channel, "user", chat_id, content);
         let outbound = self.process_message(inbound, Some(session_key)).await;
 
         Ok(outbound.content)
@@ -365,6 +311,7 @@ impl<P: Provider + 'static> AgentLoop<P> {
 
         Ok(())
     }
+
     /// 启动后台消息处理循环
     ///
     /// 这是交互式模式的核心方法。从入站通道接收消息，
@@ -418,7 +365,7 @@ impl<P: Provider + 'static> AgentLoop<P> {
     async fn process_message(&self, inbound: InboundMessage, session_key: Option<&str>) -> OutboundMessage {
         // 获取或创建会话：优先使用传入的 session_key，否则从 inbound 获取
         let session_key = session_key.map(|s| s.to_string()).unwrap_or_else(|| inbound.session_key());
-        let mut session = self.get_or_create_session(&session_key);
+        let mut session = self.sessions.get_or_create(&session_key);
 
         let InboundMessage { channel, sender_id: _, chat_id, content, .. } = inbound;
 
@@ -437,7 +384,7 @@ impl<P: Provider + 'static> AgentLoop<P> {
                 match self.re_act(messages, &channel, &chat_id).await {
                     Ok(result) => {
                         // 保存本回合消息（增量追加，跳过已存在的消息）
-                        self.save_turn(&mut session, &result.messages, skip);
+                        session.save_turn(&result.messages, skip);
                         // 持久化会话
                         if let Err(e) = self.sessions.save(&session) {
                             error!("Failed to save session: {}", e);
