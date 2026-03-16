@@ -18,17 +18,17 @@ pub enum HeartbeatError {
     InvalidConfig(String),
 
     #[error("failed to read heartbeat file: {0}")]
-    FileReadError(#[from] std::io::Error),
+    FileRead(#[from] std::io::Error),
 
     #[error("LLM provider error: {0}")]
-    ProviderError(#[source] anyhow::Error),
+    Provider(#[source] anyhow::Error),
 
     #[error("failed to parse LLM response: {0}")]
-    ParseError(String),
+    Parse(String),
 
     #[error("execute callback error: {0}")]
-    ExecuteError(#[source] anyhow::Error),
+    Execute(#[source] anyhow::Error),
 
     #[error("notify callback error: {0}")]
-    NotifyError(#[source] anyhow::Error),
+    Notify(#[source] anyhow::Error),
 }

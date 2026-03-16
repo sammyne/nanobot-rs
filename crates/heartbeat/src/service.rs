@@ -213,7 +213,7 @@ where
                 };
                 drop(on_execute);
 
-                let result = callback(tasks).await.map_err(HeartbeatError::ExecuteError)?;
+                let result = callback(tasks).await.map_err(HeartbeatError::Execute)?;
 
                 // Check result
                 if result.trim().is_empty() {
@@ -224,7 +224,7 @@ where
                 // Notify callback if configured
                 let on_notify = self.on_notify.read().await;
                 if let Some(notify_callback) = on_notify.as_ref() {
-                    notify_callback(&result).await.map_err(HeartbeatError::NotifyError)?;
+                    notify_callback(&result).await.map_err(HeartbeatError::Notify)?;
                 }
 
                 Ok(Some(result))
@@ -260,7 +260,7 @@ where
             }
             Err(e) => {
                 error!("Failed to read HEARTBEAT.md: {}", e);
-                return Err(HeartbeatError::FileReadError(e));
+                return Err(HeartbeatError::FileRead(e));
             }
         };
 
@@ -282,7 +282,7 @@ where
 
         // Call provider (tools are already bound during initialization)
         let options = nanobot_provider::Options::default();
-        let response = self.provider.chat(&messages, &options).await.map_err(HeartbeatError::ProviderError)?;
+        let response = self.provider.chat(&messages, &options).await.map_err(HeartbeatError::Provider)?;
 
         // Parse response - Message may contain tool_calls
         let tool_calls = response.tool_calls();
@@ -295,7 +295,7 @@ where
         let tool_call = response
             .tool_calls()
             .first()
-            .ok_or_else(|| HeartbeatError::ParseError("No tool call in response".to_string()))?;
+            .ok_or_else(|| HeartbeatError::Parse("No tool call in response".to_string()))?;
 
         if tool_call.name != "heartbeat" {
             error!("Unexpected tool name: {}", tool_call.name);
@@ -305,7 +305,7 @@ where
         // Parse arguments
         let args: serde_json::Value = tool_call
             .parse_arguments()
-            .map_err(|e| HeartbeatError::ParseError(format!("Failed to parse tool arguments: {e}")))?;
+            .map_err(|e| HeartbeatError::Parse(format!("Failed to parse tool arguments: {e}")))?;
 
         let action = args.get("action").and_then(|v: &serde_json::Value| v.as_str()).unwrap_or("skip").to_string();
 

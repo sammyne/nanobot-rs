@@ -23,49 +23,49 @@ pub enum ChannelError {
 
     /// 配置错误
     #[error("配置错误: {0}")]
-    ConfigError(String),
+    Config(String),
 
     /// API 错误
     #[error("API 错误: {0}")]
-    ApiError(String),
+    Api(String),
 
     /// 认证错误
     #[error("认证错误: {0}")]
-    AuthError(String),
+    Auth(String),
 
     /// 网络错误
     #[error("网络错误: {0}")]
-    NetworkError(String),
+    Network(String),
 
     /// 权限错误
     #[error("权限错误: {0}")]
-    PermissionError(String),
+    Permission(String),
 
     /// 消息解析错误
     #[error("消息解析错误: {0}")]
-    ParseError(String),
+    Parse(String),
 
     /// IO 错误
     #[error("IO 错误: {0}")]
-    IoError(#[from] std::io::Error),
+    Io(#[from] std::io::Error),
 
     /// JSON 序列化/反序列化错误
     #[error("JSON 错误: {0}")]
-    JsonError(#[from] serde_json::Error),
+    Json(#[from] serde_json::Error),
 
     /// YAML 序列化/反序列化错误
     #[error("YAML 错误: {0}")]
-    YamlError(#[from] serde_yaml::Error),
+    Yaml(#[from] serde_yaml::Error),
 
     /// HTTP 请求错误
     #[error("HTTP 错误: {0}")]
-    HttpError(#[from] reqwest::Error),
+    Http(#[from] reqwest::Error),
 }
 
 /// 从 ConfigError 转换为 ChannelError
 impl From<nanobot_config::ConfigError> for ChannelError {
     fn from(e: nanobot_config::ConfigError) -> Self {
-        ChannelError::ConfigError(e.to_string())
+        ChannelError::Config(e.to_string())
     }
 }
 
