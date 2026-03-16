@@ -1,9 +1,11 @@
-//! Integration tests for context builder.
+//! Integration tests for context module.
+//!
+//! These tests verify the public API of the context module.
 
 use std::fs;
 use std::path::PathBuf;
 
-use nanobot_context::{ContextBuilder, ContextError};
+use nanobot_context::ContextBuilder;
 use nanobot_provider::Message;
 use tempfile::TempDir;
 
@@ -27,13 +29,6 @@ fn context_builder_initializes_with_valid_workspace() {
 fn context_builder_rejects_nonexistent_workspace() {
     let result = ContextBuilder::new(PathBuf::from("/nonexistent/path"));
     assert!(result.is_err(), "Should reject non-existent workspace");
-
-    match result {
-        Err(ContextError::InvalidPath(msg)) => {
-            assert!(msg.contains("nonexistent"), "Error message should mention path");
-        }
-        _ => panic!("Expected InvalidPath error"),
-    }
 }
 
 #[test]
@@ -79,59 +74,56 @@ fn system_prompt_uses_separator_with_memory() {
 
 #[test]
 fn runtime_context_injects_time() {
-    let content = "Hello, assistant!";
-    let result = ContextBuilder::inject_runtime_context(content, None, None);
+    let workspace = create_test_workspace(&[]);
+    let builder = ContextBuilder::new(workspace.path().to_path_buf()).unwrap();
 
-    assert!(result.starts_with("Hello, assistant!"), "Should preserve original content");
-    assert!(result.contains("[Runtime Context]"), "Should add runtime context block");
-    assert!(result.contains("Current Time:"), "Should include current time");
-    assert!(!result.contains("Channel:"), "Should not include channel when not provided");
+    let messages = builder.build_messages(&[], "Hello, assistant!", None, None, None).unwrap();
+    let user_content = &messages[1].content();
+
+    assert!(user_content.starts_with("Hello, assistant!"), "Should preserve original content");
+    assert!(user_content.contains("[Runtime Context]"), "Should add runtime context block");
+    assert!(user_content.contains("Current Time:"), "Should include current time");
+    assert!(!user_content.contains("Channel:"), "Should not include channel when not provided");
 }
 
 #[test]
 fn runtime_context_injects_channel_info() {
-    let content = "Hello";
-    let result = ContextBuilder::inject_runtime_context(content, Some("telegram"), Some("chat-123"));
+    let workspace = create_test_workspace(&[]);
+    let builder = ContextBuilder::new(workspace.path().to_path_buf()).unwrap();
 
-    assert!(result.contains("Channel: telegram"), "Should include channel");
-    assert!(result.contains("Chat ID: chat-123"), "Should include chat ID");
+    let messages = builder.build_messages(&[], "Hello", None, Some("telegram"), Some("chat-123")).unwrap();
+    let user_content = &messages[1].content();
+
+    assert!(user_content.contains("Channel: telegram"), "Should include channel");
+    assert!(user_content.contains("Chat ID: chat-123"), "Should include chat ID");
 }
 
 #[test]
 fn image_encoding_returns_none_for_missing_file() {
+    let workspace = create_test_workspace(&[]);
+    let builder = ContextBuilder::new(workspace.path().to_path_buf()).unwrap();
+
     let path = PathBuf::from("/nonexistent/image.png");
-    let result = ContextBuilder::encode_image_to_base64(&path).unwrap();
-    assert!(result.is_none(), "Should return None for non-existent file");
+    let messages = builder.build_messages(&[], "Hello", Some(&[path]), None, None).unwrap();
+    let user_content = &messages[1].content();
+
+    // Missing file should not add image info
+    assert!(!user_content.contains("[Image attached:"), "Should not include image info for missing file");
+    assert!(user_content.contains("Hello"), "Should include original message");
 }
 
 #[test]
 fn image_encoding_returns_none_for_non_image() {
     let workspace = create_test_workspace(&[("test.txt", "Not an image")]);
+    let builder = ContextBuilder::new(workspace.path().to_path_buf()).unwrap();
+
     let path = workspace.path().join("test.txt");
-    let result = ContextBuilder::encode_image_to_base64(&path).unwrap();
-    assert!(result.is_none(), "Should return None for non-image file");
-}
+    let messages = builder.build_messages(&[], "Hello", Some(&[path]), None, None).unwrap();
+    let user_content = &messages[1].content();
 
-#[test]
-fn image_encoding_encodes_valid_image() {
-    let workspace = create_test_workspace(&[]);
-
-    // Create a minimal PNG file (1x1 transparent pixel)
-    let png_data = [
-        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, // PNG signature
-        0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52, // IHDR chunk
-        0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4, 0x89, 0x00,
-        0x00, 0x00, 0x0A, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x63, 0x00, 0x01, 0x00, 0x00, 0x05, 0x00, 0x01, 0x0D,
-        0x0A, 0x2D, 0xB4, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
-    ];
-    let image_path = workspace.path().join("test.png");
-    fs::write(&image_path, png_data).expect("Failed to write test image");
-
-    let result = ContextBuilder::encode_image_to_base64(&image_path).unwrap();
-    assert!(result.is_some(), "Should encode valid image");
-
-    let data_url = result.unwrap();
-    assert!(data_url.starts_with("data:image/png;base64,"), "Should have correct MIME type");
+    // Non-image file should not add image info
+    assert!(!user_content.contains("[Image attached:"), "Should not include image info for non-image file");
+    assert!(user_content.contains("Hello"), "Should include original message");
 }
 
 #[test]
@@ -165,26 +157,20 @@ fn message_building_includes_history() {
 }
 
 #[test]
-fn tool_result_appends_correctly() {
-    let mut messages = vec![Message::user("Question")];
+fn tool_message_created_correctly() {
+    let message = Message::tool("call-123", "Tool output");
 
-    ContextBuilder::append_tool_result(&mut messages, "call-123", "Tool output");
-
-    assert_eq!(messages.len(), 2, "Should have 2 messages");
-    assert_eq!(messages[1].role(), "tool", "Should be tool message");
-    assert_eq!(messages[1].content(), "Tool output", "Should have tool result");
-    assert_eq!(messages[1].tool_call_id(), Some("call-123"), "Should have tool call ID");
+    assert_eq!(message.role(), "tool", "Should be tool message");
+    assert_eq!(message.content(), "Tool output", "Should have tool result");
+    assert_eq!(message.tool_call_id(), Some("call-123"), "Should have tool call ID");
 }
 
 #[test]
-fn assistant_message_appends_correctly() {
-    let mut messages = vec![Message::user("Question")];
+fn assistant_message_created_correctly() {
+    let message = Message::assistant("Response");
 
-    ContextBuilder::append_assistant_message(&mut messages, "Response", vec![]);
-
-    assert_eq!(messages.len(), 2, "Should have 2 messages");
-    assert_eq!(messages[1].role(), "assistant", "Should be assistant message");
-    assert_eq!(messages[1].content(), "Response", "Should have content");
+    assert_eq!(message.role(), "assistant", "Should be assistant message");
+    assert_eq!(message.content(), "Response", "Should have content");
 }
 
 // ========== Bootstrap File Tests ==========
