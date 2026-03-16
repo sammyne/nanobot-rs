@@ -2,7 +2,8 @@
 //!
 //! 提供 AgentLoop 核心实现，负责接收消息、构建上下文、调用 LLM 并返回响应。
 
-pub mod r#loop;
+mod r#loop;
+mod utils;
 
 // Re-export 主要类型
 pub use r#loop::AgentLoop;
@@ -12,6 +13,3 @@ pub use nanobot_channels::messages::{InboundMessage, OutboundMessage};
 pub use nanobot_config::AgentDefaults;
 pub use nanobot_provider::{Message, Provider};
 pub use nanobot_session::{Session, SessionManager};
-
-#[cfg(test)]
-mod tests;

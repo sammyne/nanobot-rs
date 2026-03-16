@@ -139,3 +139,6 @@ impl OutboundMessage {
         self
     }
 }
+
+#[cfg(test)]
+mod tests;

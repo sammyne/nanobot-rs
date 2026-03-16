@@ -1,6 +1,6 @@
-//! Agent 库测试
+//! AgentLoop 模块测试
 //!
-//! 按照表驱动测试规范编写的单元测试
+//! 按照 AGENTS.md 规范编写的表驱动测试
 
 use std::path::PathBuf;
 
@@ -39,7 +39,7 @@ impl Provider for MockProvider {
 }
 
 /// 创建测试用 AgentDefaults
-fn test_config() -> AgentDefaults {
+fn mock_config() -> AgentDefaults {
     AgentDefaults {
         workspace: PathBuf::from("/tmp/test"),
         model: "test-model".to_string(),
@@ -51,7 +51,7 @@ fn test_config() -> AgentDefaults {
 }
 
 /// 创建测试用 SubagentManager
-fn test_subagent_manager<P: Provider + Clone + Send + Sync + 'static>(
+fn mock_subagent_manager<P: Provider + Clone + Send + Sync + 'static>(
     provider: P,
 ) -> std::sync::Arc<SubagentManager<P>> {
     let (tx, _rx) = tokio::sync::mpsc::channel(100);
@@ -86,8 +86,8 @@ async fn process_direct_returns_expected_response() {
 
     for case in test_vector {
         let provider = MockProvider::new(case.expected_response);
-        let config = test_config();
-        let subagent_manager = test_subagent_manager(provider.clone());
+        let config = mock_config();
+        let subagent_manager = mock_subagent_manager(provider.clone());
         let agent = AgentLoop::new(provider, config, None, Some(subagent_manager), std::collections::HashMap::new())
             .await
             .expect("AgentLoop creation should succeed");
@@ -106,8 +106,8 @@ async fn process_direct_returns_expected_response() {
 #[tokio::test]
 async fn process_direct_handles_empty_message() {
     let provider = MockProvider::new("OK");
-    let config = test_config();
-    let subagent_manager = test_subagent_manager(provider.clone());
+    let config = mock_config();
+    let subagent_manager = mock_subagent_manager(provider.clone());
     let agent = AgentLoop::new(provider, config, None, Some(subagent_manager), std::collections::HashMap::new())
         .await
         .expect("AgentLoop creation should succeed");
@@ -121,8 +121,8 @@ async fn process_direct_handles_empty_message() {
 #[tokio::test]
 async fn config_returns_correct_reference() {
     let provider = MockProvider::new("test");
-    let config = test_config();
-    let subagent_manager = test_subagent_manager(provider.clone());
+    let config = mock_config();
+    let subagent_manager = mock_subagent_manager(provider.clone());
     let agent =
         AgentLoop::new(provider, config.clone(), None, Some(subagent_manager), std::collections::HashMap::new())
             .await
@@ -166,9 +166,9 @@ async fn agent_loop_uses_custom_config_values() {
     };
 
     let provider1 = MockProvider::new("test");
-    let subagent_manager1 = test_subagent_manager(provider1.clone());
+    let subagent_manager1 = mock_subagent_manager(provider1.clone());
     let provider2 = MockProvider::new("test");
-    let subagent_manager2 = test_subagent_manager(provider2.clone());
+    let subagent_manager2 = mock_subagent_manager(provider2.clone());
 
     let test_vector = [
         DefaultsCase {
@@ -208,101 +208,78 @@ async fn agent_loop_uses_custom_config_values() {
     }
 }
 
-/// 从顶级模块引入测试类型
-use crate::InboundMessage;
-/// 从顶级模块引入测试类型
-use crate::OutboundMessage;
-
-/// InboundMessage::new 构造测试
-#[test]
-fn inbound_message_construct() {
-    let msg = InboundMessage::new("cli", "user123", "chat456", "Hello, world!");
-
-    assert_eq!(msg.channel, "cli");
-    assert_eq!(msg.sender_id, "user123");
-    assert_eq!(msg.chat_id, "chat456");
-    assert_eq!(msg.content, "Hello, world!");
-    assert!(msg.metadata.is_empty());
-}
-
-/// 出站消息测试用例结构
-struct OutboundCase {
+/// 系统消息路由测试用例结构
+struct SystemMessageCase {
     name: &'static str,
-    content: &'static str,
-    is_tool_hint: bool,
-    #[allow(dead_code)]
-    expect_is_progress: bool,
-    expect_is_tool_hint: bool,
+    chat_id: &'static str,
+    expected_response: &'static str,
+    expect_channel: &'static str,
+    expect_chat_id: &'static str,
 }
 
-/// OutboundMessage::progress 构造测试
-#[test]
-fn outbound_message_progress_construct() {
+/// 验证 channel=system 的消息能被正确路由到目标通道
+#[tokio::test]
+async fn process_message_routes_system_message_correctly() {
     let test_vector = [
-        OutboundCase {
-            name: "普通进度消息",
-            content: "thinking...",
-            is_tool_hint: false,
-            expect_is_progress: true,
-            expect_is_tool_hint: false,
+        SystemMessageCase {
+            name: "系统消息 - 标准格式 telegram:12345",
+            chat_id: "telegram:12345",
+            expected_response: "System message processed",
+            expect_channel: "telegram",
+            expect_chat_id: "12345",
         },
-        OutboundCase {
-            name: "工具提示消息",
-            content: "using tool...",
-            is_tool_hint: true,
-            expect_is_progress: true,
-            expect_is_tool_hint: true,
+        SystemMessageCase {
+            name: "系统消息 - 无分隔符使用默认 cli",
+            chat_id: "simple_id",
+            expected_response: "System message processed",
+            expect_channel: "cli",
+            expect_chat_id: "simple_id",
+        },
+        SystemMessageCase {
+            name: "系统消息 - 多个冒号只分割第一个",
+            chat_id: "wechat:group:456",
+            expected_response: "System message processed",
+            expect_channel: "wechat",
+            expect_chat_id: "group:456",
         },
     ];
 
     for case in test_vector {
-        let msg = OutboundMessage::progress(case.content, case.is_tool_hint);
+        let provider = MockProvider::new(case.expected_response);
+        let config = mock_config();
+        let agent = AgentLoop::new(provider, config, None, None, std::collections::HashMap::new())
+            .await
+            .expect("AgentLoop creation should succeed");
 
-        assert!(msg.is_progress(), "case[{}]: expected is_progress() to be true", case.name);
-        assert_eq!(msg.is_tool_hint(), case.expect_is_tool_hint, "case[{}]: is_tool_hint() mismatch", case.name);
-        assert_eq!(msg.content, case.content, "case[{}]: content mismatch", case.name);
+        // 构造系统消息
+        let inbound = InboundMessage::new("system", "scheduler", case.chat_id, "Test content");
+
+        // 调用 process_message
+        let outbound = agent.process_message(inbound, None).await;
+
+        // 验证路由信息
+        assert_eq!(outbound.channel, case.expect_channel, "case[{}]: channel mismatch", case.name);
+        assert_eq!(outbound.chat_id, case.expect_chat_id, "case[{}]: chat_id mismatch", case.name);
+        assert_eq!(outbound.content, case.expected_response, "case[{}]: content mismatch", case.name);
     }
 }
 
-/// OutboundMessage::new 构造测试
-#[test]
-fn outbound_message_construct() {
-    let msg = OutboundMessage::new("telegram", "chat789", "Response content");
+/// 验证非系统消息保持原有路由信息不变
+#[tokio::test]
+async fn process_message_preserves_non_system_routing() {
+    let provider = MockProvider::new("Normal message response");
+    let config = mock_config();
+    let agent = AgentLoop::new(provider, config, None, None, std::collections::HashMap::new())
+        .await
+        .expect("AgentLoop creation should succeed");
 
-    assert_eq!(msg.channel, "telegram");
-    assert_eq!(msg.chat_id, "chat789");
-    assert_eq!(msg.content, "Response content");
-    assert!(msg.metadata.is_empty());
-}
+    // 构造普通消息
+    let inbound = InboundMessage::new("cli", "user", "chat123", "Hello");
 
-/// OutboundMessage 进度检测测试
-#[test]
-fn outbound_message_progress_detection() {
-    // 进度消息
-    let progress_msg = OutboundMessage::progress("thinking...", false);
-    assert!(progress_msg.is_progress());
+    // 调用 process_message
+    let outbound = agent.process_message(inbound, None).await;
 
-    // 普通消息
-    let mut normal_msg = OutboundMessage::new("cli", "chat1", "normal");
-    assert!(!normal_msg.is_progress());
-
-    // 手动添加进度标记
-    normal_msg.metadata.insert("_progress".to_string(), serde_json::json!(true));
-    assert!(normal_msg.is_progress());
-}
-
-/// OutboundMessage 工具提示检测测试
-#[test]
-fn outbound_message_tool_hint_detection() {
-    // 工具提示消息
-    let tool_hint = OutboundMessage::progress("using tool...", true);
-    assert!(tool_hint.is_tool_hint());
-
-    // 普通进度消息
-    let normal_progress = OutboundMessage::progress("thinking...", false);
-    assert!(!normal_progress.is_tool_hint());
-
-    // 普通消息
-    let normal_msg = OutboundMessage::new("cli", "chat1", "normal");
-    assert!(!normal_msg.is_tool_hint());
+    // 验证路由信息保持不变
+    assert_eq!(outbound.channel, "cli", "channel should be unchanged");
+    assert_eq!(outbound.chat_id, "chat123", "chat_id should be unchanged");
 }
