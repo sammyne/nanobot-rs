@@ -5,7 +5,7 @@ mod workspace;
 use anyhow::Result;
 use clap::Args;
 use dialoguer::Confirm;
-use nanobot_config::Config;
+use nanobot_config::{CONFIG_PATH, Config};
 use tracing::info;
 use workspace::initializer::WorkspaceInitializer;
 
@@ -19,31 +19,36 @@ impl OnboardCmd {
         info!("开始 onboard 配置");
 
         // 获取配置文件路径
-        let config_path = Config::config_path()?;
+        let config_path = CONFIG_PATH.clone();
 
-        let config = if config_path.exists() {
-            println!("\x1b[33mConfig already exists at {}\x1b[0m", config_path.display());
-            println!("  \x1b[1my\x1b[0m = overwrite with defaults (existing values will be lost)");
-            println!("  \x1b[1mN\x1b[0m = refresh config, keeping existing values and adding new fields");
+        let config = match Config::load()? {
+            Some(existing) => {
+                println!("\x1b[33mConfig already exists at {}\x1b[0m", config_path.display());
+                println!("  \x1b[1my\x1b[0m = overwrite with defaults (existing values will be lost)");
+                println!("  \x1b[1mN\x1b[0m = refresh config, keeping existing values and adding new fields");
 
-            let overwrite = Confirm::new().with_prompt("Overwrite?").default(false).interact()?;
+                let overwrite = Confirm::new().with_prompt("Overwrite?").default(false).interact()?;
 
-            if overwrite {
+                if overwrite {
+                    let config = Config::default();
+                    config.save()?;
+                    println!("\x1b[32m✓\x1b[0m Config reset to defaults at {}", config_path.display());
+                    config
+                } else {
+                    existing.save()?;
+                    println!(
+                        "\x1b[32m✓\x1b[0m Config refreshed at {} (existing values preserved)",
+                        config_path.display()
+                    );
+                    existing
+                }
+            }
+            None => {
                 let config = Config::default();
                 config.save()?;
-                println!("\x1b[32m✓\x1b[0m Config reset to defaults at {}", config_path.display());
-                config
-            } else {
-                let config = Config::load()?;
-                config.save()?;
-                println!("\x1b[32m✓\x1b[0m Config refreshed at {} (existing values preserved)", config_path.display());
+                println!("\x1b[32m✓\x1b[0m Created config at {}", config_path.display());
                 config
             }
-        } else {
-            let config = Config::default();
-            config.save()?;
-            println!("\x1b[32m✓\x1b[0m Created config at {}", config_path.display());
-            config
         };
 
         // 初始化工作空间

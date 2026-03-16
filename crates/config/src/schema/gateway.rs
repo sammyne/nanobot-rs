@@ -10,6 +10,7 @@ use super::ConfigError;
 ///
 /// 独立定义以避免循环依赖
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct HeartbeatConfig {
     /// 是否启用心跳服务
     #[serde(default = "default_enabled")]
@@ -48,6 +49,7 @@ impl HeartbeatConfig {
 ///
 /// 网关服务的监听参数配置。
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GatewayConfig {
     /// 监听地址
     #[serde(default = "default_host")]
