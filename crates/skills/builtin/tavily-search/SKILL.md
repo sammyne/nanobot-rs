@@ -4,6 +4,7 @@ description: "Search the web for real-time information using Tavily's LLM-optimi
 metadata:
   nanobot:
     requires:
+      bins: ["curl", "jq"]
       env: ["TAVILY_API_KEY"]
 ---
 
