@@ -113,11 +113,11 @@ jobs:
           echo "Cargo.toml 版本一致性校验"
           echo "=========================================="
           
-          # 从 crates/cli/Cargo.toml 提取版本号
-          CARGO_VERSION=$(grep -m 1 '^version = ' crates/cli/Cargo.toml | sed 's/version = "\(.*\)"/\1/')
+          # 从 crates/nanobot/Cargo.toml 提取版本号
+          CARGO_VERSION=$(grep -m 1 '^version = ' crates/nanobot/Cargo.toml | sed 's/version = "\(.*\)"/\1/')
           
           if [ -z "$CARGO_VERSION" ]; then
-            echo "::error::无法从 crates/cli/Cargo.toml 提取版本号"
+            echo "::error::无法从 crates/nanobot/Cargo.toml 提取版本号"
             exit 1
           fi
           
@@ -128,10 +128,10 @@ jobs:
             echo ""
             echo "::error::版本号不一致！"
             echo ""
-            echo "Tag 版本 (${VERSION}) 与 crates/cli/Cargo.toml 中的版本 (${CARGO_VERSION}) 不匹配"
+            echo "Tag 版本 (${VERSION}) 与 crates/nanobot/Cargo.toml 中的版本 (${CARGO_VERSION}) 不匹配"
             echo ""
             echo "请确保提交消息中的版本号与 Cargo.toml 中的版本一致："
-            echo "  1. 更新 crates/cli/Cargo.toml 中的 version = \"${VERSION}\""
+            echo "  1. 更新 crates/nanobot/Cargo.toml 中的 version = \"${VERSION}\""
             echo "  2. 或者使用正确的版本号: bump v${CARGO_VERSION}"
             exit 1
           fi
