@@ -6,7 +6,8 @@
 //! 3. 调用 LLM
 //! 4. 返回响应（通过出站消息发送端）
 
-use std::sync::Arc;
+use std::collections::HashSet;
+use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
 use nanobot_config::{AgentDefaults, McpServerConfig};
@@ -52,6 +53,9 @@ pub struct AgentLoop<P: Provider + 'static> {
 
     /// 上下文构建器（包含 MemoryStore）
     context: ContextBuilder,
+
+    /// 正在进行记忆整合的会话集合
+    consolidating: Mutex<HashSet<String>>,
 }
 
 impl<P: Provider + 'static> AgentLoop<P> {
@@ -130,7 +134,7 @@ impl<P: Provider + 'static> AgentLoop<P> {
         // Initialize ContextBuilder (which contains MemoryStore)
         let context = ContextBuilder::new(config.workspace.clone()).expect("Failed to initialize ContextBuilder");
 
-        Ok(Self { provider, config, sessions, tool_registry, context })
+        Ok(Self { provider, config, sessions, tool_registry, context, consolidating: Mutex::new(HashSet::new()) })
     }
 
     /// 调用 LLM 并返回响应消息
@@ -461,13 +465,22 @@ impl<P: Provider + 'static> AgentLoop<P> {
         session.save_turn(&result.messages, skip);
 
         // 记忆整合（在消息处理完成后）
-        // 注意：不能异步执行，避免 last_consolidated 的更新没有被后续的 save 正确保存
-        match self.try_consolidate(&session).await {
-            Ok(Some(new_last_consolidated)) => {
-                session.last_consolidated = new_last_consolidated;
+        // 条件1: 消息数量达到阈值
+        // 条件2: 会话没有进行中的整合任务
+        let window_reached = session.messages.len() - session.last_consolidated >= self.config.memory_window;
+        if window_reached && self.consolidating.lock().unwrap().insert(session_key.clone()) {
+            // 执行整合
+            let r = self.try_consolidate(&session).await;
+
+            // 清除整合状态
+            self.consolidating.lock().unwrap().remove(&session_key);
+
+            // 处理整合结果
+            match r {
+                Ok(Some(new_last_consolidated)) => session.last_consolidated = new_last_consolidated,
+                Ok(None) => {}
+                Err(e) => error!("Memory consolidation failed: {}", e),
             }
-            Ok(None) => {}
-            Err(e) => error!("Memory consolidation failed: {}", e),
         }
 
         // 持久化会话（无论整合是否成功）
