@@ -7,7 +7,7 @@
 //! 4. 返回响应（通过出站消息发送端）
 
 use std::collections::HashSet;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use anyhow::Result;
 use nanobot_config::{AgentDefaults, McpServerConfig};
@@ -18,7 +18,7 @@ use nanobot_provider::{Message, Provider};
 use nanobot_session::SessionManager;
 use nanobot_subagent::{SpawnTool, SubagentManager};
 use nanobot_tools::{Tool, ToolContext, ToolRegistry};
-use tokio::sync::mpsc;
+use tokio::sync::{Mutex, mpsc};
 use tracing::{debug, error, info, warn};
 
 use crate::utils::parse_system_message_target;
@@ -55,7 +55,7 @@ pub struct AgentLoop<P: Provider + 'static> {
     context: ContextBuilder,
 
     /// 正在进行记忆整合的会话集合
-    consolidating: Mutex<HashSet<String>>,
+    consolidating: Arc<Mutex<HashSet<String>>>,
 }
 
 impl<P: Provider + 'static> AgentLoop<P> {
@@ -134,7 +134,14 @@ impl<P: Provider + 'static> AgentLoop<P> {
         // Initialize ContextBuilder (which contains MemoryStore)
         let context = ContextBuilder::new(config.workspace.clone()).expect("Failed to initialize ContextBuilder");
 
-        Ok(Self { provider, config, sessions, tool_registry, context, consolidating: Mutex::new(HashSet::new()) })
+        Ok(Self {
+            provider,
+            config,
+            sessions,
+            tool_registry,
+            context,
+            consolidating: Arc::new(Mutex::new(HashSet::new())),
+        })
     }
 
     /// 调用 LLM 并返回响应消息
@@ -283,37 +290,6 @@ impl<P: Provider + 'static> AgentLoop<P> {
         Ok(outbound.content)
     }
 
-    /// 尝试执行记忆整合
-    ///
-    /// 检查是否需要整合，如果需要则调用 LLM 进行记忆压缩。
-    /// 整合失败不影响正常消息处理流程。
-    async fn try_consolidate(&self, session: &nanobot_session::Session) -> Result<Option<usize>> {
-        match self
-            .context
-            .memory()
-            .try_consolidate(
-                &session.messages,
-                session.last_consolidated,
-                self.provider.clone(),
-                false, // archive_all
-                self.config.memory_window,
-            )
-            .await
-        {
-            Ok(new_last_consolidated) => {
-                if new_last_consolidated != session.last_consolidated {
-                    Ok(Some(new_last_consolidated))
-                } else {
-                    Ok(None)
-                }
-            }
-            Err(e) => {
-                error!("Memory consolidation error: {}", e);
-                Err(e.into())
-            }
-        }
-    }
-
     /// 启动后台消息处理循环
     ///
     /// 这是交互式模式的核心方法。从入站通道接收消息，
@@ -439,6 +415,18 @@ impl<P: Provider + 'static> AgentLoop<P> {
         let mut history = Vec::new();
         session.get_history(self.config.memory_window, &mut history);
 
+        // 保存旧的 last_consolidated 用于判断是否发生变化
+        let old_last_consolidated = session.last_consolidated;
+
+        // 在 build_messages 之前启动异步记忆整合任务
+        let consolidation_handle = tokio::spawn(try_consolidate(
+            self.context.memory(),
+            self.provider.clone(),
+            session,
+            self.config.memory_window,
+            Arc::clone(&self.consolidating),
+        ));
+
         // 使用 ContextBuilder 构建消息列表
         let messages = match self.context.build_messages(&history, &content, None, Some(&channel), Some(&chat_id)) {
             Ok(v) => v,
@@ -461,27 +449,26 @@ impl<P: Provider + 'static> AgentLoop<P> {
             }
         };
 
-        // 保存本回合消息（增量追加，跳过已存在的消息）
-        session.save_turn(&result.messages, skip);
-
-        // 记忆整合（在消息处理完成后）
-        // 条件1: 消息数量达到阈值
-        // 条件2: 会话没有进行中的整合任务
-        let window_reached = session.messages.len() - session.last_consolidated >= self.config.memory_window;
-        if window_reached && self.consolidating.lock().unwrap().insert(session_key.clone()) {
-            // 执行整合
-            let r = self.try_consolidate(&session).await;
-
-            // 清除整合状态
-            self.consolidating.lock().unwrap().remove(&session_key);
-
-            // 处理整合结果
-            match r {
-                Ok(Some(new_last_consolidated)) => session.last_consolidated = new_last_consolidated,
-                Ok(None) => {}
-                Err(e) => error!("Memory consolidation failed: {}", e),
+        // 等待记忆整合任务完成，获取更新后的 Session
+        debug!("等待记忆整合任务完成: session_key={}", session_key);
+        match consolidation_handle.await {
+            Ok(Ok(consolidated_session)) => {
+                if consolidated_session.last_consolidated != old_last_consolidated {
+                    info!("记忆整合完成: last_consolidated={}", consolidated_session.last_consolidated);
+                }
+                session = consolidated_session;
+            }
+            Ok(Err((consolidated_session, e))) => {
+                error!("记忆整合失败: {}", e);
+                session = consolidated_session;
+            }
+            Err(e) => {
+                error!("记忆整合任务 join 失败: {}", e);
+                return OutboundMessage::new(&channel, &chat_id, format!("记忆整合任务失败: {e}"));
             }
         }
+        // ReAct 结果需要合并到整合后的 Session
+        session.save_turn(&result.messages, skip);
 
         // 持久化会话（无论整合是否成功）
         if let Err(e) = self.sessions.save(&session) {
@@ -494,6 +481,78 @@ impl<P: Provider + 'static> AgentLoop<P> {
     /// 获取配置
     pub fn config(&self) -> &AgentDefaults {
         &self.config
+    }
+}
+
+/// 执行记忆整合的异步函数
+///
+/// 此函数设计为可被 `tokio::spawn` 调用的独立异步任务。
+/// 执行完成后会自动清理整合状态。
+///
+/// # Arguments
+/// * `context` - 上下文构建器（包含 MemoryStore）
+/// * `provider` - LLM 提供者
+/// * `messages` - 会话消息列表
+/// * `last_consolidated` - 上次整合位置
+/// * `memory_window` - 记忆窗口大小
+/// * `session_key` - 会话标识（用于状态清理）
+/// * `consolidating` - 整合状态集合
+///
+/// # Returns
+/// 如果整合成功且产生了新的 last_consolidated，返回 Some(new_last)；否则返回 None
+/// 运行记忆整合任务
+///
+/// 接收 Session 所有权，执行整合后返回 Session。
+/// 无论成功与否，都会返回 Session 所有权。
+///
+/// # Returns
+/// - `Ok((session, Some(new_last)))`: 整合成功，last_consolidated 已更新
+/// - `Ok(session)`: 整合成功，session.last_consolidated 已更新
+/// - `Err((session, error))`: 整合失败，返回错误信息
+async fn try_consolidate<P: Provider + 'static>(
+    memory: Arc<nanobot_memory::MemoryStore>,
+    provider: P,
+    mut session: nanobot_session::Session,
+    memory_window: usize,
+    consolidating: Arc<Mutex<HashSet<String>>>,
+) -> Result<nanobot_session::Session, (nanobot_session::Session, anyhow::Error)> {
+    let session_key = session.key.clone();
+    let last_consolidated = session.last_consolidated;
+
+    // 条件1: 消息数量是否达到阈值
+    let window_reached = session.messages.len() - last_consolidated >= memory_window;
+    if !window_reached {
+        debug!("消息数量未达到整合阈值: session_key={}", session_key);
+        return Ok(session);
+    }
+
+    // 条件2: 会话没有进行中的整合任务
+    if !consolidating.lock().await.insert(session_key.to_string()) {
+        debug!("会话已有整合任务在进行中: session_key={}", session_key);
+        return Ok(session);
+    }
+
+    info!("启动异步记忆整合任务: session_key={}", session_key);
+
+    let messages = session.messages.clone();
+
+    let result = memory.try_consolidate(&messages, last_consolidated, provider, false, memory_window).await;
+
+    // 清除整合状态（确保在任务完成时清理）
+    consolidating.lock().await.remove(&session_key);
+
+    // 转换结果：成功时更新 session.last_consolidated
+    match result {
+        Ok(new_last) => {
+            if new_last != last_consolidated {
+                session.last_consolidated = new_last;
+            }
+            Ok(session)
+        }
+        Err(e) => {
+            error!("Memory consolidation error: {}", e);
+            Err((session, anyhow::anyhow!("Memory consolidation error: {e}")))
+        }
     }
 }
 
