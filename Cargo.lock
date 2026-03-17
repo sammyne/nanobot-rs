@@ -1513,6 +1513,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "nanobot"
+version = "0.1.1"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "clap",
+ "dialoguer",
+ "nanobot-agent",
+ "nanobot-channels",
+ "nanobot-config",
+ "nanobot-cron",
+ "nanobot-heartbeat",
+ "nanobot-provider",
+ "nanobot-session",
+ "nanobot-subagent",
+ "nanobot-templates",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "nanobot-agent"
 version = "0.1.0"
 dependencies = [
@@ -1554,30 +1578,6 @@ dependencies = [
  "tokio",
  "tokio-tungstenite 0.26.2",
  "tracing",
-]
-
-[[package]]
-name = "nanobot-cli"
-version = "0.1.1"
-dependencies = [
- "anyhow",
- "async-trait",
- "chrono",
- "clap",
- "dialoguer",
- "nanobot-agent",
- "nanobot-channels",
- "nanobot-config",
- "nanobot-cron",
- "nanobot-heartbeat",
- "nanobot-provider",
- "nanobot-session",
- "nanobot-subagent",
- "nanobot-templates",
- "tempfile",
- "tokio",
- "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]
