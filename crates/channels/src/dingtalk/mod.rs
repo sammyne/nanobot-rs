@@ -13,11 +13,11 @@ use dingtalk_stream::transport::token::TokenManager;
 use dingtalk_stream::{
     AsyncChatbotHandler, ChatbotMessage, ChatbotReplier, ClientBuilder, Credential, DingTalkStreamClient,
 };
+use nanobot_config::DingTalkConfig;
 use serde_json::Value;
 use tokio::sync::{RwLock, mpsc};
 use tracing::{debug, error, info, warn};
 
-use crate::config::DingTalkConfig;
 use crate::error::{ChannelError, ChannelResult};
 use crate::messages::{InboundMessage, OutboundMessage};
 use crate::traits::Channel;

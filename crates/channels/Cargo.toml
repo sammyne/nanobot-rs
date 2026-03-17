@@ -26,3 +26,6 @@ chrono = { workspace = true, features = ["serde"] }
 
 # 钉钉 Stream SDK
 dingtalk-stream = { workspace = true }
+
+# 飞书 SDK
+feishu-sdk = { version = "0.1.2", features = ["websocket"] }

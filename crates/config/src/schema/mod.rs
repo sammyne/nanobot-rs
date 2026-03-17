@@ -122,7 +122,7 @@ mod provider;
 mod tools;
 
 pub use agent::{AgentDefaults, AgentsConfig};
-pub use channel::{ChannelsConfig, DingTalkConfig};
+pub use channel::{ChannelsConfig, DingTalkConfig, FeishuConfig};
 pub use gateway::{GatewayConfig, HeartbeatConfig};
 pub use mcp::McpServerConfig;
 pub use provider::{ProviderConfig, ProvidersConfig};
@@ -333,6 +333,10 @@ impl Config {
         // 验证 channels 配置
         if let Some(dingtalk) = &self.channels.dingtalk {
             dingtalk.validate()?;
+        }
+
+        if let Some(feishu) = &self.channels.feishu {
+            feishu.validate()?;
         }
 
         // 验证 gateway 配置
