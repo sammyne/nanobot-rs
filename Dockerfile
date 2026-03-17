@@ -55,11 +55,11 @@ COPY Cargo.toml Cargo.lock ./
 COPY crates/ ./crates/
 
 # 编译 CLI 二进制文件
-RUN cargo build --release --bin nanobot-cli
+RUN cargo build --release --bin nanobot
 
 # 设置 HOME 环境变量并运行 onboard 命令生成默认配置文件
 ENV HOME=/root
-RUN ./target/release/nanobot-cli onboard
+RUN ./target/release/nanobot onboard
 
 # =============================================================================
 # 阶段 5: Runtime - 最终运行时镜像
@@ -86,7 +86,7 @@ RUN apt-get update && \
 RUN mkdir -p /opt/nanobot/bin
 
 # 从 builder 阶段复制编译后的二进制文件
-COPY --from=builder /app/target/release/nanobot-cli /opt/nanobot/bin/nanobot
+COPY --from=builder /app/target/release/nanobot /opt/nanobot/bin/nanobot
 
 # 从 builder 阶段复制默认配置文件到用户目录
 COPY --from=builder /root/.nanobot /root/.nanobot

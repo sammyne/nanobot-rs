@@ -35,7 +35,7 @@ pub fn init() {
 /// # 示例
 ///
 /// ```
-/// use nanobot_cli::logging::mask_sensitive;
+/// use nanobot::logging::mask_sensitive;
 ///
 /// let key = "sk-1234567890abcdefghijklmnop";
 /// let masked = mask_sensitive(key);

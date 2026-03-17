@@ -43,8 +43,8 @@ crates/
 
 成员 crate 的文件夹名称**不需要**带项目前缀。
 
-- ✅ 正确：`crates/cli/`（crate 名称为 `cli`）
-- ❌ 错误：`crates/nanobot-cli/`（不应包含项目前缀）
+- ✅ 正确：`crates/nanobot/`（crate 名称为 `nanobot`）
+- ❌ 错误：`crates/nanobot-cli/`（旧格式，不应使用）
 
 在 `Cargo.toml` 中的声明：
 
