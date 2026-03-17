@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: '镜像标签前缀（未填写则使用 alpha.{git commit id}）'
+        description: '镜像标签前缀（未填写则使用 {main 分支最新的 tag}-{git commit id}）'
         required: false
         default: ''
   
@@ -117,10 +117,14 @@ jobs:
             # 被其他 workflow 调用：使用传入的 tag 参数
             TAG_PREFIX="${{ inputs.tag }}"
           else
-            # 手动触发：使用输入参数，未填写则默认为 alpha.{commit-id}
+            # 手动触发：使用输入参数，未填写则获取 main 分支最新的 tag
             TAG_PREFIX="${{ github.event.inputs.tag }}"
             if [ -z "$TAG_PREFIX" ]; then
-              TAG_PREFIX="alpha.${{ steps.git-info.outputs.commit_sha }}"
+              # 获取所有 tags
+              git fetch --tags
+              # 获取 main 分支最新的 tag
+              TAG_PREFIX=$(git describe --tags --abbrev=0 origin/main 2>/dev/null || echo "v0.0.0")
+              echo "ℹ️  未指定 tag，使用 main 分支最新 tag: ${TAG_PREFIX}"
             fi
           fi
           
