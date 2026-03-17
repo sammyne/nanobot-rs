@@ -79,7 +79,7 @@ WORKDIR /opt/nanobot
 
 # 安装运行时依赖（如需要）
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends ca-certificates && \
+    apt-get install -y --no-install-recommends ca-certificates curl jq && \
     rm -rf /var/lib/apt/lists/*
 
 # 创建安装目录
