@@ -3,6 +3,7 @@
 //! 提供 read_file, write_file, edit_file, list_dir 等文件操作。
 
 use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
 
 use async_trait::async_trait;
 use schemars::schema::SchemaObject;
@@ -14,11 +15,11 @@ use crate::core::{Tool, ToolContext, ToolError, ToolResult, bool_param, require_
 /// 解析并验证路径
 ///
 /// 将路径解析为绝对路径，并检查是否在允许目录内
-fn resolve_path(path: &str, workspace: &str, allowed_dir: Option<&str>) -> Result<PathBuf, ToolError> {
+fn resolve_path(path: &str, workspace: &Path, allowed_dir: Option<&Path>) -> Result<PathBuf, ToolError> {
     let path_obj = Path::new(path);
 
     // 解析为绝对路径
-    let absolute = if path_obj.is_absolute() { path_obj.to_path_buf() } else { Path::new(workspace).join(path_obj) };
+    let absolute = if path_obj.is_absolute() { path_obj.to_path_buf() } else { workspace.join(path_obj) };
 
     // 规范化路径
     let canonical = absolute.canonicalize().unwrap_or_else(|_| absolute.clone());
@@ -27,15 +28,26 @@ fn resolve_path(path: &str, workspace: &str, allowed_dir: Option<&str>) -> Resul
     if let Some(allowed) = allowed_dir {
         let allowed_path = Path::new(allowed);
         if !canonical.starts_with(allowed_path) {
-            return Err(ToolError::PermissionDenied { path: path.to_string(), allowed: Some(allowed.to_string()) });
+            return Err(ToolError::PermissionDenied {
+                path: path.to_string(),
+                allowed: Some(allowed.to_string_lossy().to_string()),
+            });
         }
     }
 
     Ok(canonical)
 }
 
-/// 生成基本的路径参数 Schema
-fn path_param_schema() -> SchemaObject {
+// ==================== ReadFileTool ====================
+
+/// 读取文件工具
+pub struct ReadFileTool {
+    workspace: PathBuf,
+    allowed_dir: Option<PathBuf>,
+}
+
+/// ReadFileTool 的参数 Schema
+static READ_FILE_PARAMETERS_SCHEMA: LazyLock<SchemaObject> = LazyLock::new(|| {
     serde_json::from_value(serde_json::json!({
         "type": "object",
         "properties": {
@@ -46,16 +58,8 @@ fn path_param_schema() -> SchemaObject {
         },
         "required": ["path"]
     }))
-    .unwrap_or_default()
-}
-
-// ==================== ReadFileTool ====================
-
-/// 读取文件工具
-pub struct ReadFileTool {
-    workspace: String,
-    allowed_dir: Option<String>,
-}
+    .expect("JSON schema is valid for read_file")
+});
 
 impl ReadFileTool {
     /// 创建新的读取文件工具
@@ -63,7 +67,7 @@ impl ReadFileTool {
     /// # Arguments
     /// * `workspace` - 工作目录
     /// * `allowed_dir` - 允许访问的目录限制（可选）
-    pub fn new(workspace: impl Into<String>, allowed_dir: Option<impl Into<String>>) -> Self {
+    pub fn new(workspace: impl Into<PathBuf>, allowed_dir: Option<impl Into<PathBuf>>) -> Self {
         Self { workspace: workspace.into(), allowed_dir: allowed_dir.map(|v| v.into()) }
     }
 }
@@ -79,7 +83,7 @@ impl Tool for ReadFileTool {
     }
 
     fn parameters(&self) -> SchemaObject {
-        path_param_schema()
+        READ_FILE_PARAMETERS_SCHEMA.clone()
     }
 
     async fn execute(&self, _ctx: &ToolContext, params: serde_json::Value) -> ToolResult {
@@ -105,10 +109,29 @@ impl Tool for ReadFileTool {
 
 // ==================== WriteFileTool ====================
 
+/// WriteFileTool 的参数 Schema
+static WRITE_FILE_PARAMETERS_SCHEMA: LazyLock<SchemaObject> = LazyLock::new(|| {
+    serde_json::from_value(serde_json::json!({
+        "type": "object",
+        "properties": {
+            "path": {
+                "type": "string",
+                "description": "目标文件路径"
+            },
+            "content": {
+                "type": "string",
+                "description": "要写入的文件内容"
+            }
+        },
+        "required": ["path", "content"]
+    }))
+    .expect("JSON schema is valid for write_file")
+});
+
 /// 写入文件工具
 pub struct WriteFileTool {
-    workspace: String,
-    allowed_dir: Option<String>,
+    workspace: PathBuf,
+    allowed_dir: Option<PathBuf>,
 }
 
 impl WriteFileTool {
@@ -117,7 +140,7 @@ impl WriteFileTool {
     /// # Arguments
     /// * `workspace` - 工作目录
     /// * `allowed_dir` - 允许访问的目录限制（可选）
-    pub fn new(workspace: impl Into<String>, allowed_dir: Option<impl Into<String>>) -> Self {
+    pub fn new(workspace: impl Into<PathBuf>, allowed_dir: Option<impl Into<PathBuf>>) -> Self {
         Self { workspace: workspace.into(), allowed_dir: allowed_dir.map(|v| v.into()) }
     }
 }
@@ -133,21 +156,7 @@ impl Tool for WriteFileTool {
     }
 
     fn parameters(&self) -> SchemaObject {
-        serde_json::from_value(serde_json::json!({
-            "type": "object",
-            "properties": {
-                "path": {
-                    "type": "string",
-                    "description": "目标文件路径"
-                },
-                "content": {
-                    "type": "string",
-                    "description": "要写入的文件内容"
-                }
-            },
-            "required": ["path", "content"]
-        }))
-        .unwrap_or_default()
+        WRITE_FILE_PARAMETERS_SCHEMA.clone()
     }
 
     async fn execute(&self, _ctx: &ToolContext, params: serde_json::Value) -> ToolResult {
@@ -173,10 +182,33 @@ impl Tool for WriteFileTool {
 
 // ==================== EditFileTool ====================
 
+/// EditFileTool 的参数 Schema
+static EDIT_FILE_PARAMETERS_SCHEMA: LazyLock<SchemaObject> = LazyLock::new(|| {
+    serde_json::from_value(serde_json::json!({
+        "type": "object",
+        "properties": {
+            "path": {
+                "type": "string",
+                "description": "目标文件路径"
+            },
+            "old_text": {
+                "type": "string",
+                "description": "要替换的原始文本（需完全匹配）"
+            },
+            "new_text": {
+                "type": "string",
+                "description": "替换后的新文本"
+            }
+        },
+        "required": ["path", "old_text", "new_text"]
+    }))
+    .expect("JSON schema is valid for edit_file")
+});
+
 /// 编辑文件工具
 pub struct EditFileTool {
-    workspace: String,
-    allowed_dir: Option<String>,
+    workspace: PathBuf,
+    allowed_dir: Option<PathBuf>,
 }
 
 impl EditFileTool {
@@ -185,7 +217,7 @@ impl EditFileTool {
     /// # Arguments
     /// * `workspace` - 工作目录
     /// * `allowed_dir` - 允许访问的目录限制（可选）
-    pub fn new(workspace: impl Into<String>, allowed_dir: Option<impl Into<String>>) -> Self {
+    pub fn new(workspace: impl Into<PathBuf>, allowed_dir: Option<impl Into<PathBuf>>) -> Self {
         Self { workspace: workspace.into(), allowed_dir: allowed_dir.map(|v| v.into()) }
     }
 
@@ -214,25 +246,7 @@ impl Tool for EditFileTool {
     }
 
     fn parameters(&self) -> SchemaObject {
-        serde_json::from_value(serde_json::json!({
-            "type": "object",
-            "properties": {
-                "path": {
-                    "type": "string",
-                    "description": "目标文件路径"
-                },
-                "old_text": {
-                    "type": "string",
-                    "description": "要替换的原始文本（需完全匹配）"
-                },
-                "new_text": {
-                    "type": "string",
-                    "description": "替换后的新文本"
-                }
-            },
-            "required": ["path", "old_text", "new_text"]
-        }))
-        .unwrap_or_default()
+        EDIT_FILE_PARAMETERS_SCHEMA.clone()
     }
 
     async fn execute(&self, _ctx: &ToolContext, params: serde_json::Value) -> ToolResult {
@@ -274,10 +288,30 @@ impl Tool for EditFileTool {
 
 // ==================== ListDirTool ====================
 
+/// ListDirTool 的参数 Schema
+static LIST_DIR_PARAMETERS_SCHEMA: LazyLock<SchemaObject> = LazyLock::new(|| {
+    serde_json::from_value(serde_json::json!({
+        "type": "object",
+        "properties": {
+            "path": {
+                "type": "string",
+                "description": "目录路径"
+            },
+            "recursive": {
+                "type": "boolean",
+                "description": "是否递归列出子目录",
+                "default": false
+            }
+        },
+        "required": ["path"]
+    }))
+    .expect("JSON schema is valid for list_dir")
+});
+
 /// 列出目录工具
 pub struct ListDirTool {
-    workspace: String,
-    allowed_dir: Option<String>,
+    workspace: PathBuf,
+    allowed_dir: Option<PathBuf>,
 }
 
 impl ListDirTool {
@@ -286,7 +320,7 @@ impl ListDirTool {
     /// # Arguments
     /// * `workspace` - 工作目录
     /// * `allowed_dir` - 允许访问的目录限制（可选）
-    pub fn new(workspace: impl Into<String>, allowed_dir: Option<impl Into<String>>) -> Self {
+    pub fn new(workspace: impl Into<PathBuf>, allowed_dir: Option<impl Into<PathBuf>>) -> Self {
         Self { workspace: workspace.into(), allowed_dir: allowed_dir.map(|v| v.into()) }
     }
 
@@ -310,22 +344,7 @@ impl Tool for ListDirTool {
     }
 
     fn parameters(&self) -> SchemaObject {
-        serde_json::from_value(serde_json::json!({
-            "type": "object",
-            "properties": {
-                "path": {
-                    "type": "string",
-                    "description": "目录路径"
-                },
-                "recursive": {
-                    "type": "boolean",
-                    "description": "是否递归列出子目录",
-                    "default": false
-                }
-            },
-            "required": ["path"]
-        }))
-        .unwrap_or_default()
+        LIST_DIR_PARAMETERS_SCHEMA.clone()
     }
 
     async fn execute(&self, _ctx: &ToolContext, params: serde_json::Value) -> ToolResult {

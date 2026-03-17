@@ -9,13 +9,10 @@ description = "AI Agent tools implementation for file system and shell operation
 async-trait.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-serde_yaml.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["rt", "macros", "process", "fs", "time"] }
 tracing.workspace = true
-anyhow.workspace = true
 schemars.workspace = true
-tokio-util.workspace = true
 walkdir.workspace = true
 
 [dev-dependencies]
