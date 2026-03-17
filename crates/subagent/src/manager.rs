@@ -58,8 +58,7 @@ where
         temperature: f32,
         max_tokens: u32,
     ) -> Arc<Self> {
-        let workspace_str = workspace.to_string_lossy();
-        let tool_registry = ToolRegistry::new(&workspace_str, None);
+        let tool_registry = ToolRegistry::new(workspace.clone(), None::<String>);
 
         // 绑定工具到 provider
         let tool_definitions = tool_registry.get_definitions();

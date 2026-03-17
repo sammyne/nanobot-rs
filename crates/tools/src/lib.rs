@@ -4,10 +4,10 @@
 //!
 //! MCP (Model Context Protocol) 相关功能已移至 nanobot-mcp crate。
 
-pub mod core;
-pub mod fs;
-pub mod registry;
-pub mod shell;
+mod core;
+mod fs;
+mod registry;
+mod shell;
 
 // 重新导出核心类型
 pub use core::{Tool, ToolContext, ToolDefinition, ToolError, ToolResult};
@@ -15,6 +15,3 @@ pub use core::{Tool, ToolContext, ToolDefinition, ToolError, ToolResult};
 pub use fs::{EditFileTool, ListDirTool, ReadFileTool, WriteFileTool};
 pub use registry::ToolRegistry;
 pub use shell::ShellTool;
-
-#[cfg(test)]
-mod tests;

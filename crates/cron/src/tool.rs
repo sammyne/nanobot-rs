@@ -161,7 +161,7 @@ impl Tool for CronTool {
             serde_json::from_value(params).map_err(|e| ToolError::validation("params", e.to_string()))?;
 
         match args.action.as_str() {
-            "add" => self.handle_add(&args, ctx.channel(), ctx.chat_id()).await,
+            "add" => self.handle_add(&args, &ctx.channel, &ctx.chat_id).await,
             "list" => self.handle_list().await,
             "remove" => {
                 let job_id = args.job_id.unwrap_or_default();

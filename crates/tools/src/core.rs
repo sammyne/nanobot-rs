@@ -69,25 +69,15 @@ impl ToolError {
 #[derive(Debug, Clone)]
 pub struct ToolContext {
     /// 通道名称（如 dingtalk、wechat 等）
-    channel: String,
+    pub channel: String,
     /// 聊天标识
-    chat_id: String,
+    pub chat_id: String,
 }
 
 impl ToolContext {
     /// 创建新的工具上下文
     pub fn new(channel: impl Into<String>, chat_id: impl Into<String>) -> Self {
         Self { channel: channel.into(), chat_id: chat_id.into() }
-    }
-
-    /// 获取通道名称
-    pub fn channel(&self) -> &str {
-        &self.channel
-    }
-
-    /// 获取聊天标识
-    pub fn chat_id(&self) -> &str {
-        &self.chat_id
     }
 }
 

@@ -4,6 +4,7 @@
 
 use std::path::PathBuf;
 use std::process::Stdio;
+use std::sync::LazyLock;
 use std::time::Duration;
 
 use async_trait::async_trait;
@@ -24,9 +25,33 @@ pub struct ShellResult {
 
 /// Shell 工具
 pub struct ShellTool {
-    workspace: String,
+    workspace: PathBuf,
     default_timeout_secs: u64,
 }
+
+/// ShellTool 的参数 Schema
+static SHELL_PARAMETERS_SCHEMA: LazyLock<SchemaObject> = LazyLock::new(|| {
+    serde_json::from_value(serde_json::json!({
+        "type": "object",
+        "properties": {
+            "command": {
+                "type": "string",
+                "description": "要执行的 shell 命令"
+            },
+            "cwd": {
+                "type": "string",
+                "description": "工作目录（可选，默认为 workspace）"
+            },
+            "timeout_ms": {
+                "type": "integer",
+                "description": "超时时间（毫秒，可选，默认30秒）",
+                "default": 30000
+            }
+        },
+        "required": ["command"]
+    }))
+    .expect("JSON schema is valid for shell")
+});
 
 /// 危险命令关键字
 const DANGEROUS_PATTERNS: &[&str] = &[
@@ -41,8 +66,13 @@ const DANGEROUS_PATTERNS: &[&str] = &[
     "chmod -R 000 /",
 ];
 
+/// 截断输出
+fn truncate_output(s: String, max_len: usize) -> String {
+    if s.len() > max_len { format!("{}...(truncated, {} bytes total)", &s[..max_len], s.len()) } else { s }
+}
+
 impl ShellTool {
-    pub fn new(workspace: impl Into<String>) -> Self {
+    pub fn new(workspace: impl Into<PathBuf>) -> Self {
         Self { workspace: workspace.into(), default_timeout_secs: 30 }
     }
 
@@ -65,11 +95,6 @@ impl ShellTool {
         }
         Ok(())
     }
-
-    /// 截断输出
-    fn truncate_output(s: String, max_len: usize) -> String {
-        if s.len() > max_len { format!("{}...(truncated, {} bytes total)", &s[..max_len], s.len()) } else { s }
-    }
 }
 
 #[async_trait]
@@ -83,26 +108,7 @@ impl Tool for ShellTool {
     }
 
     fn parameters(&self) -> SchemaObject {
-        serde_json::from_value(serde_json::json!({
-            "type": "object",
-            "properties": {
-                "command": {
-                    "type": "string",
-                    "description": "要执行的 shell 命令"
-                },
-                "cwd": {
-                    "type": "string",
-                    "description": "工作目录（可选，默认为 workspace）"
-                },
-                "timeout_ms": {
-                    "type": "integer",
-                    "description": "超时时间（毫秒，可选，默认30秒）",
-                    "default": 30000
-                }
-            },
-            "required": ["command"]
-        }))
-        .unwrap_or_default()
+        SHELL_PARAMETERS_SCHEMA.clone()
     }
 
     async fn execute(&self, _ctx: &ToolContext, params: serde_json::Value) -> ToolResult {
@@ -116,7 +122,7 @@ impl Tool for ShellTool {
         Self::check_safety(&command)?;
 
         // 解析工作目录
-        let working_dir = cwd.map(PathBuf::from).unwrap_or_else(|| PathBuf::from(&self.workspace));
+        let working_dir = cwd.map(PathBuf::from).unwrap_or_else(|| self.workspace.clone());
 
         // 执行命令
         let child = Command::new("sh")
@@ -138,8 +144,8 @@ impl Tool for ShellTool {
 
         // 截断长输出
         const MAX_OUTPUT: usize = 10000;
-        let stdout = Self::truncate_output(stdout, MAX_OUTPUT);
-        let stderr = Self::truncate_output(stderr, MAX_OUTPUT);
+        let stdout = truncate_output(stdout, MAX_OUTPUT);
+        let stderr = truncate_output(stderr, MAX_OUTPUT);
 
         info!("Shell 命令完成: {} (exit_code={})", command, output.status.code().unwrap_or(-1));
 

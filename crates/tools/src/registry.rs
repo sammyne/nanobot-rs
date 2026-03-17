@@ -3,6 +3,7 @@
 //! 管理所有可用的工具，提供注册、查询和执行功能。
 
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 use serde_json::Value;
 use tracing::{error, info};
@@ -16,29 +17,32 @@ pub struct ToolRegistry {
 
 impl ToolRegistry {
     /// 创建注册表并注册默认工具
-    pub fn new(workspace: &str, allowed_dir: Option<&str>) -> Self {
+    pub fn new(workspace: impl Into<PathBuf>, allowed_dir: Option<impl Into<PathBuf>>) -> Self {
         use crate::fs::{EditFileTool, ListDirTool, ReadFileTool, WriteFileTool};
         use crate::shell::ShellTool;
 
         let mut registry = Self { tools: HashMap::new() };
 
-        let read_tool = ReadFileTool::new(workspace, allowed_dir);
+        let workspace = workspace.into();
+        let allowed_dir = allowed_dir.map(|d| d.into());
+
+        let read_tool = ReadFileTool::new(&workspace, allowed_dir.as_deref());
         info!("注册工具: {}", read_tool.name());
         registry.tools.insert(read_tool.name().to_string(), Box::new(read_tool) as Box<dyn Tool>);
 
-        let write_tool = WriteFileTool::new(workspace, allowed_dir);
+        let write_tool = WriteFileTool::new(&workspace, allowed_dir.as_deref());
         info!("注册工具: {}", write_tool.name());
         registry.tools.insert(write_tool.name().to_string(), Box::new(write_tool) as Box<dyn Tool>);
 
-        let edit_tool = EditFileTool::new(workspace, allowed_dir);
+        let edit_tool = EditFileTool::new(&workspace, allowed_dir.as_deref());
         info!("注册工具: {}", edit_tool.name());
         registry.tools.insert(edit_tool.name().to_string(), Box::new(edit_tool) as Box<dyn Tool>);
 
-        let list_tool = ListDirTool::new(workspace, allowed_dir);
+        let list_tool = ListDirTool::new(&workspace, allowed_dir.as_deref());
         info!("注册工具: {}", list_tool.name());
         registry.tools.insert(list_tool.name().to_string(), Box::new(list_tool) as Box<dyn Tool>);
 
-        let shell_tool = ShellTool::new(workspace);
+        let shell_tool = ShellTool::new(&workspace);
         info!("注册工具: {}", shell_tool.name());
         registry.tools.insert(shell_tool.name().to_string(), Box::new(shell_tool) as Box<dyn Tool>);
 

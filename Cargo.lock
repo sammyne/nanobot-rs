@@ -1669,16 +1669,13 @@ dependencies = [
 name = "nanobot-tools"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "async-trait",
  "schemars 0.8.22",
  "serde",
  "serde_json",
- "serde_yaml",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
- "tokio-util",
  "tracing",
  "walkdir",
 ]
