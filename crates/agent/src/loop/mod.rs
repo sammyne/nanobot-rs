@@ -283,7 +283,7 @@ impl<P: Provider + 'static> AgentLoop<P> {
     ///
     /// 检查是否需要整合，如果需要则调用 LLM 进行记忆压缩。
     /// 整合失败不影响正常消息处理流程。
-    async fn try_consolidate(&self, session: &mut nanobot_session::Session) -> Result<()> {
+    async fn try_consolidate(&self, session: &nanobot_session::Session) -> Result<Option<usize>> {
         match self
             .context
             .memory()
@@ -298,19 +298,16 @@ impl<P: Provider + 'static> AgentLoop<P> {
         {
             Ok(new_last_consolidated) => {
                 if new_last_consolidated != session.last_consolidated {
-                    session.last_consolidated = new_last_consolidated;
-                    // 持久化更新后的会话
-                    if let Err(e) = self.sessions.save(session) {
-                        error!("Failed to save session after consolidation: {}", e);
-                    }
+                    Ok(Some(new_last_consolidated))
+                } else {
+                    Ok(None)
                 }
             }
             Err(e) => {
                 error!("Memory consolidation error: {}", e);
+                Err(e.into())
             }
         }
-
-        Ok(())
     }
 
     /// 启动后台消息处理循环
@@ -439,43 +436,46 @@ impl<P: Provider + 'static> AgentLoop<P> {
         session.get_history(self.config.memory_window, &mut history);
 
         // 使用 ContextBuilder 构建消息列表
-        let messages = self.context.build_messages(&history, &content, None, Some(&channel), Some(&chat_id));
-
-        match messages {
-            Ok(messages) => {
-                let skip = messages.len() - 1; // 跳过系统消息 + 历史消息（不包括新消息）
-
-                // 执行 ReAct 循环（支持工具调用）
-                match self.re_act(messages, &channel, &chat_id).await {
-                    Ok(result) => {
-                        // 保存本回合消息（增量追加，跳过已存在的消息）
-                        session.save_turn(&result.messages, skip);
-                        // 持久化会话
-                        if let Err(e) = self.sessions.save(&session) {
-                            error!("Failed to save session: {}", e);
-                        }
-
-                        // 记忆整合（在消息处理完成后）
-                        // TODO: 移除这里的逻辑
-                        if let Err(e) = self.try_consolidate(&mut session).await {
-                            error!("Memory consolidation failed: {}", e);
-                        }
-
-                        OutboundMessage::new(&channel, &chat_id, &result.content)
-                    }
-                    Err(e) => {
-                        error!("处理消息失败: {}", e);
-                        let error_msg = format!("处理失败: {e}");
-                        OutboundMessage::new(&channel, &chat_id, &error_msg)
-                    }
-                }
+        let messages = match self.context.build_messages(&history, &content, None, Some(&channel), Some(&chat_id)) {
+            Ok(v) => v,
+            Err(err) => {
+                error!("构建消息失败: {err}");
+                let error_msg = format!("构建消息失败: {err}");
+                return OutboundMessage::new(&channel, &chat_id, &error_msg);
             }
+        };
+
+        let skip = messages.len() - 1; // 跳过系统消息 + 历史消息（不包括新消息）
+
+        // 执行 ReAct 循环（支持工具调用）
+        let result = match self.re_act(messages, &channel, &chat_id).await {
+            Ok(v) => v,
             Err(e) => {
-                error!("构建消息失败: {}", e);
-                let error_msg = format!("构建消息失败: {e}");
-                OutboundMessage::new(&channel, &chat_id, &error_msg)
+                error!("处理消息失败: {}", e);
+                let error_msg = format!("处理失败: {e}");
+                return OutboundMessage::new(&channel, &chat_id, &error_msg);
             }
+        };
+
+        // 保存本回合消息（增量追加，跳过已存在的消息）
+        session.save_turn(&result.messages, skip);
+
+        // 记忆整合（在消息处理完成后）
+        // 注意：不能异步执行，避免 last_consolidated 的更新没有被后续的 save 正确保存
+        match self.try_consolidate(&session).await {
+            Ok(Some(new_last_consolidated)) => {
+                session.last_consolidated = new_last_consolidated;
+            }
+            Ok(None) => {}
+            Err(e) => error!("Memory consolidation failed: {}", e),
         }
+
+        // 持久化会话（无论整合是否成功）
+        if let Err(e) = self.sessions.save(&session) {
+            error!("Failed to save session: {}", e);
+        }
+
+        OutboundMessage::new(&channel, &chat_id, &result.content)
     }
 
     /// 获取配置
