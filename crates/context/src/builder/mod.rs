@@ -11,6 +11,7 @@ const BOOTSTRAP_FILES: &[&str] = &["AGENTS.md", "SOUL.md", "USER.md", "TOOLS.md"
 
 /// Context builder implementation.
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use chrono::{DateTime, Local};
 use nanobot_memory::MemoryStore;
@@ -28,7 +29,7 @@ pub struct ContextBuilder {
     /// Canonicalized workspace path (resolved symlinks, absolute path)
     workspace: PathBuf,
     /// Memory store for accessing long-term memory
-    memory: MemoryStore,
+    memory: Arc<MemoryStore>,
     /// Skills loader for managing agent skills
     skills: SkillsLoader,
 }
@@ -36,7 +37,7 @@ pub struct ContextBuilder {
 impl ContextBuilder {
     pub fn new(workspace: PathBuf) -> Result<Self, ContextError> {
         let workspace_canonical = workspace.canonicalize()?;
-        let memory = MemoryStore::new(workspace_canonical.clone())?;
+        let memory = Arc::new(MemoryStore::new(workspace_canonical.clone())?);
         let skills = SkillsLoader::new(workspace_canonical.clone());
 
         info!("ContextBuilder initialized for workspace: {}", workspace_canonical.display());
@@ -48,8 +49,8 @@ impl ContextBuilder {
     ///
     /// This is useful for operations that need direct access to memory,
     /// such as memory consolidation.
-    pub fn memory(&self) -> &MemoryStore {
-        &self.memory
+    pub fn memory(&self) -> Arc<MemoryStore> {
+        Arc::clone(&self.memory)
     }
 
     /// Build the core identity section of the system prompt.

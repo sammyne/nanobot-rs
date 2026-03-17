@@ -357,7 +357,7 @@ async fn consolidation_triggers_when_message_window_reached() {
 
         // 验证初始状态：consolidating 应该为空
         {
-            let consolidating = agent.consolidating.lock().unwrap();
+            let consolidating = agent.consolidating.lock().await;
             assert!(consolidating.is_empty(), "case[{}]: consolidating should be empty before processing", case.name);
         }
 
@@ -369,7 +369,7 @@ async fn consolidation_triggers_when_message_window_reached() {
         // 注意：由于 try_consolidate 是同步执行的，处理完成后 consolidating 应该已经清空
         // 所以这里我们无法直接验证整合是否被触发，但可以验证不会出现死锁或 panic
         {
-            let consolidating = agent.consolidating.lock().unwrap();
+            let consolidating = agent.consolidating.lock().await;
             assert!(
                 consolidating.is_empty(),
                 "case[{}]: consolidating should be empty after processing completed",
@@ -400,7 +400,7 @@ async fn consolidation_rejected_when_already_in_progress() {
 
     // 手动标记会话正在整合
     {
-        let mut consolidating = agent.consolidating.lock().unwrap();
+        let mut consolidating = agent.consolidating.lock().await;
         consolidating.insert(session_key.to_string());
     }
 
@@ -419,7 +419,7 @@ async fn consolidation_rejected_when_already_in_progress() {
     // 验证：consolidating 应该仍然只包含我们手动添加的标记
     // （因为整合被跳过，不会清除标记）
     {
-        let consolidating = agent.consolidating.lock().unwrap();
+        let consolidating = agent.consolidating.lock().await;
         assert!(
             consolidating.contains(session_key),
             "consolidating should still contain the session key since consolidation was skipped"
@@ -428,7 +428,7 @@ async fn consolidation_rejected_when_already_in_progress() {
 
     // 清理：移除手动添加的标记
     {
-        let mut consolidating = agent.consolidating.lock().unwrap();
+        let mut consolidating = agent.consolidating.lock().await;
         consolidating.remove(session_key);
     }
 }
@@ -454,7 +454,7 @@ async fn consolidation_state_properly_managed() {
 
     // 初始状态：consolidating 应该为空
     {
-        let consolidating = agent.consolidating.lock().unwrap();
+        let consolidating = agent.consolidating.lock().await;
         assert!(consolidating.is_empty(), "consolidating should be empty initially");
     }
 
@@ -472,7 +472,7 @@ async fn consolidation_state_properly_managed() {
 
     // 整合完成后：consolidating 应该被清空
     {
-        let consolidating = agent.consolidating.lock().unwrap();
+        let consolidating = agent.consolidating.lock().await;
         assert!(consolidating.is_empty(), "consolidating should be empty after consolidation completed");
     }
 }
@@ -499,13 +499,13 @@ async fn consolidation_state_independent_across_sessions() {
 
     // 手动标记 session_1 正在整合
     {
-        let mut consolidating = agent.consolidating.lock().unwrap();
+        let mut consolidating = agent.consolidating.lock().await;
         consolidating.insert(session_key_1.to_string());
     }
 
     // 验证 session_2 不受影响
     {
-        let consolidating = agent.consolidating.lock().unwrap();
+        let consolidating = agent.consolidating.lock().await;
         assert!(consolidating.contains(session_key_1), "session_1 should be marked as consolidating");
         assert!(!consolidating.contains(session_key_2), "session_2 should NOT be marked as consolidating");
     }
@@ -524,7 +524,7 @@ async fn consolidation_state_independent_across_sessions() {
 
     // 验证：session_1 仍然标记为整合中，session_2 已完成
     {
-        let consolidating = agent.consolidating.lock().unwrap();
+        let consolidating = agent.consolidating.lock().await;
         assert!(consolidating.contains(session_key_1), "session_1 should still be marked as consolidating");
         assert!(
             !consolidating.contains(session_key_2),
@@ -534,7 +534,7 @@ async fn consolidation_state_independent_across_sessions() {
 
     // 清理
     {
-        let mut consolidating = agent.consolidating.lock().unwrap();
+        let mut consolidating = agent.consolidating.lock().await;
         consolidating.clear();
     }
 }
@@ -583,7 +583,7 @@ async fn consolidation_state_thread_safe() {
 
             // 验证：处理完成后，该会话不应该在 consolidating 中
             {
-                let consolidating = agent_clone.consolidating.lock().unwrap();
+                let consolidating = agent_clone.consolidating.lock().await;
                 assert!(
                     !consolidating.contains(&session_key),
                     "session {session_key} should not be in consolidating after completion"
@@ -601,7 +601,7 @@ async fn consolidation_state_thread_safe() {
 
     // 最终验证：所有会话都应该不在 consolidating 中
     {
-        let consolidating = agent.consolidating.lock().unwrap();
+        let consolidating = agent.consolidating.lock().await;
         assert!(consolidating.is_empty(), "consolidating should be empty after all tasks completed");
     }
 }
@@ -664,7 +664,7 @@ async fn mutex_prevents_concurrent_consolidation_same_session() {
 
     // 验证：最终 consolidating 应该为空
     {
-        let consolidating = agent.consolidating.lock().unwrap();
+        let consolidating = agent.consolidating.lock().await;
         assert!(consolidating.is_empty(), "consolidating should be empty after both tasks completed");
     }
 }
