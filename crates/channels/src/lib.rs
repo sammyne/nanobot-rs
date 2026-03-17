@@ -25,10 +25,10 @@
 //! ```rust,no_run
 //! use nanobot_channels::{
 //!     manager::ChannelManager,
-//!     config::ChannelsConfig,
 //!     messages::{InboundMessage, OutboundMessage},
 //!     traits::Channel,
 //! };
+//! use nanobot_config::ChannelsConfig;
 //! use tokio::sync::mpsc;
 //!
 //! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
@@ -49,17 +49,17 @@
 //! # }
 //! ```
 
-pub mod config;
 pub mod dingtalk;
 pub mod error;
+pub mod feishu;
 pub mod manager;
 pub mod messages;
 pub mod traits;
 
 // 重新导出常用类型
-pub use config::DingTalkConfig;
 pub use dingtalk::DingTalk;
 pub use error::{ChannelError, ChannelResult};
+pub use feishu::Feishu;
 pub use manager::ChannelManager;
 pub use messages::{InboundMessage, OutboundMessage};
 pub use traits::Channel;

@@ -5,13 +5,14 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use nanobot_config::{ChannelsConfig, DingTalkConfig, FeishuConfig};
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use tracing::{debug, error, info, warn};
 
-use crate::config::{ChannelsConfig, DingTalkConfig};
 use crate::dingtalk::DingTalk;
 use crate::error::{ChannelError, ChannelResult};
+use crate::feishu::Feishu;
 use crate::messages::{InboundMessage, OutboundMessage};
 use crate::traits::Channel;
 
@@ -82,6 +83,12 @@ impl ChannelManager {
             manager.add_dingtalk_channel(dingtalk_config.clone()).await?;
         }
 
+        if let Some(feishu_config) = &manager.config.feishu
+            && feishu_config.enabled
+        {
+            manager.add_feishu_channel(feishu_config.clone()).await?;
+        }
+
         info!("通道管理器初始化完成，共 {} 个通道", manager.channels.len());
         Ok(manager)
     }
@@ -96,6 +103,19 @@ impl ChannelManager {
         self.channels.insert(name.clone(), Arc::new(channel));
 
         info!("钉钉通道添加成功: {}", name);
+        Ok(())
+    }
+
+    /// 添加飞书通道
+    async fn add_feishu_channel(&mut self, config: FeishuConfig) -> ChannelResult<()> {
+        info!("添加飞书通道");
+
+        let channel = Feishu::new(config, self.inbound_tx.clone()).await?;
+        let name = channel.name().to_string();
+
+        self.channels.insert(name.clone(), Arc::new(channel));
+
+        info!("飞书通道添加成功: {}", name);
         Ok(())
     }
 
