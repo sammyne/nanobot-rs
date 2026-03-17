@@ -668,3 +668,185 @@ async fn mutex_prevents_concurrent_consolidation_same_session() {
         assert!(consolidating.is_empty(), "consolidating should be empty after both tasks completed");
     }
 }
+
+/// 命令处理测试用例结构
+struct CommandCase {
+    name: &'static str,
+    input: &'static str,
+    channel: &'static str,
+    chat_id: &'static str,
+    expected_response: &'static str,
+}
+
+/// 验证命令识别和响应
+#[tokio::test]
+async fn try_handle_cmd_recognizes_and_processes_commands() {
+    let test_vector = [
+        CommandCase {
+            name: "/help 命令返回帮助信息",
+            input: "/help",
+            channel: "cli",
+            chat_id: "test123",
+            expected_response: "🐈 nanobot commands:\n/new — Start a new conversation\n/help — Show available commands",
+        },
+        CommandCase {
+            name: "大小写不敏感 - /HELP",
+            input: "/HELP",
+            channel: "cli",
+            chat_id: "test123",
+            expected_response: "🐈 nanobot commands:\n/new — Start a new conversation\n/help — Show available commands",
+        },
+        CommandCase {
+            name: "大小写不敏感 - /Help",
+            input: "/Help",
+            channel: "cli",
+            chat_id: "test123",
+            expected_response: "🐈 nanobot commands:\n/new — Start a new conversation\n/help — Show available commands",
+        },
+        CommandCase {
+            name: "忽略前后空格 - /help ",
+            input: "/help ",
+            channel: "cli",
+            chat_id: "test123",
+            expected_response: "🐈 nanobot commands:\n/new — Start a new conversation\n/help — Show available commands",
+        },
+        CommandCase {
+            name: "忽略前后空格 - /HELP  ",
+            input: "/HELP  ",
+            channel: "cli",
+            chat_id: "test123",
+            expected_response: "🐈 nanobot commands:\n/new — Start a new conversation\n/help — Show available commands",
+        },
+        CommandCase {
+            name: "未知命令返回提示信息",
+            input: "/unknown",
+            channel: "cli",
+            chat_id: "test123",
+            expected_response: "❌ Unsupported command: /unknown\nTry /help for available commands",
+        },
+    ];
+
+    for case in test_vector {
+        let provider = MockProvider::new("test response");
+        let config = mock_config();
+        let agent = AgentLoop::new(provider, config, None, None, std::collections::HashMap::new())
+            .await
+            .expect("AgentLoop creation should succeed");
+
+        // 构造入站消息
+        let inbound = InboundMessage::new(case.channel, "user", case.chat_id, case.input);
+
+        // 调用 try_handle_cmd
+        let result = agent.try_handle_cmd(inbound).await;
+
+        // 验证返回 Ok（是命令）
+        let outbound = result.unwrap_or_else(|e| {
+            panic!("case[{}]: try_handle_cmd should return Ok for commands, got Err: {:?}", case.name, e)
+        });
+
+        // 验证响应内容
+        assert_eq!(outbound.content, case.expected_response, "case[{}]: response mismatch", case.name);
+
+        // 验证路由信息
+        assert_eq!(outbound.channel, case.channel, "case[{}]: channel mismatch", case.name);
+        assert_eq!(outbound.chat_id, case.chat_id, "case[{}]: chat_id mismatch", case.name);
+    }
+}
+
+/// 验证非命令消息返回 Err
+#[tokio::test]
+async fn try_handle_cmd_returns_err_for_non_commands() {
+    let provider = MockProvider::new("test response");
+    let config = mock_config();
+    let agent = AgentLoop::new(provider, config, None, None, std::collections::HashMap::new())
+        .await
+        .expect("AgentLoop creation should succeed");
+
+    let test_inputs = ["Hello", "This is a normal message", "123", "", "No slash here"];
+
+    for input in test_inputs {
+        let inbound = InboundMessage::new("cli", "user", "test123", input);
+
+        // 调用 try_handle_cmd
+        let result = agent.try_handle_cmd(inbound.clone()).await;
+
+        // 验证返回 Err（不是命令）
+        let returned_msg = result.expect_err("try_handle_cmd should return Err for non-commands");
+
+        // 验证返回的消息与输入一致
+        assert_eq!(returned_msg.content, input, "returned message content should match input");
+        assert_eq!(returned_msg.channel, inbound.channel, "returned message channel should match input");
+        assert_eq!(returned_msg.chat_id, inbound.chat_id, "returned message chat_id should match input");
+    }
+}
+
+/// 验证 process_message 正确集成命令处理
+#[tokio::test]
+async fn process_message_integrates_command_handling() {
+    let provider = MockProvider::new("test response");
+    let config = mock_config();
+    let agent = AgentLoop::new(provider, config, None, None, std::collections::HashMap::new())
+        .await
+        .expect("AgentLoop creation should succeed");
+
+    // 测试命令消息
+    let inbound_cmd = InboundMessage::new("cli", "user", "test123", "/help");
+    let outbound_cmd = agent.process_message(inbound_cmd, None).await;
+
+    assert_eq!(
+        outbound_cmd.content, "🐈 nanobot commands:\n/new — Start a new conversation\n/help — Show available commands",
+        "command should be processed and return help info"
+    );
+    assert_eq!(outbound_cmd.channel, "cli", "channel should be preserved");
+    assert_eq!(outbound_cmd.chat_id, "test123", "chat_id should be preserved");
+
+    // 测试非命令消息
+    let inbound_normal = InboundMessage::new("cli", "user", "test123", "Hello");
+    let outbound_normal = agent.process_message(inbound_normal, None).await;
+
+    assert_eq!(outbound_normal.content, "test response", "non-command should be processed by LLM");
+    assert_eq!(outbound_normal.channel, "cli", "channel should be preserved");
+    assert_eq!(outbound_normal.chat_id, "test123", "chat_id should be preserved");
+}
+
+/// 验证命令处理不创建会话历史
+#[tokio::test]
+async fn command_handling_does_not_create_session_history() {
+    let provider = MockProvider::new("test response");
+    let config = mock_config();
+    let agent = AgentLoop::new(provider, config, None, None, std::collections::HashMap::new())
+        .await
+        .expect("AgentLoop creation should succeed");
+
+    let session_key = "test:no_history";
+
+    // 处理命令消息
+    let inbound = InboundMessage::new("cli", "user", "test123", "/help");
+    let _ = agent.process_message(inbound, Some(session_key)).await;
+
+    // 验证会话没有历史消息
+    let session = agent.sessions.get_or_create(session_key);
+    assert_eq!(session.messages.len(), 0, "command should not create session history");
+}
+
+/// 验证命令处理不触发记忆整合
+#[tokio::test]
+async fn command_handling_does_not_trigger_consolidation() {
+    let provider = MockProvider::new("test response");
+    let config = mock_config();
+    let agent = AgentLoop::new(provider, config, None, None, std::collections::HashMap::new())
+        .await
+        .expect("AgentLoop creation should succeed");
+
+    let session_key = "test:no_consolidation";
+
+    // 处理命令消息
+    let inbound = InboundMessage::new("cli", "user", "test123", "/help");
+    let _ = agent.process_message(inbound, Some(session_key)).await;
+
+    // 验证 consolidating 为空（没有触发整合）
+    {
+        let consolidating = agent.consolidating.lock().await;
+        assert!(consolidating.is_empty(), "command should not trigger consolidation");
+    }
+}

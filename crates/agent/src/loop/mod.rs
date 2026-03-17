@@ -392,6 +392,40 @@ impl<P: Provider + 'static> AgentLoop<P> {
         }
     }
 
+    /// 尝试处理命令
+    ///
+    /// 检查消息是否为已知命令（以 `/` 开头），如果是则处理并返回结果。
+    ///
+    /// # Arguments
+    /// * `msg` - 入站消息
+    ///
+    /// # Returns
+    /// - `Ok(OutboundMessage)`: 是命令（支持的或不支持的），并已正确处理
+    /// - `Err(InboundMessage)`: 不是命令，返回入参的 InboundMessage 供后续处理
+    async fn try_handle_cmd(&self, msg: InboundMessage) -> Result<OutboundMessage, InboundMessage> {
+        // 检查是否以 `/` 开头
+        if !msg.content.starts_with('/') {
+            return Err(msg);
+        }
+
+        // 提取命令名称（去除前导 `/`），使用 to_lowercase() 和 trim() 处理
+        let cmd = msg.content[1..].trim().to_lowercase();
+
+        // 使用 match 结构处理已知命令，不支持的命令返回提示信息
+        let response_content = match cmd.as_str() {
+            "help" => {
+                // 返回帮助信息（与 Python 版本一致）
+                "🐈 nanobot commands:\n/new — Start a new conversation\n/help — Show available commands".to_owned()
+            }
+            // 不支持的命令返回提示信息
+            _ => {
+                format!("❌ Unsupported command: /{cmd}\nTry /help for available commands")
+            }
+        };
+
+        Ok(OutboundMessage::new(msg.channel, msg.chat_id, response_content))
+    }
+
     /// 处理入站消息并返回待发送的响应
     ///
     /// # Arguments
@@ -404,6 +438,12 @@ impl<P: Provider + 'static> AgentLoop<P> {
         if inbound.channel == "system" {
             return self.process_system_message(inbound).await;
         }
+
+        // 尝试处理命令
+        let inbound = match self.try_handle_cmd(inbound.clone()).await {
+            Ok(outbound) => return outbound,
+            Err(msg) => msg,
+        };
 
         // 获取或创建会话：优先使用传入的 session_key，否则从 inbound 获取
         let session_key = session_key.map(|s| s.to_string()).unwrap_or_else(|| inbound.session_key());
