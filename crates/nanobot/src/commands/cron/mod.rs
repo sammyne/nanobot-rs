@@ -112,7 +112,10 @@ impl ListCmd {
             let schedule = format_schedule(&job.schedule);
 
             // 截断过长的名称
-            let name = if job.name.len() > 18 { format!("{}...", &job.name[..15]) } else { job.name.clone() };
+            let name = match nanobot_utils::strings::truncate(&job.name, 15) {
+                Some(truncated) => format!("{truncated}..."),
+                None => job.name.clone(),
+            };
 
             println!("{:<8} {:<20} {:<25} {:<8} {}", job.id, name, schedule, status, next_run);
         }

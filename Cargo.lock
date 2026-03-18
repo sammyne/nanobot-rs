@@ -1529,6 +1529,7 @@ dependencies = [
  "nanobot-session",
  "nanobot-subagent",
  "nanobot-templates",
+ "nanobot-utils",
  "tempfile",
  "tokio",
  "tracing",
@@ -1581,6 +1582,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "config",
+ "nanobot-utils",
  "serde",
  "serde_json",
  "temp-env",
@@ -1699,6 +1701,7 @@ dependencies = [
  "anyhow",
  "chrono",
  "nanobot-provider",
+ "nanobot-utils",
  "parking_lot",
  "serde",
  "serde_json",
@@ -1755,6 +1758,7 @@ name = "nanobot-tools"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "nanobot-utils",
  "schemars 0.8.22",
  "serde",
  "serde_json",
@@ -1764,6 +1768,10 @@ dependencies = [
  "tracing",
  "walkdir",
 ]
+
+[[package]]
+name = "nanobot-utils"
+version = "0.1.0"
 
 [[package]]
 name = "native-tls"

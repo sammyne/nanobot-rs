@@ -12,6 +12,7 @@ serde_json.workspace = true
 chrono.workspace = true
 parking_lot.workspace = true
 nanobot-provider.workspace = true
+nanobot-utils.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

@@ -27,30 +27,3 @@ pub fn init() {
         )
         .init();
 }
-
-/// 脱敏敏感信息
-///
-/// 对 API Key 等敏感信息进行脱敏处理，保留前4位和后4位
-///
-/// # 示例
-///
-/// ```
-/// use nanobot::logging::mask_sensitive;
-///
-/// let key = "sk-1234567890abcdefghijklmnop";
-/// let masked = mask_sensitive(key);
-/// assert!(masked.starts_with("sk-1"));
-/// assert!(masked.ends_with("mnop"));
-/// ```
-pub fn mask_sensitive(s: &str) -> String {
-    if s.len() <= 8 {
-        return "*".repeat(s.len());
-    }
-
-    let start = &s[..4];
-    let end = &s[s.len() - 4..];
-    format!("{start}****{end}")
-}
-
-#[cfg(test)]
-mod tests;
