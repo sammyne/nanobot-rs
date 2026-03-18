@@ -30,8 +30,13 @@ env:
   IMAGE_NAME: sammyne/nanobot
 
 jobs:
-  build-and-push:
-    runs-on: ubuntu-latest
+  # 验证job：版本校验、参数校验、secrets检查
+  validate:
+    runs-on: ubuntu-24.04
+    outputs:
+      tag_prefix: ${{ steps.image-tag.outputs.tag_prefix }}
+      image_tag: ${{ steps.image-tag.outputs.image_tag }}
+      full_image: ${{ steps.image-tag.outputs.full_image }}
     
     steps:
       # 1. 检出代码
@@ -141,8 +146,20 @@ jobs:
           echo "镜像标签: ${IMAGE_TAG}"
           echo "完整镜像: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${IMAGE_TAG}"
           echo "=========================================="
+
+  # AMD64 构建job
+  build-amd64:
+    runs-on: ubuntu-24.04
+    needs: validate
+    outputs:
+      digest: ${{ steps.get-digest.outputs.digest }}
+    
+    steps:
+      # 1. 检出代码
+      - name: Checkout repository
+        uses: actions/checkout@v6
       
-      # 7. 登录阿里云镜像仓库
+      # 2. 登录阿里云镜像仓库
       - name: Login to Alibaba Cloud Container Registry
         run: |
           echo "${{ secrets.ACR_PASSWORD }}" | docker login \
@@ -150,32 +167,202 @@ jobs:
             --password-stdin \
             ${{ env.REGISTRY }}
       
-      # 8. 设置 QEMU（支持跨平台构建）
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
-      
-      # 9. 设置 Docker Buildx（支持高级缓存特性）
+      # 3. 设置 Docker Buildx（支持缓存导出）
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
       
-      # 10. 构建并推送镜像（多架构）
-      - name: Build and push Docker image
+      # 4. 构建并推送 AMD64 镜像
+      - name: Build and push AMD64 Docker image
+        id: build-amd64
         uses: docker/build-push-action@v7
         with:
           context: .
           file: ./Dockerfile
           push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.image-tag.outputs.image_tag }}
-          platforms: linux/amd64,linux/arm64
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          platforms: linux/amd64
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:amd64-${{ needs.validate.outputs.image_tag }}
+          cache-from: type=gha,scope=amd64
+          cache-to: type=gha,scope=amd64,mode=max
       
-      # 11. 登出镜像仓库（清理凭证）
+      # 5. 获取镜像 digest
+      - name: Get image digest
+        id: get-digest
+        run: |
+          echo "=========================================="
+          echo "获取 AMD64 镜像 Digest"
+          echo "=========================================="
+          
+          DIGEST=$(docker manifest inspect ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:amd64-${{ needs.validate.outputs.image_tag }} 2>/dev/null | jq -r '.manifests[0].digest' || echo "")
+          if [ -z "$DIGEST" ]; then
+            echo "::error::无法获取 AMD64 镜像的 digest"
+            exit 1
+          fi
+          echo "digest=${DIGEST}" >> $GITHUB_OUTPUT
+          echo "  AMD64 Digest: ${DIGEST}"
+          echo "✅ 镜像 digest 获取完成"
+          echo "=========================================="
+      
+      # 6. 登出镜像仓库（清理凭证）
       - name: Logout from Container Registry
         if: always()
         run: docker logout ${{ env.REGISTRY }}
       
-      # 12. 输出构建结果
+      # 7. 输出构建结果
+      - name: Build summary
+        if: success()
+        run: |
+          echo ""
+          echo "=========================================="
+          echo "✅ AMD64 构建成功！"
+          echo "=========================================="
+          echo "镜像已推送至："
+          echo "  ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:amd64-${{ needs.validate.outputs.image_tag }}"
+          echo "  Digest: ${{ steps.get-digest.outputs.digest }}"
+          echo "=========================================="
+
+  # ARM64 构建job
+  build-arm64:
+    runs-on: ubuntu-24.04-arm
+    needs: validate
+    outputs:
+      digest: ${{ steps.get-digest.outputs.digest }}
+    
+    steps:
+      # 1. 检出代码
+      - name: Checkout repository
+        uses: actions/checkout@v6
+      
+      # 2. 登录阿里云镜像仓库
+      - name: Login to Alibaba Cloud Container Registry
+        run: |
+          echo "${{ secrets.ACR_PASSWORD }}" | docker login \
+            --username "黎康鲤" \
+            --password-stdin \
+            ${{ env.REGISTRY }}
+      
+      # 3. 设置 Docker Buildx（支持缓存导出）
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+      
+      # 4. 构建并推送 ARM64 镜像
+      - name: Build and push ARM64 Docker image
+        id: build-arm64
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          platforms: linux/arm64
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:arm64-${{ needs.validate.outputs.image_tag }}
+          cache-from: type=gha,scope=arm64
+          cache-to: type=gha,scope=arm64,mode=max
+      
+      # 5. 获取镜像 digest
+      - name: Get image digest
+        id: get-digest
+        run: |
+          echo "=========================================="
+          echo "获取 ARM64 镜像 Digest"
+          echo "=========================================="
+          
+          DIGEST=$(docker manifest inspect ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:arm64-${{ needs.validate.outputs.image_tag }} 2>/dev/null | jq -r '.manifests[0].digest' || echo "")
+          if [ -z "$DIGEST" ]; then
+            echo "::error::无法获取 ARM64 镜像的 digest"
+            exit 1
+          fi
+          echo "digest=${DIGEST}" >> $GITHUB_OUTPUT
+          echo "  ARM64 Digest: ${DIGEST}"
+          echo "✅ 镜像 digest 获取完成"
+          echo "=========================================="
+      
+      # 6. 登出镜像仓库（清理凭证）
+      - name: Logout from Container Registry
+        if: always()
+        run: docker logout ${{ env.REGISTRY }}
+      
+      # 7. 输出构建结果
+      - name: Build summary
+        if: success()
+        run: |
+          echo ""
+          echo "=========================================="
+          echo "✅ ARM64 构建成功！"
+          echo "=========================================="
+          echo "镜像已推送至："
+          echo "  ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:arm64-${{ needs.validate.outputs.image_tag }}"
+          echo "  Digest: ${{ steps.get-digest.outputs.digest }}"
+          echo ""
+          echo "构建环境："
+          echo "  Runner: Ubuntu-24.04-arm (原生 ARM64 环境)"
+          echo "  Platform: linux/arm64"
+          echo "  适用平台: ARM64 Linux 服务器 / Apple Silicon Mac (Docker Desktop)"
+          echo "=========================================="
+
+  # 创建并推送多架构manifest
+  create-manifest:
+    runs-on: ubuntu-24.04
+    needs: [validate, build-amd64, build-arm64]
+    
+    steps:
+      # 1. 登录阿里云镜像仓库
+      - name: Login to Alibaba Cloud Container Registry
+        run: |
+          echo "${{ secrets.ACR_PASSWORD }}" | docker login \
+            --username "黎康鲤" \
+            --password-stdin \
+            ${{ env.REGISTRY }}
+      
+      # 2. 删除已存在的 manifest（避免冲突）
+      - name: Remove existing manifest
+        run: |
+          echo "=========================================="
+          echo "清理已存在的 Manifest"
+          echo "=========================================="
+          
+          # 删除主 manifest（如果存在）
+          docker manifest rm --force ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.validate.outputs.image_tag }} 2>/dev/null || echo "  主 manifest 不存在或已删除"
+          
+          echo ""
+          echo "✅ Manifest 清理完成"
+          echo "=========================================="
+      
+      # 3. 创建并推送多架构manifest
+      - name: Create and push multi-architecture manifest
+        run: |
+          echo "=========================================="
+          echo "创建多架构Manifest（使用 Digest）"
+          echo "=========================================="
+          
+          echo ""
+          echo "AMD64 镜像:"
+          echo "  标签: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:amd64-${{ needs.validate.outputs.image_tag }}"
+          echo "  Digest: ${{ needs.build-amd64.outputs.digest }}"
+          echo ""
+          echo "ARM64 镜像:"
+          echo "  标签: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:arm64-${{ needs.validate.outputs.image_tag }}"
+          echo "  Digest: ${{ needs.build-arm64.outputs.digest }}"
+          echo ""
+          
+          echo ""
+          echo "创建多架构 Manifest（使用 Digest）..."
+          # 使用 digest 创建 manifest，避免标签冲突
+          docker manifest create ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.validate.outputs.image_tag }} \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ needs.build-amd64.outputs.digest }} \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ needs.build-arm64.outputs.digest }}
+          
+          # 推送manifest
+          docker manifest push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.validate.outputs.image_tag }}
+          
+          echo ""
+          echo "✅ 多架构Manifest创建并推送成功"
+          echo "=========================================="
+      
+      # 4. 登出镜像仓库（清理凭证）
+      - name: Logout from Container Registry
+        if: always()
+        run: docker logout ${{ env.REGISTRY }}
+      
+      # 6. 输出构建结果
       - name: Build summary
         if: success()
         run: |
@@ -184,15 +371,23 @@ jobs:
           echo "✅ 构建成功！"
           echo "=========================================="
           echo "多架构镜像已推送至："
-          echo "  ${{ steps.image-tag.outputs.full_image }}"
+          echo "  ${{ needs.validate.outputs.full_image }}"
           echo ""
           echo "支持架构："
-          echo "  - linux/amd64 (x86-64)"
-          echo "  - linux/arm64 (aarch64)"
+          echo "  - linux/amd64 (x86-64) - 在 Ubuntu-24.04 上构建"
+          echo "  - linux/arm64 (aarch64) - 在 Ubuntu-24.04-arm (原生 ARM64 环境) 上构建"
+          echo ""
+          echo "适用平台："
+          echo "  - AMD64: x86_64 Linux 服务器"
+          echo "  - ARM64: ARM64 Linux 服务器 / Apple Silicon Mac (Docker Desktop)"
           echo ""
           echo "拉取命令："
-          echo "  docker pull ${{ steps.image-tag.outputs.full_image }}"
+          echo "  docker pull ${{ needs.validate.outputs.full_image }}"
           echo ""
           echo "查看镜像架构："
-          echo "  docker manifest inspect ${{ steps.image-tag.outputs.full_image }}"
+          echo "  docker manifest inspect ${{ needs.validate.outputs.full_image }}"
+          echo ""
+          echo "架构特定标签（用于调试）："
+          echo "  AMD64: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:amd64-${{ needs.validate.outputs.image_tag }}"
+          echo "  ARM64: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:arm64-${{ needs.validate.outputs.image_tag }}"
           echo "=========================================="
