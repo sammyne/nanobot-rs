@@ -150,11 +150,15 @@ jobs:
             --password-stdin \
             ${{ env.REGISTRY }}
       
-      # 8. 设置 Docker Buildx（支持高级缓存特性）
+      # 8. 设置 QEMU（支持跨平台构建）
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+      
+      # 9. 设置 Docker Buildx（支持高级缓存特性）
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
       
-      # 9. 构建并推送镜像
+      # 10. 构建并推送镜像（多架构）
       - name: Build and push Docker image
         uses: docker/build-push-action@v7
         with:
@@ -162,15 +166,16 @@ jobs:
           file: ./Dockerfile
           push: true
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.image-tag.outputs.image_tag }}
+          platforms: linux/amd64,linux/arm64
           cache-from: type=gha
           cache-to: type=gha,mode=max
       
-      # 10. 登出镜像仓库（清理凭证）
+      # 11. 登出镜像仓库（清理凭证）
       - name: Logout from Container Registry
         if: always()
         run: docker logout ${{ env.REGISTRY }}
       
-      # 11. 输出构建结果
+      # 12. 输出构建结果
       - name: Build summary
         if: success()
         run: |
@@ -178,9 +183,16 @@ jobs:
           echo "=========================================="
           echo "✅ 构建成功！"
           echo "=========================================="
-          echo "镜像已推送至："
+          echo "多架构镜像已推送至："
           echo "  ${{ steps.image-tag.outputs.full_image }}"
+          echo ""
+          echo "支持架构："
+          echo "  - linux/amd64 (x86-64)"
+          echo "  - linux/arm64 (aarch64)"
           echo ""
           echo "拉取命令："
           echo "  docker pull ${{ steps.image-tag.outputs.full_image }}"
+          echo ""
+          echo "查看镜像架构："
+          echo "  docker manifest inspect ${{ steps.image-tag.outputs.full_image }}"
           echo "=========================================="
