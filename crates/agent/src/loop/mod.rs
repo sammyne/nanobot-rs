@@ -21,6 +21,7 @@ use nanobot_tools::{Tool, ToolContext, ToolRegistry};
 use tokio::sync::{Mutex, mpsc};
 use tracing::{debug, error, info, warn};
 
+use crate::cmd::{Command, HelpCmd, NewCmd};
 use crate::utils::parse_system_message_target;
 use crate::{InboundMessage, OutboundMessage};
 
@@ -38,7 +39,7 @@ pub struct ReActResult {
 /// Agent 循环处理引擎
 ///
 /// 负责管理消息处理和 LLM 调用的完整生命周期。
-pub struct AgentLoop<P: Provider + 'static> {
+pub struct AgentLoop<P: Provider> {
     /// LLM 提供者实例
     provider: P,
 
@@ -58,7 +59,7 @@ pub struct AgentLoop<P: Provider + 'static> {
     consolidating: Arc<Mutex<HashSet<String>>>,
 }
 
-impl<P: Provider + 'static> AgentLoop<P> {
+impl<P: Provider> AgentLoop<P> {
     /// 创建新的 AgentLoop 实例
     ///
     /// tool_registry 会根据 config 中的 workspace 参数自动构造。
@@ -397,32 +398,46 @@ impl<P: Provider + 'static> AgentLoop<P> {
     ///
     /// # Arguments
     /// * `msg` - 入站消息
+    /// * `session_key` - 会话标识
     ///
     /// # Returns
     /// - `Ok(OutboundMessage)`: 是命令（支持的或不支持的），并已正确处理
     /// - `Err(InboundMessage)`: 不是命令，返回入参的 InboundMessage 供后续处理
-    async fn try_handle_cmd(&self, msg: InboundMessage) -> Result<OutboundMessage, InboundMessage> {
-        // 检查是否以 `/` 开头
-        if !msg.content.starts_with('/') {
-            return Err(msg);
-        }
-
-        // 提取命令名称（去除前导 `/`），使用 to_lowercase() 和 trim() 处理
-        let cmd = msg.content[1..].trim().to_lowercase();
-
-        // 使用 match 结构处理已知命令，不支持的命令返回提示信息
-        let response_content = match cmd.as_str() {
-            "help" => {
-                // 返回帮助信息（与 Python 版本一致）
-                "🐈 nanobot commands:\n/new — Start a new conversation\n/help — Show available commands".to_owned()
-            }
-            // 不支持的命令返回提示信息
-            _ => {
-                format!("❌ Unsupported command: /{cmd}\nTry /help for available commands")
-            }
+    async fn try_handle_cmd(&self, msg: InboundMessage, session_key: &str) -> Result<OutboundMessage, InboundMessage> {
+        let cmd = match msg.content.strip_prefix('/') {
+            None => return Err(msg),
+            Some(cmd) => cmd.trim_end().to_lowercase(),
         };
 
-        Ok(OutboundMessage::new(msg.channel, msg.chat_id, response_content))
+        // 提取 channel 和 chat_id 供后续使用
+        let channel = msg.channel.clone();
+        let chat_id = msg.chat_id.clone();
+
+        // 使用 match 结构构建对应的命令实例并执行
+        let response_content = match cmd.as_str() {
+            "help" => HelpCmd.run(msg, session_key.to_string()).await,
+            "new" => {
+                // NewCmd needs access to AgentLoop components
+                // Create NewCmd with necessary dependencies
+                let new_cmd = NewCmd::new(
+                    self.sessions.clone(),
+                    self.context.memory(),
+                    self.provider.clone(),
+                    self.consolidating.clone(),
+                );
+                new_cmd.run(msg, session_key.to_string()).await
+            }
+            // 不支持的命令返回提示信息
+            _ => Err(format!("❌ Unsupported command: /{cmd}\nTry /help for available commands")),
+        };
+
+        // 处理命令执行结果
+        let response_content = match response_content {
+            Ok(content) => content,
+            Err(error) => error,
+        };
+
+        Ok(OutboundMessage::new(&channel, &chat_id, response_content))
     }
 
     /// 处理入站消息并返回待发送的响应
@@ -438,14 +453,15 @@ impl<P: Provider + 'static> AgentLoop<P> {
             return self.process_system_message(inbound).await;
         }
 
+        // 获取或创建会话：优先使用传入的 session_key，否则从 inbound 获取
+        let session_key = session_key.map(|s| s.to_string()).unwrap_or_else(|| inbound.session_key());
+
         // 尝试处理命令
-        let inbound = match self.try_handle_cmd(inbound.clone()).await {
+        let inbound = match self.try_handle_cmd(inbound, &session_key).await {
             Ok(outbound) => return outbound,
             Err(msg) => msg,
         };
 
-        // 获取或创建会话：优先使用传入的 session_key，否则从 inbound 获取
-        let session_key = session_key.map(|s| s.to_string()).unwrap_or_else(|| inbound.session_key());
         let mut session = self.sessions.get_or_create(&session_key);
 
         let InboundMessage { channel, sender_id: _, chat_id, content, .. } = inbound;
@@ -548,7 +564,7 @@ impl<P: Provider + 'static> AgentLoop<P> {
 /// - `Ok((session, Some(new_last)))`: 整合成功，last_consolidated 已更新
 /// - `Ok(session)`: 整合成功，session.last_consolidated 已更新
 /// - `Err((session, error))`: 整合失败，返回错误信息
-async fn try_consolidate<P: Provider + 'static>(
+async fn try_consolidate<P: Provider>(
     memory: Arc<nanobot_memory::MemoryStore>,
     provider: P,
     mut session: nanobot_session::Session,
