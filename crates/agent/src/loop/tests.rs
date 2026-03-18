@@ -30,7 +30,24 @@ impl MockProvider {
 #[async_trait]
 impl Provider for MockProvider {
     async fn chat(&self, _messages: &[Message], _options: &nanobot_provider::Options) -> anyhow::Result<Message> {
-        Ok(Message::assistant(&self.response))
+        // 检查是否绑定了 save_memory 工具
+        let has_save_memory = self.bound_tools.iter().any(|t| t.name == "save_memory");
+
+        if has_save_memory {
+            // 返回带工具调用的消息
+            let tool_call = nanobot_provider::ToolCall::new(
+                "call_123",
+                "save_memory",
+                serde_json::json!({
+                    "history_entry": "[2026-03-19 10:00] Test consolidation entry",
+                    "memory_update": "Updated long-term memory"
+                }),
+            );
+            Ok(Message::assistant_with_tools("Memory saved", vec![tool_call]))
+        } else {
+            // 返回普通响应
+            Ok(Message::assistant(&self.response))
+        }
     }
 
     fn bind_tools(&mut self, tools: Vec<ToolDefinition>) {
@@ -51,9 +68,7 @@ fn mock_config() -> AgentDefaults {
 }
 
 /// 创建测试用 SubagentManager
-fn mock_subagent_manager<P: Provider + Clone + Send + Sync + 'static>(
-    provider: P,
-) -> std::sync::Arc<SubagentManager<P>> {
+fn mock_subagent_manager<P: Provider>(provider: P) -> std::sync::Arc<SubagentManager<P>> {
     let (tx, _rx) = tokio::sync::mpsc::channel(100);
     SubagentManager::new(provider.clone(), PathBuf::from("/tmp/test"), tx, 0.5, 1024)
 }
@@ -735,9 +750,10 @@ async fn try_handle_cmd_recognizes_and_processes_commands() {
 
         // 构造入站消息
         let inbound = InboundMessage::new(case.channel, "user", case.chat_id, case.input);
+        let session_key = format!("{}:{}", case.channel, case.chat_id);
 
         // 调用 try_handle_cmd
-        let result = agent.try_handle_cmd(inbound).await;
+        let result = agent.try_handle_cmd(inbound, session_key.as_str()).await;
 
         // 验证返回 Ok（是命令）
         let outbound = result.unwrap_or_else(|e| {
@@ -768,7 +784,7 @@ async fn try_handle_cmd_returns_err_for_non_commands() {
         let inbound = InboundMessage::new("cli", "user", "test123", input);
 
         // 调用 try_handle_cmd
-        let result = agent.try_handle_cmd(inbound.clone()).await;
+        let result = agent.try_handle_cmd(inbound.clone(), "cli:test123").await;
 
         // 验证返回 Err（不是命令）
         let returned_msg = result.expect_err("try_handle_cmd should return Err for non-commands");
@@ -848,5 +864,206 @@ async fn command_handling_does_not_trigger_consolidation() {
     {
         let consolidating = agent.consolidating.lock().await;
         assert!(consolidating.is_empty(), "command should not trigger consolidation");
+    }
+}
+
+/// /new 命令测试用例结构
+struct NewCommandCase {
+    name: &'static str,
+    input: &'static str,
+    channel: &'static str,
+    chat_id: &'static str,
+    expected_response: &'static str,
+}
+
+/// 验证 /new 命令的识别和处理
+#[tokio::test]
+async fn try_handle_cmd_recognizes_new_command() {
+    let test_vector = [
+        NewCommandCase {
+            name: "/new 命令返回成功消息",
+            input: "/new",
+            channel: "cli",
+            chat_id: "test123",
+            expected_response: "New session started.",
+        },
+        NewCommandCase {
+            name: "大小写不敏感 - /NEW",
+            input: "/NEW",
+            channel: "cli",
+            chat_id: "test123",
+            expected_response: "New session started.",
+        },
+        NewCommandCase {
+            name: "大小写不敏感 - /New",
+            input: "/New",
+            channel: "cli",
+            chat_id: "test123",
+            expected_response: "New session started.",
+        },
+        NewCommandCase {
+            name: "忽略前后空格 - /new ",
+            input: "/new ",
+            channel: "cli",
+            chat_id: "test123",
+            expected_response: "New session started.",
+        },
+    ];
+
+    for case in test_vector {
+        let provider = MockProvider::new("test response");
+        let config = mock_config();
+        let agent = AgentLoop::new(provider, config, None, None, std::collections::HashMap::new())
+            .await
+            .expect("AgentLoop creation should succeed");
+
+        // 构造入站消息
+        let inbound = InboundMessage::new(case.channel, "user", case.chat_id, case.input);
+        let session_key = format!("{}:{}", case.channel, case.chat_id);
+
+        // 调用 try_handle_cmd
+        let result = agent.try_handle_cmd(inbound, session_key.as_str()).await;
+
+        // 验证返回 Ok（是命令）
+        let outbound = result.unwrap_or_else(|e| {
+            panic!("case[{}]: try_handle_cmd should return Ok for /new command, got Err: {:?}", case.name, e)
+        });
+
+        // 验证响应内容
+        assert_eq!(outbound.content, case.expected_response, "case[{}]: response mismatch", case.name);
+
+        // 验证路由信息
+        assert_eq!(outbound.channel, case.channel, "case[{}]: channel mismatch", case.name);
+        assert_eq!(outbound.chat_id, case.chat_id, "case[{}]: chat_id mismatch", case.name);
+    }
+}
+
+/// 验证 /new 命令清除会话历史
+#[tokio::test]
+async fn new_command_clears_session_history() {
+    let provider = MockProvider::new("test response");
+    let config = mock_config();
+    let agent = AgentLoop::new(provider, config, None, None, std::collections::HashMap::new())
+        .await
+        .expect("AgentLoop creation should succeed");
+
+    let session_key = "test:clear_history";
+    let channel = "cli";
+    let chat_id = "clear_test";
+
+    // 添加一些消息到会话
+    let mut session = agent.sessions.get_or_create(session_key);
+    for i in 0..5 {
+        session.add_message(Message::user(format!("Message {i}")));
+        session.add_message(Message::assistant(format!("Response {i}")));
+    }
+    session.last_consolidated = 3;
+    agent.sessions.save(&session).expect("Failed to save session");
+
+    // 验证会话有消息
+    let session_before = agent.sessions.get_or_create(session_key);
+    assert_eq!(session_before.messages.len(), 10, "session should have messages before /new");
+    assert_eq!(session_before.last_consolidated, 3, "last_consolidated should be 3 before /new");
+
+    // 处理 /new 命令
+    let inbound = InboundMessage::new(channel, "user", chat_id, "/new");
+    let _ = agent.process_message(inbound, Some(session_key)).await;
+
+    // 验证会话被清除
+    let session_after = agent.sessions.get_or_create(session_key);
+    assert_eq!(session_after.messages.len(), 0, "session should be cleared after /new");
+    assert_eq!(session_after.last_consolidated, 0, "last_consolidated should be 0 after /new");
+}
+
+/// 验证 /new 命令处理并发请求
+#[tokio::test]
+async fn new_command_handles_concurrent_requests() {
+    use std::sync::Arc;
+
+    let provider = MockProvider::new("test response");
+    let config = mock_config();
+    let agent = Arc::new(
+        AgentLoop::new(provider, config, None, None, std::collections::HashMap::new())
+            .await
+            .expect("AgentLoop creation should succeed"),
+    );
+
+    let session_key = "test:concurrent_new";
+    let channel = "cli";
+    let chat_id = "concurrent_test";
+
+    // 添加消息到会话
+    let mut session = agent.sessions.get_or_create(session_key);
+    for i in 0..5 {
+        session.add_message(Message::user(format!("Message {i}")));
+        session.add_message(Message::assistant(format!("Response {i}")));
+    }
+    agent.sessions.save(&session).expect("Failed to save session");
+
+    // 创建多个并发 /new 命令请求
+    let mut handles = Vec::new();
+    for _ in 0..3 {
+        let agent_clone = Arc::clone(&agent);
+        let session_key_clone = session_key.to_string();
+        let channel_clone = channel.to_string();
+        let chat_id_clone = chat_id.to_string();
+
+        let handle = tokio::spawn(async move {
+            let inbound = InboundMessage::new(&channel_clone, "user", &chat_id_clone, "/new");
+            agent_clone.process_message(inbound, Some(&session_key_clone)).await
+        });
+
+        handles.push(handle);
+    }
+
+    // 等待所有任务完成
+    for handle in handles {
+        let result = handle.await.expect("Task should complete successfully");
+        // 验证响应内容
+        assert_eq!(result.content, "New session started.", "response should be success message");
+    }
+
+    // 验证 consolidating 状态被正确清理
+    {
+        let consolidating = agent.consolidating.lock().await;
+        assert!(consolidating.is_empty(), "consolidating should be empty after all /new commands completed");
+    }
+
+    // 验证会话被清除
+    let session_final = agent.sessions.get_or_create(session_key);
+    assert_eq!(session_final.messages.len(), 0, "session should be cleared");
+}
+
+/// 验证 /new 命令在整合进行时返回错误
+#[tokio::test]
+async fn new_command_returns_error_when_consolidating() {
+    let provider = MockProvider::new("test response");
+    let config = mock_config();
+    let agent = AgentLoop::new(provider, config, None, None, std::collections::HashMap::new())
+        .await
+        .expect("AgentLoop creation should succeed");
+
+    let session_key = "test:new_during_consolidation";
+
+    // 手动标记会话正在整合
+    {
+        let mut consolidating = agent.consolidating.lock().await;
+        consolidating.insert(session_key.to_string());
+    }
+
+    // 处理 /new 命令
+    let inbound = InboundMessage::new("cli", "user", "test123", "/new");
+    let result = agent.process_message(inbound, Some(session_key)).await;
+
+    // 验证返回错误消息
+    assert!(
+        result.content.contains("already being consolidated"),
+        "response should indicate consolidation is in progress"
+    );
+
+    // 清理
+    {
+        let mut consolidating = agent.consolidating.lock().await;
+        consolidating.remove(session_key);
     }
 }
