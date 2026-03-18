@@ -13,12 +13,9 @@ parking_lot = "0.12"
 async-trait = "0.1"
 async-openai = "0.28"
 schemars = "0.8"
-tokio-util = "0.7"
 walkdir = "2"
 tokio-test = "0.4"
 tempfile = "3"
-futures = "0.3"
-http = "1"
 
 # Internal crates
 nanobot-config.path = "crates/config"
@@ -66,9 +63,6 @@ version = "0.10"
 [workspace.dependencies.config]
 version = "0.15"
 features = ["json", "convert-case"]
-
-[workspace.dependencies.temp-env]
-version = "0.3"
 
 [workspace.dependencies.cron]
 version = "0.15"
