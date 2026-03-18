@@ -14,6 +14,7 @@ tokio = { workspace = true, features = ["rt", "macros", "process", "fs", "time"]
 tracing.workspace = true
 schemars.workspace = true
 walkdir.workspace = true
+nanobot-utils.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

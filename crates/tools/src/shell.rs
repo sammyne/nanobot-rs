@@ -8,6 +8,7 @@ use std::sync::LazyLock;
 use std::time::Duration;
 
 use async_trait::async_trait;
+use nanobot_utils::strings::truncate;
 use schemars::schema::SchemaObject;
 use tokio::process::Command;
 use tokio::time::timeout;
@@ -68,7 +69,10 @@ const DANGEROUS_PATTERNS: &[&str] = &[
 
 /// 截断输出
 fn truncate_output(s: String, max_len: usize) -> String {
-    if s.len() > max_len { format!("{}...(truncated, {} bytes total)", &s[..max_len], s.len()) } else { s }
+    match truncate(&s, max_len) {
+        Some(truncated) => format!("{}...(truncated, {} bytes total)", truncated, s.len()),
+        None => s,
+    }
 }
 
 impl ShellTool {

@@ -1,31 +1,31 @@
-//! 日志模块测试
+//! Integration tests for the strings module
 
-use super::*;
+use nanobot_utils::strings::redact;
 
 #[test]
-fn mask_sensitive_long() {
+fn redact_long() {
     let key = "sk-1234567890abcdefghijklmnop";
-    let masked = mask_sensitive(key);
+    let masked = redact(key);
     assert_eq!(masked, "sk-1****mnop");
 }
 
 #[test]
-fn mask_sensitive_short() {
+fn redact_short() {
     let key = "abc";
-    let masked = mask_sensitive(key);
+    let masked = redact(key);
     assert_eq!(masked, "***");
 }
 
 #[test]
-fn mask_sensitive_8_chars() {
+fn redact_8_chars() {
     let key = "12345678";
-    let masked = mask_sensitive(key);
+    let masked = redact(key);
     assert_eq!(masked, "********");
 }
 
 #[test]
-fn mask_sensitive_9_chars() {
+fn redact_9_chars() {
     let key = "123456789";
-    let masked = mask_sensitive(key);
+    let masked = redact(key);
     assert_eq!(masked, "1234****6789");
 }

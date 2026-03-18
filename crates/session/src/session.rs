@@ -4,6 +4,7 @@ use std::collections::HashMap;
 
 use chrono::{DateTime, Utc};
 use nanobot_provider::Message;
+use nanobot_utils::strings::truncate;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -118,11 +119,9 @@ impl Session {
         for msg in messages.iter().skip(skip) {
             let msg_to_save = match msg {
                 Message::Tool { content, tool_call_id } => {
-                    let truncated = if content.len() > Self::TOOL_RESULT_MAX_CHARS {
-                        format!("{}\n... (truncated)", &content[..Self::TOOL_RESULT_MAX_CHARS])
-                    } else {
-                        content.clone()
-                    };
+                    let truncated = truncate(content, Self::TOOL_RESULT_MAX_CHARS)
+                        .map(|truncated_content| format!("{truncated_content}\n... (truncated)"))
+                        .unwrap_or_else(|| content.clone());
                     Message::Tool { content: truncated, tool_call_id: tool_call_id.clone() }
                 }
                 other => other.clone(),

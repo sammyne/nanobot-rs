@@ -32,6 +32,7 @@ nanobot-channels.path = "crates/channels"
 nanobot-cron.path = "crates/cron"
 nanobot-heartbeat.path = "crates/heartbeat"
 nanobot-subagent.path = "crates/subagent"
+nanobot-utils.path = "crates/utils"
 
 # Dependency with features
 [workspace.dependencies.tokio]

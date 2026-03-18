@@ -16,9 +16,11 @@ pub fn parse_frontmatter(content: &str) -> Option<String> {
         return None;
     }
 
-    // Find the closing ---
-    let remaining = &content[3..];
-    remaining.find("\n---").map(|end_pos| remaining[..end_pos].trim().to_string())
+    // Find the closing --- using character boundary
+    content.char_indices().nth(3).and_then(|(i, _)| {
+        let remaining = &content[i..];
+        remaining.find("\n---").map(|end_pos| remaining[..end_pos].trim().to_string())
+    })
 }
 
 /// Extracts the content after the frontmatter.
@@ -28,12 +30,14 @@ pub fn strip_frontmatter(content: &str) -> String {
     }
 
     // Find the closing --- and return content after it
-    let remaining = &content[3..];
-    if let Some(end_pos) = remaining.find("\n---") {
-        remaining[end_pos + 5..].trim().to_string()
-    } else {
-        content.to_string()
-    }
+    content
+        .char_indices()
+        .nth(3)
+        .and_then(|(i, _)| {
+            let remaining = &content[i..];
+            remaining.find("\n---").map(|end_pos| remaining[end_pos + 5..].trim().to_string())
+        })
+        .unwrap_or_else(|| content.to_string())
 }
 
 /// Parses skill metadata from YAML frontmatter content.

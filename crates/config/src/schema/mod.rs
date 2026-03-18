@@ -348,14 +348,7 @@ impl Config {
     /// 脱敏的 API Key（用于日志显示）
     pub fn masked_api_key(&self) -> String {
         let key = self.providers.custom.as_ref().map(|c| c.api_key.as_str()).unwrap_or("");
-
-        if key.len() <= 8 {
-            return "*".repeat(key.len());
-        }
-
-        let start = &key[..4];
-        let end = &key[key.len() - 4..];
-        format!("{start}****{end}")
+        nanobot_utils::strings::redact(key)
     }
 }
 
