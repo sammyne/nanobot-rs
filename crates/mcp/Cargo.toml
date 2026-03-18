@@ -15,7 +15,7 @@ schemars.workspace = true
 rmcp.workspace = true
 nanobot-config.workspace = true
 nanobot-tools.workspace = true
-http.workspace = true
+http = "1"
 
 [dev-dependencies]
 serde_yaml.workspace = true
