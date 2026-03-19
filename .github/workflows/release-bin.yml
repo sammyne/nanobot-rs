@@ -25,7 +25,7 @@ jobs:
     
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0  # 获取完整历史以获取所有 tags
       
@@ -102,15 +102,11 @@ jobs:
             os: ubuntu-24.04
             platform: linux
             arch: x86_64
-          - target: x86_64-pc-windows-msvc
-            os: windows-2022
-            platform: windows
-            arch: x86_64
-            ext: .exe
-          - target: x86_64-apple-darwin
-            os: macos-26
-            platform: macos
-            arch: x86_64
+          # - target: x86_64-pc-windows-msvc
+          #   os: windows-2022
+          #   platform: windows
+          #   arch: x86_64
+          #   ext: .exe
           - target: aarch64-apple-darwin
             os: macos-26
             platform: macos
@@ -120,13 +116,14 @@ jobs:
     
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0  # 获取完整历史以支持手动触发时切换 tag
       
       # 手动触发时切换到指定 tag
       - name: Checkout specified tag (for manual dispatch)
         if: github.event_name == 'workflow_dispatch'
+        shell: bash
         run: |
           SPECIFIED_TAG="${{ needs.verify-version.outputs.version }}"
           git checkout "$SPECIFIED_TAG"
@@ -137,6 +134,10 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
+      
+      # 显式安装 target（确保跨架构编译时 target 可用）
+      - name: Add Rust target
+        run: rustup target add ${{ matrix.target }}
       
       # Rust 构建缓存
       - name: Setup Rust cache
@@ -157,7 +158,7 @@ jobs:
           echo "=========================================="
           echo "使用 cargo-chef 准备依赖"
           echo "=========================================="
-          cd crates/nanobot
+          # 在 workspace 根目录执行 cargo-chef
           cargo chef prepare --recipe-path recipe.json
           cargo chef cook --release --target ${{ matrix.target }} --recipe-path recipe.json
           echo "✅ 依赖准备完成"
