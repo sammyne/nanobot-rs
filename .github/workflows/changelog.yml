@@ -5,9 +5,6 @@ on:
   push:
     tags:
       - '*'
-  
-  # 支持手动触发（使用当前分支最新 commit）
-  workflow_dispatch:
 
 permissions:
   contents: write
@@ -24,7 +21,7 @@ jobs:
         with:
           fetch-depth: 0
       
-      # 1.5. 解析 tag 参数（手动触发时使用当前分支最新 commit）
+      # 1.5. 解析 tag 参数
       - name: Resolve tag
         id: resolve-tag
         run: |
@@ -32,28 +29,14 @@ jobs:
           echo "解析 Tag 参数"
           echo "=========================================="
           
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            # 手动触发：使用当前分支最新的 commit SHA
-            echo "ℹ️  手动触发，使用当前分支最新的 commit..."
-            
-            COMMIT_SHA=$(git rev-parse HEAD)
-            
-            echo "✅ 找到最新 Commit: $COMMIT_SHA"
-            echo "tag=${COMMIT_SHA}" >> $GITHUB_OUTPUT
-            echo "use_commit=true" >> $GITHUB_OUTPUT
-          else
-            # push tag 触发
-            TAG="${GITHUB_REF#refs/tags/}"
-            echo "✅ 使用触发的 Tag: $TAG"
-            echo "tag=$TAG" >> $GITHUB_OUTPUT
-            echo "use_commit=false" >> $GITHUB_OUTPUT
-          fi
+          TAG="${GITHUB_REF#refs/tags/}"
+          echo "✅ 使用触发的 Tag: $TAG"
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
           
           echo "=========================================="
       
-      # 1.6. 验证 tag 与 Cargo.toml 版本一致性（手动触发时跳过）
+      # 1.6. 验证 tag 与 Cargo.toml 版本一致性
       - name: Validate tag version
-        if: github.event_name != 'workflow_dispatch'
         id: validate-version
         run: |
           echo "=========================================="
@@ -91,7 +74,7 @@ jobs:
         uses: orhun/git-cliff-action@v4
         with:
           config: cliff.toml
-          args: ${{ steps.resolve-tag.outputs.use_commit == 'true' && '' || format('--tag {0}', steps.resolve-tag.outputs.tag) }}
+          args: --tag ${{ steps.resolve-tag.outputs.tag }}
         env:
           OUTPUT: CHANGELOG.md
       
@@ -123,9 +106,8 @@ jobs:
           echo "$CHANGELOG_CONTENT" > /tmp/release_notes.md
           echo "=========================================="
       
-      # 4. 更新 CHANGELOG.md 文件（手动触发时跳过）
+      # 4. 更新 CHANGELOG.md 文件
       - name: Update CHANGELOG.md
-        if: github.event_name != 'workflow_dispatch'
         run: |
           echo "=========================================="
           echo "更新 CHANGELOG.md 文件"
@@ -172,16 +154,14 @@ jobs:
           echo "----------------------------------------"
           echo "=========================================="
       
-      # 5. 配置 Git 用户信息（手动触发时跳过）
+      # 5. 配置 Git 用户信息
       - name: Configure Git
-        if: github.event_name != 'workflow_dispatch'
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
       
-      # 6. 提交并推送 CHANGELOG.md（带重试机制，手动触发时跳过）
+      # 6. 提交并推送 CHANGELOG.md（带重试机制）
       - name: Commit and push CHANGELOG.md
-        if: github.event_name != 'workflow_dispatch'
         id: push-changelog
         run: |
           echo "=========================================="
@@ -265,17 +245,12 @@ jobs:
           echo ""
           echo "版本: ${{ steps.resolve-tag.outputs.tag }}"
           echo ""
-          if [ "${{ github.event_name }}" != "workflow_dispatch" ]; then
-            echo "CHANGELOG.md:"
-            if [ "${{ steps.push-changelog.outputs.commit_sha }}" != "none" ]; then
-              echo "  ✅ 已更新并推送到仓库"
-              echo "  Commit: ${{ steps.push-changelog.outputs.commit_sha }}"
-            else
-              echo "  ℹ️  无变更，未创建新提交"
-            fi
+          echo "CHANGELOG.md:"
+          if [ "${{ steps.push-changelog.outputs.commit_sha }}" != "none" ]; then
+            echo "  ✅ 已更新并推送到仓库"
+            echo "  Commit: ${{ steps.push-changelog.outputs.commit_sha }}"
           else
-            echo "CHANGELOG.md:"
-            echo "  ℹ️  手动触发，跳过更新 CHANGELOG.md"
+            echo "  ℹ️  无变更，未创建新提交"
           fi
           echo ""
           echo "GitHub Release:"
