@@ -306,11 +306,8 @@ impl Channel for Feishu {
             },
             "elements": [
                 {
-                    "tag": "div",
-                    "text": {
-                        "content": markdown_content,
-                        "tag": "lark_md"
-                    }
+                    "tag": "markdown",
+                    "content": markdown_content,
                 }
             ]
         });
