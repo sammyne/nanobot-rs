@@ -43,7 +43,7 @@ jobs:
           TAG_VERSION="${GITHUB_REF#refs/tags/}"
           
           # 从 Cargo.toml 中提取 package.version
-          CARGO_VERSION=$(grep -E '^version\s*=' crates/cli/Cargo.toml | head -1 | sed 's/.*"\([^"]*\)".*/\1/')
+          CARGO_VERSION=$(grep -E '^version\s*=' crates/nanobot/Cargo.toml | head -1 | sed 's/.*"\([^"]*\)".*/\1/')
           
           echo "=========================================="
           echo "版本一致性校验"
@@ -56,7 +56,7 @@ jobs:
           if [ "$TAG_VERSION" != "$CARGO_VERSION" ]; then
             echo "::error::版本不一致！Git Tag 版本 (${TAG_VERSION}) 与 Cargo.toml 版本 (${CARGO_VERSION}) 不匹配"
             echo ""
-            echo "请确保 Git Tag 与 crates/cli/Cargo.toml 中的 package.version 保持一致"
+            echo "请确保 Git Tag 与 crates/nanobot/Cargo.toml 中的 package.version 保持一致"
             exit 1
           fi
           
