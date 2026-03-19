@@ -1,5 +1,7 @@
 //! Cron type definitions.
 
+use std::str::FromStr;
+
 use serde::{Deserialize, Serialize};
 
 /// Schedule definition for a cron job.
@@ -14,7 +16,7 @@ pub enum CronSchedule {
     /// Recurring execution at fixed intervals
     Every {
         /// Interval in milliseconds
-        every_ms: i64,
+        every_ms: u64,
     },
     /// Cron expression based scheduling
     Cron {
@@ -29,6 +31,60 @@ pub enum CronSchedule {
 impl Default for CronSchedule {
     fn default() -> Self {
         CronSchedule::Every { every_ms: 60000 } // Default to 1 minute
+    }
+}
+
+impl CronSchedule {
+    /// Compute the next run time in milliseconds.
+    pub fn compute_next_run(&self, now_ms: i64) -> Option<i64> {
+        match self {
+            CronSchedule::At { at_ms } => {
+                // One-time execution
+                if *at_ms > now_ms { Some(*at_ms) } else { None }
+            }
+            CronSchedule::Every { every_ms } => {
+                // Recurring execution
+                if *every_ms == 0 {
+                    return None;
+                }
+                Some(now_ms + (*every_ms as i64))
+            }
+            CronSchedule::Cron { expr, tz } => {
+                // Cron expression based scheduling - delegate to scheduler module
+                crate::scheduler::compute_cron_next_run(expr, tz.as_ref(), now_ms)
+            }
+        }
+    }
+
+    /// Validate a schedule for job addition.
+    pub fn validate(&self) -> Result<(), String> {
+        match self {
+            CronSchedule::Cron { expr, tz } => {
+                // Validate cron expression
+                if cron::Schedule::from_str(expr).is_err() {
+                    return Err(format!("Invalid cron expression: {expr}"));
+                }
+
+                // Validate timezone if provided
+                if let Some(tz_name) = tz
+                    && tz_name.parse::<chrono_tz::Tz>().is_err()
+                {
+                    return Err(format!("Unknown timezone: {tz_name}"));
+                }
+            }
+            CronSchedule::At { at_ms } => {
+                if *at_ms <= 0 {
+                    return Err("at_ms must be positive".to_string());
+                }
+            }
+            CronSchedule::Every { every_ms } => {
+                if *every_ms == 0 {
+                    return Err("every_ms must be positive".to_string());
+                }
+            }
+        }
+
+        Ok(())
     }
 }
 

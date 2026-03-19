@@ -1,12 +1,13 @@
 use chrono::Utc;
 
 use super::*;
+use crate::CronSchedule;
 
 #[test]
 fn compute_next_run_at() {
     let now = Utc::now().timestamp_millis();
     let schedule = CronSchedule::At { at_ms: now + 60000 };
-    let next = compute_next_run(&schedule, now);
+    let next = schedule.compute_next_run(now);
     assert_eq!(next, Some(now + 60000));
 }
 
@@ -14,7 +15,7 @@ fn compute_next_run_at() {
 fn compute_next_run_at_past() {
     let now = Utc::now().timestamp_millis();
     let schedule = CronSchedule::At { at_ms: now - 60000 };
-    let next = compute_next_run(&schedule, now);
+    let next = schedule.compute_next_run(now);
     assert_eq!(next, None);
 }
 
@@ -22,7 +23,7 @@ fn compute_next_run_at_past() {
 fn compute_next_run_every() {
     let now = Utc::now().timestamp_millis();
     let schedule = CronSchedule::Every { every_ms: 60000 };
-    let next = compute_next_run(&schedule, now);
+    let next = schedule.compute_next_run(now);
     assert_eq!(next, Some(now + 60000));
 }
 
@@ -33,7 +34,7 @@ fn compute_next_run_cron() {
         tz: None,
     };
     let now = Utc::now().timestamp_millis();
-    let next = compute_next_run(&schedule, now);
+    let next = schedule.compute_next_run(now);
     assert!(next.is_some());
     // Next run should be within the next minute
     let diff = next.unwrap() - now;
@@ -43,19 +44,19 @@ fn compute_next_run_cron() {
 #[test]
 fn validate_schedule_valid() {
     let schedule = CronSchedule::Every { every_ms: 60000 };
-    assert!(validate_schedule(&schedule).is_ok());
+    assert!(schedule.validate().is_ok());
 }
 
 #[test]
 fn validate_schedule_invalid_every() {
     let schedule = CronSchedule::Every { every_ms: 0 };
-    assert!(validate_schedule(&schedule).is_err());
+    assert!(schedule.validate().is_err());
 }
 
 #[test]
 fn validate_schedule_invalid_cron() {
     let schedule = CronSchedule::Cron { expr: "invalid".to_string(), tz: None };
-    assert!(validate_schedule(&schedule).is_err());
+    assert!(schedule.validate().is_err());
 }
 
 #[test]

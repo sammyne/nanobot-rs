@@ -7,7 +7,7 @@ use crate::types::{CronPayload, CronSchedule};
 async fn storage_new() {
     let dir = tempdir().unwrap();
     let path = dir.path().join("cron.json");
-    let storage = CronStorage::new(path);
+    let storage = CronStorage::load(path).await.unwrap();
 
     let jobs = storage.list_jobs(true).await;
     assert!(jobs.is_empty());
@@ -18,7 +18,7 @@ async fn storage_save_and_load() {
     let dir = tempdir().unwrap();
     let path = dir.path().join("cron.json");
 
-    let storage = CronStorage::new(path.clone());
+    let storage = CronStorage::load(path.clone()).await.unwrap();
 
     let job = CronJob::new("Test".to_string(), CronSchedule::Every { every_ms: 60000 }, CronPayload::default(), false);
 
@@ -26,8 +26,7 @@ async fn storage_save_and_load() {
     storage.save().await.unwrap();
 
     // Load in a new storage instance
-    let storage2 = CronStorage::new(path);
-    storage2.load().await.unwrap();
+    let storage2 = CronStorage::load(path).await.unwrap();
 
     let jobs = storage2.list_jobs(true).await;
     assert_eq!(jobs.len(), 1);
@@ -36,7 +35,7 @@ async fn storage_save_and_load() {
 
 #[tokio::test]
 async fn storage_remove_job() {
-    let storage = CronStorage::new(PathBuf::from("/tmp/test_cron.json"));
+    let storage = CronStorage::load(PathBuf::from("/tmp/test_cron.json")).await.unwrap();
 
     let job = CronJob::new("Test".to_string(), CronSchedule::Every { every_ms: 60000 }, CronPayload::default(), false);
 

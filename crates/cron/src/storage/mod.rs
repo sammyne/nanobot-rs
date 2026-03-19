@@ -1,7 +1,6 @@
 //! Cron storage module for persisting jobs.
 
 use std::path::PathBuf;
-use std::sync::Arc;
 
 use tokio::sync::RwLock;
 use tracing::{info, warn};
@@ -11,39 +10,32 @@ use crate::types::{CronJob, CronStore};
 /// Storage backend for cron jobs.
 pub struct CronStorage {
     store_path: PathBuf,
-    store: Arc<RwLock<CronStore>>,
+    store: RwLock<CronStore>,
 }
 
 impl CronStorage {
-    /// Create a new storage instance.
-    pub fn new(store_path: PathBuf) -> Self {
-        CronStorage { store_path, store: Arc::new(RwLock::new(CronStore::default())) }
-    }
-
-    /// Load jobs from disk.
-    pub async fn load(&self) -> Result<(), anyhow::Error> {
-        if !self.store_path.exists() {
-            info!("Cron store file does not exist, creating empty store");
-            return Ok(());
-        }
-
-        match tokio::fs::read_to_string(&self.store_path).await {
+    /// Create a new storage instance and load data from disk.
+    /// If the file doesn't exist or fails to load, an empty store is created.
+    pub async fn load(store_path: PathBuf) -> Result<Self, anyhow::Error> {
+        let store = match tokio::fs::read_to_string(&store_path).await {
             Ok(content) => match serde_json::from_str::<CronStore>(&content) {
-                Ok(store) => {
-                    let mut s = self.store.write().await;
-                    *s = store;
-                    info!("Loaded {} cron jobs from disk", s.jobs.len());
-                }
+                Ok(store) => store,
                 Err(e) => {
                     warn!("Failed to parse cron store file: {}, creating empty store", e);
+                    CronStore::default()
                 }
             },
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                info!("Cron store file does not exist, creating empty store");
+                CronStore::default()
+            }
             Err(e) => {
                 warn!("Failed to read cron store file: {}, creating empty store", e);
+                CronStore::default()
             }
-        }
+        };
 
-        Ok(())
+        Ok(CronStorage { store_path, store: RwLock::new(store) })
     }
 
     /// Save jobs to disk.
@@ -60,15 +52,9 @@ impl CronStorage {
         Ok(())
     }
 
-    /// Get a read lock on the store.
-    pub fn store(&self) -> Arc<RwLock<CronStore>> {
-        Arc::clone(&self.store)
-    }
-
     /// Add a job to the store.
     pub async fn add_job(&self, job: CronJob) {
-        let mut store = self.store.write().await;
-        store.jobs.push(job);
+        self.store.write().await.jobs.push(job);
     }
 
     /// Remove a job from the store by ID.
@@ -115,8 +101,9 @@ impl CronStorage {
 
     /// Get the earliest next run time across all enabled jobs.
     pub async fn get_next_wake_ms(&self) -> Option<i64> {
-        let store = self.store.read().await;
-        store
+        self.store
+            .read()
+            .await
             .jobs
             .iter()
             .filter(|j| j.enabled && j.state.next_run_at_ms.is_some())

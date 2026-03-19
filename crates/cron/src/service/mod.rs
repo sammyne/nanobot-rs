@@ -4,13 +4,13 @@ use std::future::Future;
 use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
 use tokio::time::{Duration, sleep};
 use tracing::{error, info, warn};
 
-use crate::scheduler::{compute_next_run, validate_schedule};
 use crate::storage::CronStorage;
 use crate::types::{CronJob, CronPayload, CronSchedule};
 
@@ -22,22 +22,21 @@ pub type JobCallback =
 pub struct CronService {
     storage: Arc<CronStorage>,
     on_job: Arc<RwLock<Option<JobCallback>>>,
-    running: Arc<RwLock<bool>>,
+    running: Arc<AtomicBool>,
     timer_task: Arc<RwLock<Option<JoinHandle<()>>>>,
 }
 
 impl CronService {
     /// Create a new cron service without callback.
     pub async fn new(store_path: PathBuf) -> Result<Self, anyhow::Error> {
+        let storage = Arc::new(CronStorage::load(store_path).await?);
+
         let service = CronService {
-            storage: Arc::new(CronStorage::new(store_path)),
+            storage,
             on_job: Arc::new(RwLock::new(None)),
-            running: Arc::new(RwLock::new(false)),
+            running: Arc::new(AtomicBool::new(false)),
             timer_task: Arc::new(RwLock::new(None)),
         };
-
-        // Load persisted data
-        service.storage.load().await?;
 
         Ok(service)
     }
@@ -50,14 +49,12 @@ impl CronService {
 
     /// Start the cron service.
     pub async fn start(&self) {
-        let mut running = self.running.write().await;
-        if *running {
+        if self.running.load(Ordering::SeqCst) {
             warn!("Cron service is already running");
             return;
         }
 
-        *running = true;
-        drop(running);
+        self.running.store(true, Ordering::SeqCst);
 
         // Recompute next run times for all enabled jobs
         self.recompute_next_runs().await;
@@ -76,9 +73,7 @@ impl CronService {
 
     /// Stop the cron service.
     pub async fn stop(&self) {
-        let mut running = self.running.write().await;
-        *running = false;
-        drop(running);
+        self.running.store(false, Ordering::SeqCst);
 
         let mut timer_task = self.timer_task.write().await;
         if let Some(task) = timer_task.take() {
@@ -90,7 +85,7 @@ impl CronService {
 
     /// Check if the service is running.
     pub async fn is_running(&self) -> bool {
-        *self.running.read().await
+        self.running.load(Ordering::SeqCst)
     }
 
     /// Recompute next run times for all enabled jobs.
@@ -100,7 +95,7 @@ impl CronService {
 
         for job in &mut jobs {
             if job.enabled {
-                job.state.next_run_at_ms = compute_next_run(&job.schedule, now);
+                job.state.next_run_at_ms = job.schedule.compute_next_run(now);
                 self.storage.update_job(job.clone()).await;
             }
         }
@@ -122,7 +117,7 @@ impl CronService {
             // Use a loop instead of recursion
             loop {
                 // Check if still running
-                if !*running.read().await {
+                if !running.load(Ordering::SeqCst) {
                     break;
                 }
 
@@ -144,7 +139,7 @@ impl CronService {
                 }
 
                 // Check if still running after sleep
-                if !*running.read().await {
+                if !running.load(Ordering::SeqCst) {
                     break;
                 }
 
@@ -158,7 +153,7 @@ impl CronService {
                     .collect();
 
                 for job in due_jobs {
-                    Self::execute_job(storage.clone(), on_job.clone(), job).await;
+                    execute_job(storage.clone(), on_job.clone(), job).await;
                 }
 
                 if let Err(e) = storage.save().await {
@@ -168,61 +163,6 @@ impl CronService {
         });
 
         *timer_task = Some(task);
-    }
-
-    /// Execute a single job.
-    async fn execute_job(storage: Arc<CronStorage>, on_job: Arc<RwLock<Option<JobCallback>>>, mut job: CronJob) {
-        let start_ms = chrono::Utc::now().timestamp_millis();
-        info!("Cron: executing job '{}' ({})", job.name, job.id);
-
-        let on_job_guard = on_job.read().await;
-        let result = if let Some(callback) = on_job_guard.as_ref() {
-            match callback(job.clone()).await {
-                Ok(response) => {
-                    info!("Cron: job '{}' completed: {}", job.name, response);
-                    Ok(())
-                }
-                Err(e) => {
-                    error!("Cron: job '{}' failed: {}", job.name, e);
-                    Err(e)
-                }
-            }
-        } else {
-            info!("Cron: job '{}' completed (no callback)", job.name);
-            Ok(())
-        };
-        drop(on_job_guard);
-
-        job.state.last_run_at_ms = Some(start_ms);
-        job.updated_at_ms = chrono::Utc::now().timestamp_millis();
-
-        match result {
-            Ok(()) => {
-                job.state.last_status = Some("ok".to_string());
-                job.state.last_error = None;
-            }
-            Err(e) => {
-                job.state.last_status = Some("error".to_string());
-                job.state.last_error = Some(e);
-            }
-        }
-
-        // Handle one-shot jobs
-        if matches!(job.schedule, CronSchedule::At { .. }) {
-            if job.delete_after_run {
-                storage.remove_job(&job.id).await;
-                return;
-            } else {
-                job.enabled = false;
-                job.state.next_run_at_ms = None;
-            }
-        } else {
-            // Compute next run
-            let now = chrono::Utc::now().timestamp_millis();
-            job.state.next_run_at_ms = compute_next_run(&job.schedule, now);
-        }
-
-        storage.update_job(job).await;
     }
 
     // ========== Public API ==========
@@ -245,10 +185,10 @@ impl CronService {
         delete_after_run: bool,
     ) -> Result<CronJob, String> {
         // Validate schedule
-        validate_schedule(&schedule)?;
+        schedule.validate()?;
 
         let now = chrono::Utc::now().timestamp_millis();
-        let next_run = compute_next_run(&schedule, now);
+        let next_run = schedule.compute_next_run(now);
 
         let mut job = CronJob::new(
             name.clone(),
@@ -295,7 +235,7 @@ impl CronService {
         job.updated_at_ms = chrono::Utc::now().timestamp_millis();
 
         if enabled {
-            job.state.next_run_at_ms = compute_next_run(&job.schedule, chrono::Utc::now().timestamp_millis());
+            job.state.next_run_at_ms = job.schedule.compute_next_run(chrono::Utc::now().timestamp_millis());
         } else {
             job.state.next_run_at_ms = None;
         }
@@ -309,18 +249,61 @@ impl CronService {
         self.arm_timer().await;
         Some(job)
     }
+}
 
-    /// Get service status.
-    pub async fn status(&self) -> serde_json::Value {
-        let job_count = self.storage.list_jobs(true).await.len();
-        let next_wake = self.storage.get_next_wake_ms().await;
+/// Execute a single job.
+async fn execute_job(storage: Arc<CronStorage>, on_job: Arc<RwLock<Option<JobCallback>>>, mut job: CronJob) {
+    let start_ms = chrono::Utc::now().timestamp_millis();
+    info!("Cron: executing job '{}' ({})", job.name, job.id);
 
-        serde_json::json!({
-            "enabled": *self.running.read().await,
-            "jobs": job_count,
-            "next_wake_at_ms": next_wake,
-        })
+    let on_job_guard = on_job.read().await;
+    let result = if let Some(callback) = on_job_guard.as_ref() {
+        match callback(job.clone()).await {
+            Ok(response) => {
+                info!("Cron: job '{}' completed: {}", job.name, response);
+                Ok(())
+            }
+            Err(e) => {
+                error!("Cron: job '{}' failed: {}", job.name, e);
+                Err(e)
+            }
+        }
+    } else {
+        info!("Cron: job '{}' completed (no callback)", job.name);
+        Ok(())
+    };
+    drop(on_job_guard);
+
+    job.state.last_run_at_ms = Some(start_ms);
+    job.updated_at_ms = chrono::Utc::now().timestamp_millis();
+
+    match result {
+        Ok(()) => {
+            job.state.last_status = Some("ok".to_string());
+            job.state.last_error = None;
+        }
+        Err(e) => {
+            job.state.last_status = Some("error".to_string());
+            job.state.last_error = Some(e);
+        }
     }
+
+    // Handle one-shot jobs
+    if matches!(job.schedule, CronSchedule::At { .. }) {
+        if job.delete_after_run {
+            storage.remove_job(&job.id).await;
+            return;
+        } else {
+            job.enabled = false;
+            job.state.next_run_at_ms = None;
+        }
+    } else {
+        // Compute next run
+        let now = chrono::Utc::now().timestamp_millis();
+        job.state.next_run_at_ms = job.schedule.compute_next_run(now);
+    }
+
+    storage.update_job(job).await;
 }
 
 #[cfg(test)]
