@@ -32,6 +32,12 @@ jobs:
           toolchain: 1.93.0
           components: rustfmt, clippy
 
+      - name: Setup nightly toolchain for fmt
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: nightly-2026-01-22
+          components: rustfmt
+
       - name: Cache cargo registry
         uses: actions/cache@v4
         with:
@@ -44,7 +50,7 @@ jobs:
             ${{ runner.os }}-cargo-
 
       - name: Format check
-        run: cargo fmt --check
+        run: cargo +nightly-2026-01-22 fmt --check
 
       - name: Clippy check
         run: cargo clippy -- -D warnings -D clippy::uninlined_format_args
