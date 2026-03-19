@@ -37,7 +37,10 @@ async fn cron_tool_add_without_context() {
     let params = serde_json::json!({
         "action": "add",
         "message": "Test reminder",
-        "every_seconds": 60
+        "schedule": {
+            "kind": "every",
+            "every_seconds": 60
+        }
     });
 
     let result = tool.execute(&ctx, params).await;
@@ -73,7 +76,10 @@ async fn cron_tool_add_and_list() {
     let params = serde_json::json!({
         "action": "add",
         "message": "Test reminder",
-        "every_seconds": 60
+        "schedule": {
+            "kind": "every",
+            "every_seconds": 60
+        }
     });
 
     let result = tool.execute(&ctx, params).await.unwrap();
@@ -99,8 +105,11 @@ async fn cron_tool_invalid_tz() {
     let params = serde_json::json!({
         "action": "add",
         "message": "Test reminder",
-        "every_seconds": 60,
-        "tz": "Invalid/Timezone"
+        "schedule": {
+            "kind": "cron",
+            "expr": "0 * * * *",
+            "tz": "Invalid/Timezone"
+        }
     });
 
     let result = tool.execute(&ctx, params).await;

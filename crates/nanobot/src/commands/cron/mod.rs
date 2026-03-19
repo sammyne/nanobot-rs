@@ -209,17 +209,16 @@ impl AddCmd {
             if seconds == 0 {
                 anyhow::bail!("--every 值必须大于 0");
             }
-            return Ok(CronSchedule::Every { every_ms: (seconds as i64) * 1000 });
+            return Ok(CronSchedule::Every { every_ms: seconds * 1000 });
         }
 
         if let Some(ref expr) = self.cron {
-            // 验证 cron 表达式
-            if let Err(e) =
-                nanobot_cron::validate_schedule(&CronSchedule::Cron { expr: expr.clone(), tz: self.tz.clone() })
-            {
+            // Validate cron expression
+            let schedule = CronSchedule::Cron { expr: expr.clone(), tz: self.tz.clone() };
+            if let Err(e) = schedule.validate() {
                 anyhow::bail!("无效的 cron 表达式: {e}");
             }
-            return Ok(CronSchedule::Cron { expr: expr.clone(), tz: self.tz.clone() });
+            return Ok(schedule);
         }
 
         if let Some(ref time_str) = self.at {
