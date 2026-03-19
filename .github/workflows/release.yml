@@ -391,3 +391,210 @@ jobs:
           echo "  AMD64: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:amd64-${{ needs.validate.outputs.image_tag }}"
           echo "  ARM64: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:arm64-${{ needs.validate.outputs.image_tag }}"
           echo "=========================================="
+
+  # 更新 CHANGELOG.md 并创建 GitHub Release
+  update-changelog:
+    runs-on: ubuntu-24.04
+    needs: [validate, create-manifest]
+    # 仅在 Git Tag 推送时执行
+    if: github.event_name == 'push'
+    permissions:
+      contents: write
+    
+    steps:
+      # 1. 检出代码（完整历史，用于生成 changelog）
+      - name: Checkout repository with full history
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      
+      # 2. 生成 CHANGELOG 内容
+      - name: Generate CHANGELOG
+        id: changelog
+        uses: orhun/git-cliff-action@v4
+        with:
+          config: cliff.toml
+          args: --tag ${{ github.ref_name }}
+        env:
+          OUTPUT: CHANGELOG.md
+      
+      # 3. 检查生成的 changelog 内容
+      - name: Check changelog content
+        id: check-changelog
+        run: |
+          echo "=========================================="
+          echo "检查 Changelog 内容"
+          echo "=========================================="
+          
+          CHANGELOG_CONTENT="${{ steps.changelog.outputs.content }}"
+          
+          if [ -z "$CHANGELOG_CONTENT" ] || [ "$CHANGELOG_CONTENT" = "" ]; then
+            echo "⚠️  未检测到变更内容，将生成默认的 'No changes' 消息"
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+            CHANGELOG_CONTENT="## [${{ github.ref_name }}] - $(date +%Y-%m-%d)\n\nNo changes in this release."
+          else
+            echo "✅ 检测到变更内容"
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo ""
+            echo "变更内容预览："
+            echo "----------------------------------------"
+            echo "$CHANGELOG_CONTENT" | head -20
+            echo "----------------------------------------"
+          fi
+          
+          # 将内容保存到文件供后续步骤使用
+          echo "$CHANGELOG_CONTENT" > /tmp/release_notes.md
+          echo "=========================================="
+      
+      # 4. 更新 CHANGELOG.md 文件
+      - name: Update CHANGELOG.md
+        run: |
+          echo "=========================================="
+          echo "更新 CHANGELOG.md 文件"
+          echo "=========================================="
+          
+          # 检查 CHANGELOG.md 是否存在
+          if [ -f "CHANGELOG.md" ]; then
+            echo "📄 CHANGELOG.md 已存在，将在顶部插入新内容"
+            # 备份现有文件
+            cp CHANGELOG.md CHANGELOG.md.backup
+            
+            # 创建新内容（新版本 + 旧内容）
+            {
+              cat /tmp/release_notes.md
+              echo ""
+              echo ""
+              # 移除旧文件的头部说明（如果存在），保留版本历史
+              tail -n +5 CHANGELOG.md.backup
+            } > CHANGELOG.md.new
+            
+            mv CHANGELOG.md.new CHANGELOG.md
+            rm CHANGELOG.md.backup
+          else
+            echo "📄 CHANGELOG.md 不存在，将创建新文件"
+            # 创建标准头部
+            {
+              echo "# Changelog"
+              echo ""
+              echo "All notable changes to this project will be documented in this file."
+              echo ""
+              echo "The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),"
+              echo "and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)."
+              echo ""
+              cat /tmp/release_notes.md
+            } > CHANGELOG.md
+          fi
+          
+          echo ""
+          echo "✅ CHANGELOG.md 更新完成"
+          echo ""
+          echo "文件内容预览："
+          echo "----------------------------------------"
+          head -30 CHANGELOG.md
+          echo "----------------------------------------"
+          echo "=========================================="
+      
+      # 5. 配置 Git 用户信息
+      - name: Configure Git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+      
+      # 6. 提交并推送 CHANGELOG.md（带重试机制）
+      - name: Commit and push CHANGELOG.md
+        id: push-changelog
+        run: |
+          echo "=========================================="
+          echo "提交并推送 CHANGELOG.md"
+          echo "=========================================="
+          
+          # 检查是否有变更
+          if git diff --quiet CHANGELOG.md; then
+            echo "ℹ️  CHANGELOG.md 无变更，跳过提交"
+            echo "commit_sha=none" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          # 添加文件到暂存区
+          git add CHANGELOG.md
+          
+          # 创建提交
+          COMMIT_MSG="chore: update CHANGELOG.md for ${{ github.ref_name }}"
+          git commit -m "$COMMIT_MSG"
+          
+          # 推送（带重试机制，最多 3 次）
+          MAX_RETRIES=3
+          RETRY_COUNT=0
+          PUSH_SUCCESS=false
+          
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            RETRY_COUNT=$((RETRY_COUNT + 1))
+            echo ""
+            echo "尝试推送 (第 ${RETRY_COUNT}/${MAX_RETRIES} 次)..."
+            
+            if git push origin HEAD:main; then
+              PUSH_SUCCESS=true
+              break
+            else
+              echo "⚠️  推送失败"
+              if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+                echo "等待 5 秒后重试..."
+                sleep 5
+                # 拉取最新变更并重新应用
+                git pull --rebase origin main
+              fi
+            fi
+          done
+          
+          if [ "$PUSH_SUCCESS" = false ]; then
+            echo "::error::推送 CHANGELOG.md 失败，已达到最大重试次数"
+            exit 1
+          fi
+          
+          # 获取提交 SHA
+          COMMIT_SHA=$(git rev-parse HEAD)
+          echo "commit_sha=${COMMIT_SHA}" >> $GITHUB_OUTPUT
+          
+          echo ""
+          echo "✅ CHANGELOG.md 推送成功"
+          echo "  Commit SHA: ${COMMIT_SHA}"
+          echo "  Commit Message: ${COMMIT_MSG}"
+          echo "=========================================="
+      
+      # 7. 创建 GitHub Release
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          body_path: /tmp/release_notes.md
+          draft: false
+          prerelease: false
+          generate_release_notes: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      # 8. 输出执行结果
+      - name: Summary
+        if: success()
+        run: |
+          echo ""
+          echo "=========================================="
+          echo "✅ Changelog 更新和 Release 创建成功！"
+          echo "=========================================="
+          echo ""
+          echo "版本: ${{ github.ref_name }}"
+          echo ""
+          echo "CHANGELOG.md:"
+          if [ "${{ steps.push-changelog.outputs.commit_sha }}" != "none" ]; then
+            echo "  ✅ 已更新并推送到仓库"
+            echo "  Commit: ${{ steps.push-changelog.outputs.commit_sha }}"
+          else
+            echo "  ℹ️  无变更，未创建新提交"
+          fi
+          echo ""
+          echo "GitHub Release:"
+          echo "  ✅ 已创建"
+          echo "  URL: https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}"
+          echo ""
+          echo "=========================================="
