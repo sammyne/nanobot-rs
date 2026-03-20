@@ -614,7 +614,7 @@ fn dingtalk_config_validation() {
 #[test]
 fn exec_config_default_values() {
     // 测试 ExecConfig 的默认值
-    let exec = tools::ExecConfig::default();
+    let exec = tools::ExecToolConfig::default();
     assert_eq!(exec.timeout, 60);
     assert_eq!(exec.path_append, "");
 }
@@ -622,7 +622,7 @@ fn exec_config_default_values() {
 #[test]
 fn exec_config_serialization() {
     // 测试 ExecConfig 序列化使用 camelCase
-    let exec = tools::ExecConfig { timeout: 120, path_append: "/usr/local/bin".to_string() };
+    let exec = tools::ExecToolConfig { timeout: 120, path_append: "/usr/local/bin".to_string() };
     let json = serde_json::to_string(&exec).unwrap();
 
     // 验证序列化后的字段名是 camelCase
@@ -635,7 +635,7 @@ fn exec_config_serialization() {
 fn exec_config_deserialization() {
     // 测试 ExecConfig 反序列化
     let json = r#"{"timeout": 30, "pathAppend": "/custom/path"}"#;
-    let exec: tools::ExecConfig = serde_json::from_str(json).unwrap();
+    let exec: tools::ExecToolConfig = serde_json::from_str(json).unwrap();
 
     assert_eq!(exec.timeout, 30);
     assert_eq!(exec.path_append, "/custom/path");
@@ -645,7 +645,7 @@ fn exec_config_deserialization() {
 fn exec_config_partial_deserialization() {
     // 测试部分字段反序列化时使用默认值
     let json = r#"{"timeout": 90}"#;
-    let exec: tools::ExecConfig = serde_json::from_str(json).unwrap();
+    let exec: tools::ExecToolConfig = serde_json::from_str(json).unwrap();
 
     assert_eq!(exec.timeout, 90);
     assert_eq!(exec.path_append, ""); // 使用默认值
@@ -655,7 +655,7 @@ fn exec_config_partial_deserialization() {
 fn exec_config_empty_deserialization() {
     // 测试空对象反序列化时使用所有默认值
     let json = r#"{}"#;
-    let exec: tools::ExecConfig = serde_json::from_str(json).unwrap();
+    let exec: tools::ExecToolConfig = serde_json::from_str(json).unwrap();
 
     assert_eq!(exec.timeout, 60);
     assert_eq!(exec.path_append, "");
@@ -702,7 +702,7 @@ fn tools_config_full_serialization() {
     let config = tools::ToolsConfig {
         mcp_servers: std::collections::HashMap::new(),
         restrict_to_workspace: true,
-        exec: tools::ExecConfig { timeout: 180, path_append: "/custom/path".to_string() },
+        exec: tools::ExecToolConfig { timeout: 180, path_append: "/custom/path".to_string() },
     };
     let json = serde_json::to_string_pretty(&config).unwrap();
 

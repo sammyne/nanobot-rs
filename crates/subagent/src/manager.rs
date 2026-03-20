@@ -58,8 +58,7 @@ where
         temperature: f32,
         max_tokens: u32,
     ) -> Arc<Self> {
-        let tool_registry =
-            ToolRegistry::new(workspace.clone(), None::<String>, nanobot_config::ToolsConfig::default());
+        let tool_registry = ToolRegistry::new(workspace.clone(), nanobot_config::ExecToolConfig::default(), false);
 
         // 绑定工具到 provider
         let tool_definitions = tool_registry.get_definitions();

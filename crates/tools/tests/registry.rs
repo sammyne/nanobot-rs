@@ -29,7 +29,7 @@ async fn registry_basic_operations() {
     for case in test_cases {
         let temp_dir = setup();
         let workspace = temp_dir.path().to_str().unwrap();
-        let mut registry = ToolRegistry::new(workspace, None::<&str>, nanobot_config::ToolsConfig::default());
+        let mut registry = ToolRegistry::new(workspace, nanobot_config::ExecToolConfig::default(), false);
 
         assert!(registry.contains("read_file"));
         assert!(registry.contains("write_file"));
@@ -66,7 +66,7 @@ async fn registry_register_default_tools() {
 
     let temp_dir = setup();
     let workspace = temp_dir.path().to_str().unwrap();
-    let registry = ToolRegistry::new(workspace, None::<&str>, nanobot_config::ToolsConfig::default());
+    let registry = ToolRegistry::new(workspace, nanobot_config::ExecToolConfig::default(), false);
 
     let names = registry.tool_names();
     for case in test_cases {
@@ -90,7 +90,7 @@ async fn registry_execute_nonexistent_tool() {
     for case in test_cases {
         let temp_dir = setup();
         let workspace = temp_dir.path().to_str().unwrap();
-        let registry = ToolRegistry::new(workspace, None::<&str>, nanobot_config::ToolsConfig::default());
+        let registry = ToolRegistry::new(workspace, nanobot_config::ExecToolConfig::default(), false);
         let ctx = test_context();
 
         let result: Result<String, _> = registry.execute(&ctx, case.tool_name, case.input).await;

@@ -172,21 +172,18 @@ async fn shell_path_append_config() {
 /// ToolRegistry 集成测试：使用 ToolsConfig 配置
 #[tokio::test]
 async fn tool_registry_with_tools_config() {
-    use nanobot_config::{ExecConfig, ToolsConfig};
+    use nanobot_config::ExecToolConfig;
     use nanobot_tools::ToolRegistry;
 
     let temp_dir = setup();
     let workspace = PathBuf::from(temp_dir.path());
 
-    // 创建 ToolsConfig
-    let tools_config = ToolsConfig {
-        mcp_servers: std::collections::HashMap::new(),
-        restrict_to_workspace: true,
-        exec: ExecConfig { timeout: 30, path_append: String::new() },
-    };
+    // 创建 ExecToolConfig
+    let exec_config = ExecToolConfig { timeout: 30, path_append: String::new() };
+    let restrict_to_workspace = true;
 
     // 使用配置创建 ToolRegistry
-    let registry = ToolRegistry::new(workspace.clone(), None::<PathBuf>, tools_config);
+    let registry = ToolRegistry::new(workspace.clone(), exec_config, restrict_to_workspace);
 
     // 验证 shell 工具已注册
     assert!(registry.contains("shell"));

@@ -157,7 +157,7 @@ pub use channel::{ChannelsConfig, DingTalkConfig, FeishuConfig};
 pub use gateway::{GatewayConfig, HeartbeatConfig};
 pub use mcp::McpServerConfig;
 pub use provider::{ProviderConfig, ProvidersConfig};
-pub use tools::{ExecConfig, ToolsConfig};
+pub use tools::{ExecToolConfig, ToolsConfig};
 
 pub use crate::utils::expand_tilde;
 

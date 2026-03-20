@@ -9,7 +9,8 @@ use serde_json::Value;
 use tracing::{error, info};
 
 use crate::core::{Tool, ToolContext, ToolDefinition, ToolError, ToolResult};
-use crate::shell::ExecToolOptions;
+use crate::fs::{EditFileTool, ListDirTool, ReadFileTool, WriteFileTool};
+use crate::shell::{ExecTool, ExecToolOptions};
 
 /// 工具注册表
 pub struct ToolRegistry {
@@ -20,16 +21,14 @@ impl ToolRegistry {
     /// 创建注册表并注册默认工具
     pub fn new(
         workspace: impl Into<PathBuf>,
-        allowed_dir: Option<impl Into<PathBuf>>,
-        tools_config: nanobot_config::ToolsConfig,
+        exec_config: nanobot_config::ExecToolConfig,
+        restrict_to_workspace: bool,
     ) -> Self {
-        use crate::fs::{EditFileTool, ListDirTool, ReadFileTool, WriteFileTool};
-        use crate::shell::ExecTool;
-
         let mut registry = Self { tools: HashMap::new() };
 
         let workspace = workspace.into();
-        let allowed_dir = allowed_dir.map(|d| d.into());
+        // 根据 restrict_to_workspace 确定 allowed_dir
+        let allowed_dir = if restrict_to_workspace { Some(workspace.clone()) } else { None };
 
         let read_tool = ReadFileTool::new(&workspace, allowed_dir.as_deref());
         info!("注册工具: {}", read_tool.name());
@@ -47,12 +46,12 @@ impl ToolRegistry {
         info!("注册工具: {}", list_tool.name());
         registry.tools.insert(list_tool.name().to_string(), Box::new(list_tool) as Box<dyn Tool>);
 
-        // 应用 ToolsConfig 到 ExecToolOptions
+        // 应用 exec_config 到 ExecToolOptions
         let exec_options = ExecToolOptions {
             workspace: Some(workspace.clone()),
-            restrict_to_workspace: tools_config.restrict_to_workspace,
-            timeout: tools_config.exec.timeout,
-            path_append: tools_config.exec.path_append.clone(),
+            restrict_to_workspace,
+            timeout: exec_config.timeout,
+            path_append: exec_config.path_append.clone(),
             ..Default::default()
         };
 
