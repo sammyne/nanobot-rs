@@ -608,3 +608,126 @@ fn dingtalk_config_validation() {
     config.client_secret = "test_client_secret".to_string();
     assert!(config.validate().is_ok());
 }
+
+// ==================== ExecConfig 测试 ====================
+
+#[test]
+fn exec_config_default_values() {
+    // 测试 ExecConfig 的默认值
+    let exec = tools::ExecConfig::default();
+    assert_eq!(exec.timeout, 60);
+    assert_eq!(exec.path_append, "");
+}
+
+#[test]
+fn exec_config_serialization() {
+    // 测试 ExecConfig 序列化使用 camelCase
+    let exec = tools::ExecConfig { timeout: 120, path_append: "/usr/local/bin".to_string() };
+    let json = serde_json::to_string(&exec).unwrap();
+
+    // 验证序列化后的字段名是 camelCase
+    assert!(json.contains("timeout"));
+    assert!(json.contains("pathAppend"));
+    assert!(!json.contains("path_append"));
+}
+
+#[test]
+fn exec_config_deserialization() {
+    // 测试 ExecConfig 反序列化
+    let json = r#"{"timeout": 30, "pathAppend": "/custom/path"}"#;
+    let exec: tools::ExecConfig = serde_json::from_str(json).unwrap();
+
+    assert_eq!(exec.timeout, 30);
+    assert_eq!(exec.path_append, "/custom/path");
+}
+
+#[test]
+fn exec_config_partial_deserialization() {
+    // 测试部分字段反序列化时使用默认值
+    let json = r#"{"timeout": 90}"#;
+    let exec: tools::ExecConfig = serde_json::from_str(json).unwrap();
+
+    assert_eq!(exec.timeout, 90);
+    assert_eq!(exec.path_append, ""); // 使用默认值
+}
+
+#[test]
+fn exec_config_empty_deserialization() {
+    // 测试空对象反序列化时使用所有默认值
+    let json = r#"{}"#;
+    let exec: tools::ExecConfig = serde_json::from_str(json).unwrap();
+
+    assert_eq!(exec.timeout, 60);
+    assert_eq!(exec.path_append, "");
+}
+
+// ==================== ToolsConfig 新字段测试 ====================
+
+#[test]
+fn tools_config_default_values() {
+    // 测试 ToolsConfig 的默认值
+    let tools = tools::ToolsConfig::default();
+    assert!(!tools.restrict_to_workspace);
+    assert_eq!(tools.exec.timeout, 60);
+    assert_eq!(tools.exec.path_append, "");
+}
+
+#[test]
+fn tools_config_with_restrict_to_workspace() {
+    // 测试 restrict_to_workspace 字段
+    let json = r#"{"restrictToWorkspace": true}"#;
+    let config: tools::ToolsConfig = serde_json::from_str(json).unwrap();
+
+    assert!(config.restrict_to_workspace);
+}
+
+#[test]
+fn tools_config_with_exec_section() {
+    // 测试 exec 配置节
+    let json = r#"{
+        "exec": {
+            "timeout": 300,
+            "pathAppend": "/opt/bin:/usr/local/bin"
+        }
+    }"#;
+    let config: tools::ToolsConfig = serde_json::from_str(json).unwrap();
+
+    assert_eq!(config.exec.timeout, 300);
+    assert_eq!(config.exec.path_append, "/opt/bin:/usr/local/bin");
+}
+
+#[test]
+fn tools_config_full_serialization() {
+    // 测试完整 ToolsConfig 序列化
+    let config = tools::ToolsConfig {
+        mcp_servers: std::collections::HashMap::new(),
+        restrict_to_workspace: true,
+        exec: tools::ExecConfig { timeout: 180, path_append: "/custom/path".to_string() },
+    };
+    let json = serde_json::to_string_pretty(&config).unwrap();
+
+    // 验证序列化后的字段名是 camelCase
+    assert!(json.contains("restrictToWorkspace"));
+    assert!(json.contains("exec"));
+    assert!(json.contains("timeout"));
+    assert!(json.contains("pathAppend"));
+}
+
+#[test]
+fn tools_config_backward_compatibility() {
+    // 测试向后兼容性：旧配置文件（不含新字段）应能正常加载
+    let old_json = r#"{
+        "mcpServers": {
+            "test-server": {
+                "command": "test",
+                "args": []
+            }
+        }
+    }"#;
+    let config: tools::ToolsConfig = serde_json::from_str(old_json).unwrap();
+
+    // 验证新字段使用默认值
+    assert!(!config.restrict_to_workspace);
+    assert_eq!(config.exec.timeout, 60);
+    assert_eq!(config.exec.path_append, "");
+}

@@ -37,6 +37,11 @@
 //!     "port": 18790
 //!   },
 //!   "tools": {
+//!     "restrictToWorkspace": false,
+//!     "exec": {
+//!       "timeout": 60,
+//!       "pathAppend": ""
+//!     },
 //!     "mcpServers": {
 //!       "filesystem": {
 //!         "command": "npx",
@@ -93,6 +98,32 @@
 //! - `headers`: HTTP 请求头键值对（可选）
 //! - `toolTimeout`: 工具调用超时时间，单位秒（可选，默认 30）
 //!
+//! # 工具配置
+//!
+//! `tools` 字段提供工具行为的全局配置：
+//!
+//! - `restrictToWorkspace`: 是否限制工具在工作空间内执行（默认 false）
+//!   - 当设置为 true 时，文件系统相关工具仅在工作空间目录内操作
+//!   - ExecTool 会检查命令中的路径是否在工作空间范围内
+//!
+//! - `exec`: ExecTool 的专属配置
+//!   - `timeout`: 命令执行超时时间，单位秒（默认 60）
+//!   - `pathAppend`: 追加到 PATH 环境变量的路径（默认 ""）
+//!
+//! ## 示例
+//!
+//! ```json
+//! {
+//!   "tools": {
+//!     "restrictToWorkspace": true,
+//!     "exec": {
+//!       "timeout": 120,
+//!       "pathAppend": "/usr/local/bin:/opt/tools"
+//!     }
+//!   }
+//! }
+//! ```
+//!
 //! # 配置验证
 //!
 //! 配置加载时会自动验证：
@@ -126,7 +157,7 @@ pub use channel::{ChannelsConfig, DingTalkConfig, FeishuConfig};
 pub use gateway::{GatewayConfig, HeartbeatConfig};
 pub use mcp::McpServerConfig;
 pub use provider::{ProviderConfig, ProvidersConfig};
-pub use tools::ToolsConfig;
+pub use tools::{ExecConfig, ToolsConfig};
 
 pub use crate::utils::expand_tilde;
 

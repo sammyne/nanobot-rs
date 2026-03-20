@@ -10,7 +10,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use anyhow::Result;
-use nanobot_config::{AgentDefaults, McpServerConfig};
+use nanobot_config::AgentDefaults;
 use nanobot_context::ContextBuilder;
 use nanobot_cron::{CronService, CronTool};
 use nanobot_mcp::wrapper::connect;
@@ -63,32 +63,32 @@ impl<P: Provider> AgentLoop<P> {
     /// 创建新的 AgentLoop 实例
     ///
     /// tool_registry 会根据 config 中的 workspace 参数自动构造。
-    /// 如果提供了 mcp_configs，会自动连接 MCP 服务器并注册工具。
+    /// 如果 tools_config 中包含 MCP 服务器配置，会自动连接并注册工具。
     ///
     /// # Arguments
     /// * `provider` - LLM 提供者实例
     /// * `config` - Agent 配置
     /// * `cron_service` - 可选的 Cron 服务实例
     /// * `subagent_manager` - 可选的子代理管理器
-    /// * `mcp_configs` - 可选的 MCP 服务器配置
+    /// * `tools_config` - 工具配置（包含 MCP 服务器配置、ExecTool 配置等）
     pub async fn new(
         mut provider: P,
         config: AgentDefaults,
         cron_service: Option<Arc<CronService>>,
         subagent_manager: Option<Arc<SubagentManager<P>>>,
-        mcp_configs: std::collections::HashMap<String, McpServerConfig>,
+        tools_config: nanobot_config::ToolsConfig,
     ) -> Result<Self> {
         info!("初始化 AgentLoop: model={}, max_tool_iterations={}", config.model, config.max_tool_iterations);
 
-        // 基于 config 构造 tool_registry
-        let mut tool_registry = ToolRegistry::new(config.workspace.clone(), None::<String>);
+        // 基于 config 构造 tool_registry，传入 tools_config
+        let mut tool_registry = ToolRegistry::new(config.workspace.clone(), None::<String>, tools_config.clone());
 
         // 连接 MCP 服务器并注册工具
-        let mcp_server_count = mcp_configs.len();
+        let mcp_server_count = tools_config.mcp_servers.len();
         let mut mcp_tool_count = 0;
-        if !mcp_configs.is_empty() {
+        if !tools_config.mcp_servers.is_empty() {
             info!("发现 {} 个 MCP 服务器配置", mcp_server_count);
-            match connect(mcp_configs).await {
+            match connect(tools_config.mcp_servers).await {
                 Ok(mcp_tools) => {
                     mcp_tool_count = mcp_tools.len();
                     for tool in mcp_tools {

@@ -23,6 +23,6 @@ pub static DEFAULT_WORKSPACE_PATH: LazyLock<PathBuf> = LazyLock::new(|| NANOBOT_
 
 // 公开导出
 pub use schema::{
-    AgentDefaults, ChannelsConfig, Config, ConfigError, DingTalkConfig, FeishuConfig, GatewayConfig, HeartbeatConfig,
-    McpServerConfig, ProviderConfig, ToolsConfig,
+    AgentDefaults, ChannelsConfig, Config, ConfigError, DingTalkConfig, ExecConfig, FeishuConfig, GatewayConfig,
+    HeartbeatConfig, McpServerConfig, ProviderConfig, ToolsConfig,
 };

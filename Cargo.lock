@@ -1733,6 +1733,7 @@ dependencies = [
  "async-trait",
  "chrono",
  "nanobot-channels",
+ "nanobot-config",
  "nanobot-provider",
  "nanobot-tools",
  "schemars 0.8.22",
@@ -1758,6 +1759,7 @@ name = "nanobot-tools"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "nanobot-config",
  "nanobot-utils",
  "regex",
  "schemars 0.8.22",
