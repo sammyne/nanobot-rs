@@ -16,6 +16,7 @@ schemars = "0.8"
 walkdir = "2"
 tokio-test = "0.4"
 tempfile = "3"
+regex = "1"
 
 # Internal crates
 nanobot-config.path = "crates/config"
