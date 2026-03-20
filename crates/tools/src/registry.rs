@@ -9,6 +9,7 @@ use serde_json::Value;
 use tracing::{error, info};
 
 use crate::core::{Tool, ToolContext, ToolDefinition, ToolError, ToolResult};
+use crate::shell::ExecToolOptions;
 
 /// 工具注册表
 pub struct ToolRegistry {
@@ -17,7 +18,11 @@ pub struct ToolRegistry {
 
 impl ToolRegistry {
     /// 创建注册表并注册默认工具
-    pub fn new(workspace: impl Into<PathBuf>, allowed_dir: Option<impl Into<PathBuf>>) -> Self {
+    pub fn new(
+        workspace: impl Into<PathBuf>,
+        allowed_dir: Option<impl Into<PathBuf>>,
+        tools_config: nanobot_config::ToolsConfig,
+    ) -> Self {
         use crate::fs::{EditFileTool, ListDirTool, ReadFileTool, WriteFileTool};
         use crate::shell::ExecTool;
 
@@ -42,8 +47,16 @@ impl ToolRegistry {
         info!("注册工具: {}", list_tool.name());
         registry.tools.insert(list_tool.name().to_string(), Box::new(list_tool) as Box<dyn Tool>);
 
-        let shell_tool =
-            ExecTool::new(crate::shell::ExecToolOptions { workspace: Some(workspace.clone()), ..Default::default() });
+        // 应用 ToolsConfig 到 ExecToolOptions
+        let exec_options = ExecToolOptions {
+            workspace: Some(workspace.clone()),
+            restrict_to_workspace: tools_config.restrict_to_workspace,
+            timeout: tools_config.exec.timeout,
+            path_append: tools_config.exec.path_append.clone(),
+            ..Default::default()
+        };
+
+        let shell_tool = ExecTool::new(exec_options);
         info!("注册工具: {}", shell_tool.name());
         registry.tools.insert(shell_tool.name().to_string(), Box::new(shell_tool) as Box<dyn Tool>);
 

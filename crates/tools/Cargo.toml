@@ -15,7 +15,9 @@ tracing.workspace = true
 schemars.workspace = true
 walkdir.workspace = true
 nanobot-utils.workspace = true
+nanobot-config.workspace = true
 regex.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+nanobot-config = { path = "../config" }

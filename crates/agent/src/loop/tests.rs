@@ -103,9 +103,10 @@ async fn process_direct_returns_expected_response() {
         let provider = MockProvider::new(case.expected_response);
         let config = mock_config();
         let subagent_manager = mock_subagent_manager(provider.clone());
-        let agent = AgentLoop::new(provider, config, None, Some(subagent_manager), std::collections::HashMap::new())
-            .await
-            .expect("AgentLoop creation should succeed");
+        let agent =
+            AgentLoop::new(provider, config, None, Some(subagent_manager), nanobot_config::ToolsConfig::default())
+                .await
+                .expect("AgentLoop creation should succeed");
 
         let session_key = case.session_id.unwrap_or("cli:direct");
         let result = agent
@@ -123,7 +124,7 @@ async fn process_direct_handles_empty_message() {
     let provider = MockProvider::new("OK");
     let config = mock_config();
     let subagent_manager = mock_subagent_manager(provider.clone());
-    let agent = AgentLoop::new(provider, config, None, Some(subagent_manager), std::collections::HashMap::new())
+    let agent = AgentLoop::new(provider, config, None, Some(subagent_manager), nanobot_config::ToolsConfig::default())
         .await
         .expect("AgentLoop creation should succeed");
 
@@ -139,7 +140,7 @@ async fn config_returns_correct_reference() {
     let config = mock_config();
     let subagent_manager = mock_subagent_manager(provider.clone());
     let agent =
-        AgentLoop::new(provider, config.clone(), None, Some(subagent_manager), std::collections::HashMap::new())
+        AgentLoop::new(provider, config.clone(), None, Some(subagent_manager), nanobot_config::ToolsConfig::default())
             .await
             .expect("AgentLoop creation should succeed");
 
@@ -193,7 +194,7 @@ async fn agent_loop_uses_custom_config_values() {
                 custom_defaults1,
                 None,
                 Some(subagent_manager1),
-                std::collections::HashMap::new(),
+                nanobot_config::ToolsConfig::default(),
             )
             .await
             .expect("AgentLoop creation should succeed"),
@@ -207,7 +208,7 @@ async fn agent_loop_uses_custom_config_values() {
                 custom_defaults2,
                 None,
                 Some(subagent_manager2),
-                std::collections::HashMap::new(),
+                nanobot_config::ToolsConfig::default(),
             )
             .await
             .expect("AgentLoop creation should succeed"),
@@ -262,7 +263,7 @@ async fn process_message_routes_system_message_correctly() {
     for case in test_vector {
         let provider = MockProvider::new(case.expected_response);
         let config = mock_config();
-        let agent = AgentLoop::new(provider, config, None, None, std::collections::HashMap::new())
+        let agent = AgentLoop::new(provider, config, None, None, nanobot_config::ToolsConfig::default())
             .await
             .expect("AgentLoop creation should succeed");
 
@@ -284,7 +285,7 @@ async fn process_message_routes_system_message_correctly() {
 async fn process_message_preserves_non_system_routing() {
     let provider = MockProvider::new("Normal message response");
     let config = mock_config();
-    let agent = AgentLoop::new(provider, config, None, None, std::collections::HashMap::new())
+    let agent = AgentLoop::new(provider, config, None, None, nanobot_config::ToolsConfig::default())
         .await
         .expect("AgentLoop creation should succeed");
 
@@ -355,7 +356,7 @@ async fn consolidation_triggers_when_message_window_reached() {
         };
 
         let provider = MockProvider::new("test response");
-        let agent = AgentLoop::new(provider, config, None, None, std::collections::HashMap::new())
+        let agent = AgentLoop::new(provider, config, None, None, nanobot_config::ToolsConfig::default())
             .await
             .expect("AgentLoop creation should succeed");
 
@@ -407,7 +408,7 @@ async fn consolidation_rejected_when_already_in_progress() {
     };
 
     let provider = MockProvider::new("test response");
-    let agent = AgentLoop::new(provider, config, None, None, std::collections::HashMap::new())
+    let agent = AgentLoop::new(provider, config, None, None, nanobot_config::ToolsConfig::default())
         .await
         .expect("AgentLoop creation should succeed");
 
@@ -461,7 +462,7 @@ async fn consolidation_state_properly_managed() {
     };
 
     let provider = MockProvider::new("test response");
-    let agent = AgentLoop::new(provider, config, None, None, std::collections::HashMap::new())
+    let agent = AgentLoop::new(provider, config, None, None, nanobot_config::ToolsConfig::default())
         .await
         .expect("AgentLoop creation should succeed");
 
@@ -505,7 +506,7 @@ async fn consolidation_state_independent_across_sessions() {
     };
 
     let provider = MockProvider::new("test response");
-    let agent = AgentLoop::new(provider, config, None, None, std::collections::HashMap::new())
+    let agent = AgentLoop::new(provider, config, None, None, nanobot_config::ToolsConfig::default())
         .await
         .expect("AgentLoop creation should succeed");
 
@@ -570,7 +571,7 @@ async fn consolidation_state_thread_safe() {
 
     let provider = MockProvider::new("test response");
     let agent = Arc::new(
-        AgentLoop::new(provider, config, None, None, std::collections::HashMap::new())
+        AgentLoop::new(provider, config, None, None, nanobot_config::ToolsConfig::default())
             .await
             .expect("AgentLoop creation should succeed"),
     );
@@ -638,7 +639,7 @@ async fn mutex_prevents_concurrent_consolidation_same_session() {
 
     let provider = MockProvider::new("test response");
     let agent = Arc::new(
-        AgentLoop::new(provider, config, None, None, std::collections::HashMap::new())
+        AgentLoop::new(provider, config, None, None, nanobot_config::ToolsConfig::default())
             .await
             .expect("AgentLoop creation should succeed"),
     );
@@ -744,7 +745,7 @@ async fn try_handle_cmd_recognizes_and_processes_commands() {
     for case in test_vector {
         let provider = MockProvider::new("test response");
         let config = mock_config();
-        let agent = AgentLoop::new(provider, config, None, None, std::collections::HashMap::new())
+        let agent = AgentLoop::new(provider, config, None, None, nanobot_config::ToolsConfig::default())
             .await
             .expect("AgentLoop creation should succeed");
 
@@ -774,7 +775,7 @@ async fn try_handle_cmd_recognizes_and_processes_commands() {
 async fn try_handle_cmd_returns_err_for_non_commands() {
     let provider = MockProvider::new("test response");
     let config = mock_config();
-    let agent = AgentLoop::new(provider, config, None, None, std::collections::HashMap::new())
+    let agent = AgentLoop::new(provider, config, None, None, nanobot_config::ToolsConfig::default())
         .await
         .expect("AgentLoop creation should succeed");
 
@@ -801,7 +802,7 @@ async fn try_handle_cmd_returns_err_for_non_commands() {
 async fn process_message_integrates_command_handling() {
     let provider = MockProvider::new("test response");
     let config = mock_config();
-    let agent = AgentLoop::new(provider, config, None, None, std::collections::HashMap::new())
+    let agent = AgentLoop::new(provider, config, None, None, nanobot_config::ToolsConfig::default())
         .await
         .expect("AgentLoop creation should succeed");
 
@@ -830,7 +831,7 @@ async fn process_message_integrates_command_handling() {
 async fn command_handling_does_not_create_session_history() {
     let provider = MockProvider::new("test response");
     let config = mock_config();
-    let agent = AgentLoop::new(provider, config, None, None, std::collections::HashMap::new())
+    let agent = AgentLoop::new(provider, config, None, None, nanobot_config::ToolsConfig::default())
         .await
         .expect("AgentLoop creation should succeed");
 
@@ -850,7 +851,7 @@ async fn command_handling_does_not_create_session_history() {
 async fn command_handling_does_not_trigger_consolidation() {
     let provider = MockProvider::new("test response");
     let config = mock_config();
-    let agent = AgentLoop::new(provider, config, None, None, std::collections::HashMap::new())
+    let agent = AgentLoop::new(provider, config, None, None, nanobot_config::ToolsConfig::default())
         .await
         .expect("AgentLoop creation should succeed");
 
@@ -913,7 +914,7 @@ async fn try_handle_cmd_recognizes_new_command() {
     for case in test_vector {
         let provider = MockProvider::new("test response");
         let config = mock_config();
-        let agent = AgentLoop::new(provider, config, None, None, std::collections::HashMap::new())
+        let agent = AgentLoop::new(provider, config, None, None, nanobot_config::ToolsConfig::default())
             .await
             .expect("AgentLoop creation should succeed");
 
@@ -943,7 +944,7 @@ async fn try_handle_cmd_recognizes_new_command() {
 async fn new_command_clears_session_history() {
     let provider = MockProvider::new("test response");
     let config = mock_config();
-    let agent = AgentLoop::new(provider, config, None, None, std::collections::HashMap::new())
+    let agent = AgentLoop::new(provider, config, None, None, nanobot_config::ToolsConfig::default())
         .await
         .expect("AgentLoop creation should succeed");
 
@@ -983,7 +984,7 @@ async fn new_command_handles_concurrent_requests() {
     let provider = MockProvider::new("test response");
     let config = mock_config();
     let agent = Arc::new(
-        AgentLoop::new(provider, config, None, None, std::collections::HashMap::new())
+        AgentLoop::new(provider, config, None, None, nanobot_config::ToolsConfig::default())
             .await
             .expect("AgentLoop creation should succeed"),
     );
@@ -1039,7 +1040,7 @@ async fn new_command_handles_concurrent_requests() {
 async fn new_command_returns_error_when_consolidating() {
     let provider = MockProvider::new("test response");
     let config = mock_config();
-    let agent = AgentLoop::new(provider, config, None, None, std::collections::HashMap::new())
+    let agent = AgentLoop::new(provider, config, None, None, nanobot_config::ToolsConfig::default())
         .await
         .expect("AgentLoop creation should succeed");
 

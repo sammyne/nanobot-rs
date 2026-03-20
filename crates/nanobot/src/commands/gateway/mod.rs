@@ -102,7 +102,7 @@ impl GatewayCmd {
                 config.agents.defaults.clone(),
                 Some(cron_service.clone()),
                 Some(subagent_manager),
-                config.tools.mcp_servers.clone(),
+                config.tools.clone(),
             )
             .await?,
         );
