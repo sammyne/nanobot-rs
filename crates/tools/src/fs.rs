@@ -6,7 +6,8 @@ use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
 use async_trait::async_trait;
-use schemars::schema::SchemaObject;
+use schemars::{JsonSchema, Schema};
+use serde::{Deserialize, Serialize};
 use tokio::fs;
 use tracing::{debug, info};
 
@@ -40,26 +41,22 @@ fn resolve_path(path: &str, workspace: &Path, allowed_dir: Option<&Path>) -> Res
 
 // ==================== ReadFileTool ====================
 
+/// ReadFile 参数结构
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ReadFileArgs {
+    /// 文件或目录路径，支持相对路径（基于workspace）或绝对路径
+    pub path: String,
+}
+
+/// Lazy-initialized global schema for ReadFileArgs
+static READ_FILE_PARAMETERS_SCHEMA: LazyLock<Schema> = LazyLock::new(|| schemars::schema_for!(ReadFileArgs));
+
 /// 读取文件工具
 pub struct ReadFileTool {
     workspace: PathBuf,
     allowed_dir: Option<PathBuf>,
 }
-
-/// ReadFileTool 的参数 Schema
-static READ_FILE_PARAMETERS_SCHEMA: LazyLock<SchemaObject> = LazyLock::new(|| {
-    serde_json::from_value(serde_json::json!({
-        "type": "object",
-        "properties": {
-            "path": {
-                "type": "string",
-                "description": "文件或目录路径，支持相对路径（基于workspace）或绝对路径"
-            }
-        },
-        "required": ["path"]
-    }))
-    .expect("JSON schema is valid for read_file")
-});
 
 impl ReadFileTool {
     /// 创建新的读取文件工具
@@ -82,7 +79,7 @@ impl Tool for ReadFileTool {
         "读取指定文件的内容。支持相对路径（基于 workspace）或绝对路径。"
     }
 
-    fn parameters(&self) -> SchemaObject {
+    fn parameters(&self) -> Schema {
         READ_FILE_PARAMETERS_SCHEMA.clone()
     }
 
@@ -109,24 +106,18 @@ impl Tool for ReadFileTool {
 
 // ==================== WriteFileTool ====================
 
-/// WriteFileTool 的参数 Schema
-static WRITE_FILE_PARAMETERS_SCHEMA: LazyLock<SchemaObject> = LazyLock::new(|| {
-    serde_json::from_value(serde_json::json!({
-        "type": "object",
-        "properties": {
-            "path": {
-                "type": "string",
-                "description": "目标文件路径"
-            },
-            "content": {
-                "type": "string",
-                "description": "要写入的文件内容"
-            }
-        },
-        "required": ["path", "content"]
-    }))
-    .expect("JSON schema is valid for write_file")
-});
+/// WriteFile 参数结构
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct WriteFileArgs {
+    /// 目标文件路径
+    pub path: String,
+    /// 要写入的文件内容
+    pub content: String,
+}
+
+/// Lazy-initialized global schema for WriteFileArgs
+static WRITE_FILE_PARAMETERS_SCHEMA: LazyLock<Schema> = LazyLock::new(|| schemars::schema_for!(WriteFileArgs));
 
 /// 写入文件工具
 pub struct WriteFileTool {
@@ -155,7 +146,7 @@ impl Tool for WriteFileTool {
         "将内容写入指定文件。如果父目录不存在会自动创建。支持相对路径或绝对路径。"
     }
 
-    fn parameters(&self) -> SchemaObject {
+    fn parameters(&self) -> Schema {
         WRITE_FILE_PARAMETERS_SCHEMA.clone()
     }
 
@@ -182,28 +173,20 @@ impl Tool for WriteFileTool {
 
 // ==================== EditFileTool ====================
 
-/// EditFileTool 的参数 Schema
-static EDIT_FILE_PARAMETERS_SCHEMA: LazyLock<SchemaObject> = LazyLock::new(|| {
-    serde_json::from_value(serde_json::json!({
-        "type": "object",
-        "properties": {
-            "path": {
-                "type": "string",
-                "description": "目标文件路径"
-            },
-            "old_text": {
-                "type": "string",
-                "description": "要替换的原始文本（需完全匹配）"
-            },
-            "new_text": {
-                "type": "string",
-                "description": "替换后的新文本"
-            }
-        },
-        "required": ["path", "old_text", "new_text"]
-    }))
-    .expect("JSON schema is valid for edit_file")
-});
+/// EditFile 参数结构
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct EditFileArgs {
+    /// 目标文件路径
+    pub path: String,
+    /// 要替换的原始文本（需完全匹配）
+    pub old_text: String,
+    /// 替换后的新文本
+    pub new_text: String,
+}
+
+/// Lazy-initialized global schema for EditFileArgs
+static EDIT_FILE_PARAMETERS_SCHEMA: LazyLock<Schema> = LazyLock::new(|| schemars::schema_for!(EditFileArgs));
 
 /// 编辑文件工具
 pub struct EditFileTool {
@@ -245,7 +228,7 @@ impl Tool for EditFileTool {
         "编辑文件内容，将 old_text 替换为 new_text。需要完全匹配（建议包含3行上下文确保唯一性）。"
     }
 
-    fn parameters(&self) -> SchemaObject {
+    fn parameters(&self) -> Schema {
         EDIT_FILE_PARAMETERS_SCHEMA.clone()
     }
 
@@ -288,25 +271,19 @@ impl Tool for EditFileTool {
 
 // ==================== ListDirTool ====================
 
-/// ListDirTool 的参数 Schema
-static LIST_DIR_PARAMETERS_SCHEMA: LazyLock<SchemaObject> = LazyLock::new(|| {
-    serde_json::from_value(serde_json::json!({
-        "type": "object",
-        "properties": {
-            "path": {
-                "type": "string",
-                "description": "目录路径"
-            },
-            "recursive": {
-                "type": "boolean",
-                "description": "是否递归列出子目录",
-                "default": false
-            }
-        },
-        "required": ["path"]
-    }))
-    .expect("JSON schema is valid for list_dir")
-});
+/// ListDir 参数结构
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ListDirArgs {
+    /// 目录路径
+    pub path: String,
+    /// 是否递归列出子目录
+    #[serde(default)]
+    pub recursive: bool,
+}
+
+/// Lazy-initialized global schema for ListDirArgs
+static LIST_DIR_PARAMETERS_SCHEMA: LazyLock<Schema> = LazyLock::new(|| schemars::schema_for!(ListDirArgs));
 
 /// 列出目录工具
 pub struct ListDirTool {
@@ -343,7 +320,7 @@ impl Tool for ListDirTool {
         "列出指定目录的内容。可选项 recursive 支持递归列出。"
     }
 
-    fn parameters(&self) -> SchemaObject {
+    fn parameters(&self) -> Schema {
         LIST_DIR_PARAMETERS_SCHEMA.clone()
     }
 

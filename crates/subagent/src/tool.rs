@@ -5,7 +5,8 @@ use std::sync::{Arc, LazyLock};
 use async_trait::async_trait;
 use nanobot_provider::Provider;
 use nanobot_tools::{Tool, ToolContext, ToolError, ToolResult};
-use schemars::schema::SchemaObject;
+use schemars::{JsonSchema, Schema};
+use serde::{Deserialize, Serialize};
 
 use crate::manager::SubagentManager;
 
@@ -36,33 +37,18 @@ where
 }
 
 /// Parameters for the spawn tool
-#[derive(Debug, Clone, serde::Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
 struct SpawnParams {
     /// The task for the subagent to complete
     task: String,
     /// Optional short label for the task (for display)
-    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
     label: Option<String>,
 }
 
 /// Parameters schema for spawn tool
-static SPAWN_PARAMS_SCHEMA: LazyLock<SchemaObject> = LazyLock::new(|| {
-    serde_json::from_value(serde_json::json!({
-        "type": "object",
-        "properties": {
-            "task": {
-                "type": "string",
-                "description": "The task for the subagent to complete"
-            },
-            "label": {
-                "type": "string",
-                "description": "Optional short label for the task (for display)"
-            }
-        },
-        "required": ["task"]
-    }))
-    .unwrap_or_default()
-});
+static SPAWN_PARAMS_SCHEMA: LazyLock<Schema> = LazyLock::new(|| schemars::schema_for!(SpawnParams));
 
 #[async_trait]
 impl<P> Tool for SpawnTool<P>
@@ -79,7 +65,7 @@ where
          The subagent will complete the task and report back when done."
     }
 
-    fn parameters(&self) -> SchemaObject {
+    fn parameters(&self) -> Schema {
         SPAWN_PARAMS_SCHEMA.clone()
     }
 

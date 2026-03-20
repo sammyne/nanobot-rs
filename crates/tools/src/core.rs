@@ -3,7 +3,7 @@
 //! 定义 Tool trait 和通用的工具结果、错误类型。
 
 use async_trait::async_trait;
-use schemars::schema::SchemaObject;
+use schemars::Schema;
 use thiserror::Error;
 
 /// 工具执行结果
@@ -102,7 +102,7 @@ pub trait Tool: Send + Sync {
     fn description(&self) -> &str;
 
     /// 生成 JSON Schema 描述参数
-    fn parameters(&self) -> SchemaObject;
+    fn parameters(&self) -> Schema;
 
     /// 异步执行工具
     ///
@@ -119,7 +119,7 @@ pub trait Tool: Send + Sync {
         ToolDefinition {
             name: self.name().to_string(),
             description: self.description().to_string(),
-            parameters: serde_json::to_value(self.parameters()).unwrap_or_default(),
+            parameters: self.parameters().to_value(),
         }
     }
 }

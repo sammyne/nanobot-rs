@@ -20,7 +20,7 @@ use rmcp::model::{
 use rmcp::service::{RoleClient, RunningService, serve_client};
 use rmcp::transport::streamable_http_client::StreamableHttpClientTransportConfig;
 use rmcp::transport::{StreamableHttpClientTransport, TokioChildProcess};
-use schemars::schema::SchemaObject;
+use schemars::Schema;
 use serde_json::Value;
 use tokio::process::Command;
 use tokio::time::timeout;
@@ -292,18 +292,10 @@ impl Tool for McpToolWrapper {
 
     /// 返回工具参数 Schema
     ///
-    /// 将 MCP 工具的 inputSchema 转换为 SchemaObject
-    fn parameters(&self) -> SchemaObject {
-        // 将 JsonObject 转换为 serde_json::Value，然后反序列化为 SchemaObject
-        let schema_value = self.tool_def.schema_as_json_value();
-        match serde_json::from_value(schema_value) {
-            Ok(schema) => schema,
-            Err(e) => {
-                warn!("Failed to parse tool schema for {}: {}", self.wrapped_name, e);
-                // 返回空的 object schema
-                SchemaObject::default()
-            }
-        }
+    /// 将 MCP 工具的 inputSchema 转换为 Schema
+    fn parameters(&self) -> Schema {
+        // 将 MCP 工具的 schema_as_json_value 转换为 Schema
+        Schema::try_from(self.tool_def.schema_as_json_value()).expect("MCP tool schema should be valid JSON Schema")
     }
 
     /// 执行工具调用
