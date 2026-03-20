@@ -15,7 +15,7 @@ use schemars::schema::SchemaObject;
 use tokio::process::Command;
 use tokio::time::timeout;
 use tracing::{debug, info};
-use utils::{detect_path_traversal, extract_absolute_paths, truncate_output};
+use utils::{add_envs, detect_path_traversal, extract_absolute_paths, truncate_output};
 
 use crate::core::{Tool, ToolContext, ToolError, ToolResult, optional_param, require_param, u64_param};
 
@@ -192,25 +192,6 @@ impl ExecTool {
 
         Ok(())
     }
-
-    /// 构建包含 PATH 扩展的环境变量
-    fn build_env_with_path(&self) -> Option<std::collections::HashMap<String, String>> {
-        if self.options.path_append.is_empty() {
-            return None;
-        }
-
-        let mut env_map = std::collections::HashMap::new();
-        for (key, value) in std::env::vars() {
-            env_map.insert(key, value);
-        }
-
-        let path_sep = if cfg!(windows) { ";" } else { ":" };
-        let current_path = env_map.get("PATH").cloned().unwrap_or_default();
-        let new_path = format!("{}{}{}", current_path, path_sep, self.options.path_append);
-        env_map.insert("PATH".to_string(), new_path);
-
-        Some(env_map)
-    }
 }
 
 #[async_trait]
@@ -246,11 +227,7 @@ impl Tool for ExecTool {
         cmd.arg("-c").arg(&command).current_dir(&working_dir).stdout(Stdio::piped()).stderr(Stdio::piped());
 
         // 应用 PATH 环境变量扩展
-        if let Some(env) = self.build_env_with_path() {
-            for (key, value) in env {
-                cmd.env(key, value);
-            }
-        }
+        add_envs(&mut cmd, &self.options.path_append);
 
         // 执行命令
         let child = cmd.spawn().map_err(|e| ToolError::execution(format!("命令启动失败: {e}")))?;
