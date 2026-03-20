@@ -39,5 +39,22 @@ pub fn extract_absolute_paths(cmd: &str) -> Vec<String> {
     paths
 }
 
+/// 构建包含 PATH 扩展的环境变量并应用到命令
+pub fn add_envs(cmd: &mut tokio::process::Command, append_path: &str) {
+    cmd.envs(std::env::vars());
+
+    if append_path.trim().is_empty() {
+        return;
+    }
+
+    const KEY: &str = "PATH";
+    const ENV_PATH_SEP: char = if cfg!(windows) { ';' } else { ':' };
+
+    match std::env::var(KEY) {
+        Ok(v) => cmd.env(KEY, format!("{v}{ENV_PATH_SEP}{append_path}")),
+        Err(_) => cmd.env(KEY, append_path),
+    };
+}
+
 #[cfg(test)]
 mod tests;
