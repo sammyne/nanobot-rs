@@ -19,9 +19,9 @@ use utils::{detect_path_traversal, extract_absolute_paths, truncate_output};
 
 use crate::core::{Tool, ToolContext, ToolError, ToolResult, optional_param, require_param, u64_param};
 
-/// Shell 执行结果
+/// Exec 执行结果
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
-pub struct ShellResult {
+pub struct ExecResult {
     pub exit_code: i32,
     pub stdout: String,
     pub stderr: String,
@@ -29,7 +29,7 @@ pub struct ShellResult {
 
 /// Shell 工具配置选项
 #[derive(Debug, Clone)]
-pub struct ShellToolOptions {
+pub struct ExecToolOptions {
     /// 正则表达式拒绝模式列表
     pub deny_patterns: Vec<String>,
     /// 正则表达式允许模式列表（白名单）
@@ -44,7 +44,7 @@ pub struct ShellToolOptions {
     pub workspace: Option<PathBuf>,
 }
 
-impl Default for ShellToolOptions {
+impl Default for ExecToolOptions {
     fn default() -> Self {
         Self {
             deny_patterns: vec![
@@ -67,15 +67,15 @@ impl Default for ShellToolOptions {
     }
 }
 
-/// Shell 工具
-pub struct ShellTool {
-    options: ShellToolOptions,
+/// Exec 工具
+pub struct ExecTool {
+    options: ExecToolOptions,
     deny_patterns: Vec<Regex>,
     allow_patterns: Option<Vec<Regex>>,
 }
 
-/// ShellTool 的参数 Schema
-static SHELL_PARAMETERS_SCHEMA: LazyLock<SchemaObject> = LazyLock::new(|| {
+/// ExecTool 的参数 Schema
+static EXEC_PARAMETERS_SCHEMA: LazyLock<SchemaObject> = LazyLock::new(|| {
     serde_json::from_value(serde_json::json!({
         "type": "object",
         "properties": {
@@ -98,9 +98,9 @@ static SHELL_PARAMETERS_SCHEMA: LazyLock<SchemaObject> = LazyLock::new(|| {
     .expect("JSON schema is valid for shell")
 });
 
-impl ShellTool {
+impl ExecTool {
     /// 从配置选项创建 ShellTool 实例
-    pub fn new(options: ShellToolOptions) -> Self {
+    pub fn new(options: ExecToolOptions) -> Self {
         let deny_patterns: Vec<Regex> = options.deny_patterns.iter().filter_map(|p| Regex::new(p).ok()).collect();
 
         let allow_patterns: Option<Vec<Regex>> = if options.allow_patterns.is_empty() {
@@ -214,7 +214,7 @@ impl ShellTool {
 }
 
 #[async_trait]
-impl Tool for ShellTool {
+impl Tool for ExecTool {
     fn name(&self) -> &str {
         "shell"
     }
@@ -224,7 +224,7 @@ impl Tool for ShellTool {
     }
 
     fn parameters(&self) -> SchemaObject {
-        SHELL_PARAMETERS_SCHEMA.clone()
+        EXEC_PARAMETERS_SCHEMA.clone()
     }
 
     async fn execute(&self, _ctx: &ToolContext, params: serde_json::Value) -> ToolResult {
@@ -270,7 +270,7 @@ impl Tool for ShellTool {
 
         info!("Shell 命令完成: {} (exit_code={})", command, output.status.code().unwrap_or(-1));
 
-        let result = ShellResult { exit_code: output.status.code().unwrap_or(-1), stdout, stderr };
+        let result = ExecResult { exit_code: output.status.code().unwrap_or(-1), stdout, stderr };
 
         Ok(serde_json::to_string_pretty(&result).unwrap_or_else(|_| "结果序列化失败".to_string()))
     }

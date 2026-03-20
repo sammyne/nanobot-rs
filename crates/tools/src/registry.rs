@@ -19,7 +19,7 @@ impl ToolRegistry {
     /// 创建注册表并注册默认工具
     pub fn new(workspace: impl Into<PathBuf>, allowed_dir: Option<impl Into<PathBuf>>) -> Self {
         use crate::fs::{EditFileTool, ListDirTool, ReadFileTool, WriteFileTool};
-        use crate::shell::ShellTool;
+        use crate::shell::ExecTool;
 
         let mut registry = Self { tools: HashMap::new() };
 
@@ -43,7 +43,7 @@ impl ToolRegistry {
         registry.tools.insert(list_tool.name().to_string(), Box::new(list_tool) as Box<dyn Tool>);
 
         let shell_tool =
-            ShellTool::new(crate::shell::ShellToolOptions { workspace: Some(workspace.clone()), ..Default::default() });
+            ExecTool::new(crate::shell::ExecToolOptions { workspace: Some(workspace.clone()), ..Default::default() });
         info!("注册工具: {}", shell_tool.name());
         registry.tools.insert(shell_tool.name().to_string(), Box::new(shell_tool) as Box<dyn Tool>);
 
