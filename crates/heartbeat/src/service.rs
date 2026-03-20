@@ -29,8 +29,7 @@ static HEARTBEAT_TOOL: std::sync::LazyLock<nanobot_tools::ToolDefinition> =
     std::sync::LazyLock::new(|| nanobot_tools::ToolDefinition {
         name: "heartbeat".to_string(),
         description: "Decide whether to execute tasks based on HEARTBEAT.md content".to_string(),
-        parameters: serde_json::to_value(schemars::schema_for!(Action).schema)
-            .expect("Failed to serialize Action schema to heartbeat tool"),
+        parameters: schemars::schema_for!(Action).to_value(),
     });
 
 /// Heartbeat service for periodic task checking

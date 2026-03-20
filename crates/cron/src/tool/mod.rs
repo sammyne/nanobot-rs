@@ -4,16 +4,15 @@ use std::sync::{Arc, LazyLock};
 
 use async_trait::async_trait;
 use nanobot_tools::{Tool, ToolContext, ToolError, ToolResult};
-use schemars::JsonSchema;
-use schemars::schema::SchemaObject;
+use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 
 use crate::scheduler::is_valid_timezone;
 use crate::service::CronService;
 use crate::types::CronSchedule;
 
-/// Lazy-initialized global schema for CronAddArgs
-static CRON_PARAMETERS: LazyLock<SchemaObject> = LazyLock::new(|| schemars::schema_for!(CronArgs).schema);
+/// Lazy-initialized global schema for CronArgs
+static CRON_PARAMETERS: LazyLock<Schema> = LazyLock::new(|| schemars::schema_for!(CronArgs));
 
 /// Schedule definition for adding a cron job
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -160,7 +159,7 @@ impl Tool for CronTool {
         "Schedule reminders and recurring tasks. Actions: add, list, remove."
     }
 
-    fn parameters(&self) -> SchemaObject {
+    fn parameters(&self) -> Schema {
         CRON_PARAMETERS.clone()
     }
 

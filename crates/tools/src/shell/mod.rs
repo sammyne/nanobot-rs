@@ -11,7 +11,8 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use regex::Regex;
-use schemars::schema::SchemaObject;
+use schemars::{JsonSchema, Schema};
+use serde::{Deserialize, Serialize};
 use tokio::process::Command;
 use tokio::time::timeout;
 use tracing::{debug, info};
@@ -74,29 +75,26 @@ pub struct ExecTool {
     allow_patterns: Option<Vec<Regex>>,
 }
 
-/// ExecTool 的参数 Schema
-static EXEC_PARAMETERS_SCHEMA: LazyLock<SchemaObject> = LazyLock::new(|| {
-    serde_json::from_value(serde_json::json!({
-        "type": "object",
-        "properties": {
-            "command": {
-                "type": "string",
-                "description": "要执行的 shell 命令"
-            },
-            "cwd": {
-                "type": "string",
-                "description": "工作目录（可选，默认为 workspace）"
-            },
-            "timeout_ms": {
-                "type": "integer",
-                "description": "超时时间（毫秒，可选，默认60秒）",
-                "default": 60000
-            }
-        },
-        "required": ["command"]
-    }))
-    .expect("JSON schema is valid for shell")
-});
+/// Exec 参数结构
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ExecArgs {
+    /// 要执行的 shell 命令
+    pub command: String,
+    /// 工作目录（可选，默认为 workspace）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cwd: Option<String>,
+    /// 超时时间（毫秒，可选，默认60秒）
+    #[serde(default = "default_timeout_ms")]
+    pub timeout_ms: u64,
+}
+
+fn default_timeout_ms() -> u64 {
+    60000
+}
+
+/// Lazy-initialized global schema for ExecArgs
+static EXEC_PARAMETERS_SCHEMA: LazyLock<Schema> = LazyLock::new(|| schemars::schema_for!(ExecArgs));
 
 impl ExecTool {
     /// 从配置选项创建 ShellTool 实例
@@ -204,7 +202,7 @@ impl Tool for ExecTool {
         "执行 Shell 命令。支持设置工作目录和超时。危险命令会被拦截。"
     }
 
-    fn parameters(&self) -> SchemaObject {
+    fn parameters(&self) -> Schema {
         EXEC_PARAMETERS_SCHEMA.clone()
     }
 
