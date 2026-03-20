@@ -4,13 +4,13 @@ use super::*;
 
 #[test]
 fn default_deny_patterns() {
-    let options = ShellToolOptions::default();
+    let options = ExecToolOptions::default();
     assert!(!options.deny_patterns.is_empty());
 }
 
 #[test]
 fn check_deny_patterns() {
-    let tool = ShellTool::new(ShellToolOptions::default());
+    let tool = ExecTool::new(ExecToolOptions::default());
 
     // 应该被拒绝的命令
     assert!(tool.check_deny_patterns("rm -rf /").is_err());
@@ -27,8 +27,8 @@ fn check_deny_patterns() {
 #[test]
 fn check_allow_patterns() {
     let options =
-        ShellToolOptions { allow_patterns: vec![r"\bls\b".to_string(), r"\becho\b".to_string()], ..Default::default() };
-    let tool = ShellTool::new(options);
+        ExecToolOptions { allow_patterns: vec![r"\bls\b".to_string(), r"\becho\b".to_string()], ..Default::default() };
+    let tool = ExecTool::new(options);
 
     // 在白名单中的命令
     assert!(tool.check_allow_patterns("ls -la").is_ok());
@@ -40,7 +40,7 @@ fn check_allow_patterns() {
 
 #[test]
 fn security_guard() {
-    let tool = ShellTool::new(ShellToolOptions::default());
+    let tool = ExecTool::new(ExecToolOptions::default());
     let cwd = PathBuf::from(".");
 
     // 危险命令应被拒绝
@@ -53,8 +53,8 @@ fn security_guard() {
 #[test]
 fn security_guard_with_restrict_to_workspace() {
     let options =
-        ShellToolOptions { restrict_to_workspace: true, workspace: Some(PathBuf::from("/tmp")), ..Default::default() };
-    let tool = ShellTool::new(options);
+        ExecToolOptions { restrict_to_workspace: true, workspace: Some(PathBuf::from("/tmp")), ..Default::default() };
+    let tool = ExecTool::new(options);
     let cwd = PathBuf::from("/tmp");
 
     // 路径遍历应被拒绝

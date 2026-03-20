@@ -4,7 +4,7 @@
 
 use std::path::PathBuf;
 
-use nanobot_tools::{ShellTool, ShellToolOptions, Tool, ToolContext, ToolResult};
+use nanobot_tools::{ExecTool, ExecToolOptions, Tool, ToolContext, ToolResult};
 use serde_json::json;
 use tempfile::TempDir;
 
@@ -22,8 +22,7 @@ fn test_context() -> ToolContext {
 #[tokio::test]
 async fn shell_echo_success() {
     let temp_dir = setup();
-    let tool =
-        ShellTool::new(ShellToolOptions { workspace: Some(PathBuf::from(temp_dir.path())), ..Default::default() });
+    let tool = ExecTool::new(ExecToolOptions { workspace: Some(PathBuf::from(temp_dir.path())), ..Default::default() });
     let ctx = test_context();
 
     let result: ToolResult = tool.execute(&ctx, json!({"command": "echo hello"})).await;
@@ -37,8 +36,7 @@ async fn shell_echo_success() {
 #[tokio::test]
 async fn shell_dangerous_command_blocked() {
     let temp_dir = setup();
-    let tool =
-        ShellTool::new(ShellToolOptions { workspace: Some(PathBuf::from(temp_dir.path())), ..Default::default() });
+    let tool = ExecTool::new(ExecToolOptions { workspace: Some(PathBuf::from(temp_dir.path())), ..Default::default() });
     let ctx = test_context();
 
     let result: ToolResult = tool.execute(&ctx, json!({"command": "rm -rf /"})).await;
@@ -51,7 +49,7 @@ async fn shell_dangerous_command_blocked() {
 #[tokio::test]
 async fn shell_timeout() {
     let temp_dir = setup();
-    let tool = ShellTool::new(ShellToolOptions {
+    let tool = ExecTool::new(ExecToolOptions {
         workspace: Some(PathBuf::from(temp_dir.path())),
         timeout: 1,
         ..Default::default()

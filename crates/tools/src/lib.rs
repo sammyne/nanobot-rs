@@ -14,4 +14,4 @@ pub use core::{Tool, ToolContext, ToolDefinition, ToolError, ToolResult};
 
 pub use fs::{EditFileTool, ListDirTool, ReadFileTool, WriteFileTool};
 pub use registry::ToolRegistry;
-pub use shell::{ShellTool, ShellToolOptions};
+pub use shell::{ExecTool, ExecToolOptions};
