@@ -18,7 +18,7 @@ echo "代码行数统计（排除测试函数）"
 echo "=========================================="
 
 # 排除的 crates
-EXCLUDED_CRATES="channels|cli|provider"
+EXCLUDED_CRATES="channels|nanobot|provider"
 
 # 统计非测试代码行数的函数
 count_non_test_lines() {
@@ -58,7 +58,7 @@ count_non_test_lines() {
                 ((total++))
             fi
         done < "$file"
-    done < <(find "$dir" -name "*.rs" -type f | grep -vE "($EXCLUDED_CRATES)" | grep -v "tests.rs" | grep -v "tests/" | tr '\n' '\0')
+    done < <(find "$dir" -name "*.rs" -type f | grep -vE "crates/($EXCLUDED_CRATES)" | grep -v "tests.rs" | grep -v "tests/" | tr '\n' '\0')
     
     echo "$total"
 }
@@ -67,7 +67,7 @@ count_non_test_lines() {
 total_non_test_lines=$(count_non_test_lines "$SOURCE_DIR")
 
 echo ""
-echo -e "非测试代码行数（排除 channels、cli、providers）: ${GREEN}$total_non_test_lines${NC}"
+echo -e "非测试代码行数（排除 channels、nanobot、provider）: ${GREEN}$total_non_test_lines${NC}"
 echo "=========================================="
 
 # 显示各 crate 的统计（排除指定 crate）
