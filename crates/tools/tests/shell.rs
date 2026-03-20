@@ -2,7 +2,9 @@
 //!
 //! 测试 Shell 工具的命令执行、安全拦截和超时处理。
 
-use nanobot_tools::{ShellTool, Tool, ToolContext, ToolResult};
+use std::path::PathBuf;
+
+use nanobot_tools::{ShellTool, ShellToolOptions, Tool, ToolContext, ToolResult};
 use serde_json::json;
 use tempfile::TempDir;
 
@@ -20,7 +22,8 @@ fn test_context() -> ToolContext {
 #[tokio::test]
 async fn shell_echo_success() {
     let temp_dir = setup();
-    let tool = ShellTool::new(temp_dir.path().to_str().unwrap());
+    let tool =
+        ShellTool::new(ShellToolOptions { workspace: Some(PathBuf::from(temp_dir.path())), ..Default::default() });
     let ctx = test_context();
 
     let result: ToolResult = tool.execute(&ctx, json!({"command": "echo hello"})).await;
@@ -34,7 +37,8 @@ async fn shell_echo_success() {
 #[tokio::test]
 async fn shell_dangerous_command_blocked() {
     let temp_dir = setup();
-    let tool = ShellTool::new(temp_dir.path().to_str().unwrap());
+    let tool =
+        ShellTool::new(ShellToolOptions { workspace: Some(PathBuf::from(temp_dir.path())), ..Default::default() });
     let ctx = test_context();
 
     let result: ToolResult = tool.execute(&ctx, json!({"command": "rm -rf /"})).await;
@@ -47,7 +51,11 @@ async fn shell_dangerous_command_blocked() {
 #[tokio::test]
 async fn shell_timeout() {
     let temp_dir = setup();
-    let tool = ShellTool::new(temp_dir.path().to_str().unwrap()).with_timeout(1);
+    let tool = ShellTool::new(ShellToolOptions {
+        workspace: Some(PathBuf::from(temp_dir.path())),
+        timeout: 1,
+        ..Default::default()
+    });
     let ctx = test_context();
 
     let result: ToolResult = tool

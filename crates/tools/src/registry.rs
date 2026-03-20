@@ -42,7 +42,8 @@ impl ToolRegistry {
         info!("注册工具: {}", list_tool.name());
         registry.tools.insert(list_tool.name().to_string(), Box::new(list_tool) as Box<dyn Tool>);
 
-        let shell_tool = ShellTool::new(&workspace);
+        let shell_tool =
+            ShellTool::new(crate::shell::ShellToolOptions { workspace: Some(workspace.clone()), ..Default::default() });
         info!("注册工具: {}", shell_tool.name());
         registry.tools.insert(shell_tool.name().to_string(), Box::new(shell_tool) as Box<dyn Tool>);
 

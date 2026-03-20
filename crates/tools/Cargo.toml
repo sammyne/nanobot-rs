@@ -15,6 +15,7 @@ tracing.workspace = true
 schemars.workspace = true
 walkdir.workspace = true
 nanobot-utils.workspace = true
+regex.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
