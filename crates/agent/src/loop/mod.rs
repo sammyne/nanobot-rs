@@ -80,8 +80,9 @@ impl<P: Provider> AgentLoop<P> {
     ) -> Result<Self> {
         info!("初始化 AgentLoop: model={}, max_tool_iterations={}", config.model, config.max_tool_iterations);
 
-        // 基于 config 构造 tool_registry，传入 tools_config
-        let mut tool_registry = ToolRegistry::new(config.workspace.clone(), None::<String>, tools_config.clone());
+        // 基于 config 构造 tool_registry，传入 exec_config 和 restrict_to_workspace
+        let mut tool_registry =
+            ToolRegistry::new(config.workspace.clone(), tools_config.exec.clone(), tools_config.restrict_to_workspace);
 
         // 连接 MCP 服务器并注册工具
         let mcp_server_count = tools_config.mcp_servers.len();

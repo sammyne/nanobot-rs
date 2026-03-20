@@ -31,7 +31,7 @@ use super::mcp::McpServerConfig;
 /// - `pathAppend`: 追加到 PATH 环境变量的路径，多个路径用冒号分隔（Linux/macOS）或分号分隔（Windows）
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
-pub struct ExecConfig {
+pub struct ExecToolConfig {
     /// 命令执行超时时间（单位：秒）
     pub timeout: u64,
 
@@ -39,7 +39,7 @@ pub struct ExecConfig {
     pub path_append: String,
 }
 
-impl Default for ExecConfig {
+impl Default for ExecToolConfig {
     fn default() -> Self {
         Self { timeout: 60, path_append: String::new() }
     }
@@ -73,5 +73,5 @@ pub struct ToolsConfig {
     ///
     /// 控制 Shell 命令执行的超时时间和 PATH 环境变量。
     #[serde(default)]
-    pub exec: ExecConfig,
+    pub exec: ExecToolConfig,
 }
