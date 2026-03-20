@@ -417,7 +417,7 @@ fn tool_call_construction() {
     assert_eq!(tool_call.name, "search");
 
     // 测试参数解析
-    let args = tool_call.parse_arguments().expect("Failed to parse arguments");
+    let args = tool_call.parse_arguments::<serde_json::Value>().expect("Failed to parse arguments");
     assert_eq!(args["query"], "rust");
 
     println!("✓ ToolCall construction test passed");

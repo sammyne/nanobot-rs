@@ -16,14 +16,14 @@ use anyhow::{Context, Result};
 use clap::Args;
 use nanobot_agent::{AgentLoop, InboundMessage, OutboundMessage};
 use nanobot_channels::ChannelManager;
-use nanobot_config::{Config, HeartbeatConfig as GatewayHeartbeatConfig};
+use nanobot_config::{Config, HeartbeatConfig};
 use nanobot_cron::{CronJob, CronService};
-use nanobot_heartbeat::config::HeartbeatConfig as HeartbeatServiceConfig;
 use nanobot_heartbeat::{HeartbeatService, OnExecuteCallback, OnNotifyCallback};
 use nanobot_provider::{OpenAILike, Provider};
 use nanobot_session::SessionInfo;
 use nanobot_subagent::SubagentManager;
 use tokio::sync::mpsc;
+use tokio_util::sync::{CancellationToken, DropGuard};
 use tracing::{error, info, warn};
 
 use crate::utils::init_cron_service;
@@ -48,12 +48,14 @@ struct ServicesContext<P: Provider + Send + Sync + Clone + 'static> {
     channel_manager: ChannelManager,
     /// CronService 实例
     cron_service: Arc<CronService>,
-    /// HeartbeatService 实例
-    heartbeat_service: HeartbeatService<P>,
     /// 入站消息接收端
     inbound_rx: mpsc::Receiver<InboundMessage>,
     /// 出站消息发送端
     outbound_tx: mpsc::Sender<OutboundMessage>,
+    /// LLM Provider
+    provider: P,
+    /// 工作区路径
+    workspace_path: std::path::PathBuf,
 }
 
 impl GatewayCmd {
@@ -115,15 +117,6 @@ impl GatewayCmd {
             .await
             .context("创建通道管理器失败")?;
 
-        // 初始化 HeartbeatService（在创建 AgentLoop 和 ChannelManager 之后）
-        let heartbeat_service = self.setup_heartbeat_service(
-            config.agents.defaults.workspace.clone(),
-            provider,
-            &config.gateway.heartbeat,
-            agent_loop.clone(),
-            outbound_tx.clone(),
-        )?;
-
         // 启动健康检查服务（后台任务运行）
         if let Some(port) = health_check_port {
             tokio::spawn(health_check::serve(port));
@@ -131,8 +124,16 @@ impl GatewayCmd {
 
         // 启动服务并等待关闭信号
         self.run_services(
-            ServicesContext { agent_loop, channel_manager, cron_service, heartbeat_service, inbound_rx, outbound_tx },
-            &config.gateway.heartbeat,
+            ServicesContext {
+                agent_loop,
+                channel_manager,
+                cron_service,
+                inbound_rx,
+                outbound_tx,
+                provider,
+                workspace_path: config.agents.defaults.workspace.clone(),
+            },
+            &config,
             health_check_port,
         )
         .await?;
@@ -156,7 +157,7 @@ impl GatewayCmd {
     async fn print_service_status(
         &self,
         channel_manager: &ChannelManager,
-        heartbeat_config: &GatewayHeartbeatConfig,
+        heartbeat_config: &HeartbeatConfig,
         health_check_port: Option<u16>,
     ) {
         println!();
@@ -248,14 +249,11 @@ impl GatewayCmd {
         &self,
         workspace_path: std::path::PathBuf,
         provider: OpenAILike,
-        config: &GatewayHeartbeatConfig,
+        config: HeartbeatConfig,
         agent_loop: Arc<AgentLoop<OpenAILike>>,
         outbound_tx: mpsc::Sender<OutboundMessage>,
     ) -> Result<HeartbeatService<OpenAILike>> {
         info!("设置 HeartbeatService: enabled={}, interval_s={}", config.enabled, config.interval_s);
-
-        // 转换配置格式
-        let heartbeat_config = HeartbeatServiceConfig::with_values(config.enabled, config.interval_s);
 
         // 创建 SessionManager 用于访问会话列表
         let sessions = Arc::new(nanobot_session::SessionManager::new(workspace_path.clone()));
@@ -337,7 +335,7 @@ impl GatewayCmd {
 
         // 创建 HeartbeatService（带回调）
         let heartbeat_service =
-            HeartbeatService::new(workspace_path, provider, heartbeat_config, Some(on_execute), Some(on_notify));
+            HeartbeatService::new(workspace_path, provider, config, Some(on_execute), Some(on_notify));
 
         Ok(heartbeat_service)
     }
@@ -379,12 +377,16 @@ impl GatewayCmd {
     async fn run_services(
         &self,
         ctx: ServicesContext<OpenAILike>,
-        heartbeat_config: &GatewayHeartbeatConfig,
+        config: &Config,
         health_check_port: Option<u16>,
     ) -> Result<()> {
+        // Clone values needed for agent_task before moving ctx
+        let agent_loop_clone = ctx.agent_loop.clone();
+        let outbound_tx_clone = ctx.outbound_tx.clone();
+
         // 启动 AgentLoop 后台任务（传递通道给 run）
         let agent_task = tokio::spawn(async move {
-            if let Err(e) = ctx.agent_loop.run(ctx.inbound_rx, ctx.outbound_tx).await {
+            if let Err(e) = agent_loop_clone.run(ctx.inbound_rx, ctx.outbound_tx).await {
                 error!("AgentLoop 运行失败: {}", e);
             }
         });
@@ -397,25 +399,37 @@ impl GatewayCmd {
         ctx.cron_service.start().await;
         info!("CronService 已启动");
 
-        // 启动 HeartbeatService
-        let heartbeat_service = Arc::new(ctx.heartbeat_service);
-        let heartbeat_interval = heartbeat_config.interval_s;
-        match heartbeat_service.clone().start().await {
-            Ok(()) => {
-                info!("HeartbeatService 已启动 (间隔: {}s)", heartbeat_interval);
-            }
-            Err(nanobot_heartbeat::error::HeartbeatError::Disabled) => {
-                info!("HeartbeatService 已禁用");
-            }
-            Err(e) => {
-                error!("HeartbeatService 启动失败: {}", e);
-            }
-        }
+        // 启动 HeartbeatService using CancellationToken
+        let heartbeat_token = if config.gateway.heartbeat.enabled {
+            let token = CancellationToken::new();
+            let heartbeat_drop_guard = token.clone().drop_guard();
+
+            // Create heartbeat service
+            let heartbeat_service = self.setup_heartbeat_service(
+                ctx.workspace_path.clone(),
+                ctx.provider.clone(),
+                config.gateway.heartbeat,
+                ctx.agent_loop.clone(),
+                outbound_tx_clone,
+            )?;
+
+            // Start heartbeat service in a cancellable task
+            let token_clone = token.clone();
+            tokio::spawn(async move {
+                let _ = token_clone.run_until_cancelled_owned(heartbeat_service.start()).await;
+            });
+
+            info!("HeartbeatService 已启动");
+            Some(heartbeat_drop_guard)
+        } else {
+            info!("HeartbeatService 已禁用");
+            None
+        };
 
         // HealthCheckService 已在 run 方法中启动
 
         // 显示服务状态（在启动所有通道后）
-        self.print_service_status(&channel_manager, heartbeat_config, health_check_port).await;
+        self.print_service_status(&channel_manager, &config.gateway.heartbeat, health_check_port).await;
 
         println!("  ✓ 服务已启动，按 Ctrl+C 停止");
         println!();
@@ -432,7 +446,7 @@ impl GatewayCmd {
         }
 
         // 优雅关闭
-        self.shutdown(agent_task, channel_manager, ctx.cron_service, heartbeat_service).await?;
+        self.shutdown(agent_task, channel_manager, ctx.cron_service, heartbeat_token).await?;
 
         println!("  ✓ 服务已停止");
         println!();
@@ -446,10 +460,10 @@ impl GatewayCmd {
         agent_task: tokio::task::JoinHandle<()>,
         mut channel_manager: ChannelManager,
         cron_service: Arc<CronService>,
-        heartbeat_service: Arc<HeartbeatService<OpenAILike>>,
+        heartbeat_token: Option<DropGuard>,
     ) -> Result<()> {
         println!("    ↦ 停止 HeartbeatService...");
-        heartbeat_service.stop().await;
+        drop(heartbeat_token); // Drop the token to cancel the heartbeat service
 
         println!("    ↦ 停止 AgentLoop...");
         agent_task.abort();

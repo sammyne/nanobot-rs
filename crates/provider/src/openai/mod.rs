@@ -187,7 +187,7 @@ impl From<ChatCompletionMessageToolCall> for ToolCall {
 /// 将内部 ToolCall 类型转换为 OpenAI 的工具调用格式
 impl From<&ToolCall> for ChatCompletionMessageToolCall {
     fn from(tc: &ToolCall) -> Self {
-        let arguments = tc.parse_arguments().unwrap_or_default();
+        let arguments = tc.parse_arguments::<serde_json::Value>().unwrap_or_default();
         Self {
             id: tc.id.clone(),
             r#type: ChatCompletionToolType::Function,

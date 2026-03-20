@@ -1532,6 +1532,7 @@ dependencies = [
  "nanobot-utils",
  "tempfile",
  "tokio",
+ "tokio-util",
  "tracing",
  "tracing-subscriber",
 ]
@@ -1634,8 +1635,10 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "nanobot-config",
  "nanobot-provider",
  "nanobot-tools",
+ "schemars 0.8.22",
  "serde",
  "serde_json",
  "tempfile",

@@ -201,7 +201,7 @@ where
                     let tool_context = ToolContext::new(&task.channel, &task.chat_id);
 
                     // 解析参数
-                    let args = tool_call.parse_arguments().unwrap_or(serde_json::Value::Null);
+                    let args = tool_call.parse_arguments::<serde_json::Value>().unwrap_or(serde_json::Value::Null);
 
                     // 使用 tool_registry 执行工具
                     let result = match self.tool_registry.execute(&tool_context, &tool_call.name, args).await {
