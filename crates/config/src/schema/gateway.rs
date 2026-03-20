@@ -9,7 +9,7 @@ use super::ConfigError;
 /// Heartbeat 服务配置
 ///
 /// 独立定义以避免循环依赖
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct HeartbeatConfig {
     /// 是否启用心跳服务
@@ -32,6 +32,12 @@ fn default_interval() -> u64 {
 impl Default for HeartbeatConfig {
     fn default() -> Self {
         Self { enabled: default_enabled(), interval_s: default_interval() }
+    }
+}
+
+impl std::fmt::Display for HeartbeatConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "HeartbeatConfig {{ enabled: {}, interval_s: {} }}", self.enabled, self.interval_s)
     }
 }
 

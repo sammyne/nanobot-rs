@@ -35,8 +35,33 @@ impl ToolCall {
         Self { id: id.into(), name: name.into(), arguments: params.to_string() }
     }
 
-    /// 解析参数为 JSON Value
-    pub fn parse_arguments(&self) -> Result<serde_json::Value, serde_json::Error> {
+    /// 解析参数为指定类型
+    ///
+    /// # Type Parameters
+    ///
+    /// * `T` - 目标类型，必须实现 `Deserialize`
+    ///
+    /// # Errors
+    ///
+    /// 返回 `serde_json::Error` 如果反序列化失败
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// # use nanobot_provider::ToolCall;
+    /// # let tool_call = ToolCall::new("id", "name", serde_json::json!({ "action": "run" }));
+    /// #[derive(serde::Deserialize)]
+    /// struct Action {
+    ///     action: String,
+    /// }
+    ///
+    /// let action: Action = tool_call.parse_arguments()?;
+    /// # Ok::<(), serde_json::Error>(())
+    /// ```
+    pub fn parse_arguments<T>(&self) -> Result<T, serde_json::Error>
+    where
+        T: for<'de> Deserialize<'de>,
+    {
         serde_json::from_str(&self.arguments)
     }
 }

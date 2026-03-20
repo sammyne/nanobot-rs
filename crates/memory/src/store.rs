@@ -238,7 +238,9 @@ impl MemoryStore {
             tool_calls.iter().find(|tc| tc.name == SAVE_MEMORY_TOOL).ok_or(MemoryError::NoToolCall)?;
 
         // Parse arguments
-        let args = save_memory_call.parse_arguments().map_err(|e| MemoryError::ToolParse(e.to_string()))?;
+        let args = save_memory_call
+            .parse_arguments::<serde_json::Value>()
+            .map_err(|e| MemoryError::ToolParse(e.to_string()))?;
 
         // Extract history_entry
         if let Some(entry) = args.get("history_entry") {

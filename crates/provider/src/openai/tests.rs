@@ -98,7 +98,7 @@ fn tool_call_new() {
 fn tool_call_parse_arguments_ok() {
     let tool = ToolCall::new("call_1", "search", json!({"query": "rust", "limit": 10}));
 
-    let args = tool.parse_arguments().unwrap();
+    let args = tool.parse_arguments::<serde_json::Value>().unwrap();
     assert_eq!(args["query"], "rust");
     assert_eq!(args["limit"], 10);
 }
@@ -107,7 +107,7 @@ fn tool_call_parse_arguments_ok() {
 fn tool_call_parse_arguments_invalid() {
     let tool = ToolCall { id: "call_1".to_string(), name: "search".to_string(), arguments: "invalid json".to_string() };
 
-    assert!(tool.parse_arguments().is_err());
+    assert!(tool.parse_arguments::<serde_json::Value>().is_err());
 }
 
 // ============ ProviderResponse 测试 ============

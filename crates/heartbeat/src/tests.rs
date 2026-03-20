@@ -1,6 +1,8 @@
 use std::path::PathBuf;
 
-use crate::{HeartbeatConfig, HeartbeatError, HeartbeatService};
+use nanobot_config::HeartbeatConfig;
+
+use crate::{HeartbeatError, HeartbeatService};
 
 mod config_validation {
     use super::*;
@@ -9,26 +11,26 @@ mod config_validation {
     async fn default_config_is_valid() {
         let config = HeartbeatConfig::default();
         assert!(config.enabled);
-        assert_eq!(config.interval_seconds, 1800);
+        assert_eq!(config.interval_s, 1800);
         assert!(config.validate().is_ok());
     }
 
     #[tokio::test]
     async fn interval_must_be_greater_than_zero() {
-        let config = HeartbeatConfig { interval_seconds: 0, ..Default::default() };
+        let config = HeartbeatConfig { interval_s: 0, ..Default::default() };
         assert!(config.validate().is_err());
     }
 
     #[tokio::test]
     async fn interval_can_be_one_second() {
-        let config = HeartbeatConfig { interval_seconds: 1, ..Default::default() };
+        let config = HeartbeatConfig { interval_s: 1, ..Default::default() };
         assert!(config.validate().is_ok());
     }
 
     #[tokio::test]
     async fn interval_can_be_large_value() {
         let config = HeartbeatConfig {
-            interval_seconds: 86400, // 1 day
+            interval_s: 86400, // 1 day
             ..Default::default()
         };
         assert!(config.validate().is_ok());
@@ -40,19 +42,19 @@ mod config_serialization {
 
     #[tokio::test]
     async fn serialize_to_json() {
-        let config = HeartbeatConfig { enabled: false, interval_seconds: 3600 };
+        let config = HeartbeatConfig { enabled: false, interval_s: 3600 };
 
         let json = serde_json::to_value(config).unwrap();
         assert_eq!(json["enabled"], false);
-        assert_eq!(json["interval_seconds"], 3600);
+        assert_eq!(json["intervalS"], 3600);
     }
 
     #[tokio::test]
     async fn deserialize_from_json() {
-        let json = r#"{"enabled": true, "interval_seconds": 7200}"#;
+        let json = r#"{"enabled": true, "intervalS": 7200}"#;
         let config: HeartbeatConfig = serde_json::from_str(json).unwrap();
         assert!(config.enabled);
-        assert_eq!(config.interval_seconds, 7200);
+        assert_eq!(config.interval_s, 7200);
     }
 
     #[tokio::test]
@@ -60,15 +62,15 @@ mod config_serialization {
         let json = r#"{}"#;
         let config: HeartbeatConfig = serde_json::from_str(json).unwrap();
         assert!(config.enabled);
-        assert_eq!(config.interval_seconds, 1800);
+        assert_eq!(config.interval_s, 1800);
     }
 
     #[tokio::test]
     async fn deserialize_with_missing_enabled_field() {
-        let json = r#"{"interval_seconds": 5000}"#;
+        let json = r#"{"intervalS": 5000}"#;
         let config: HeartbeatConfig = serde_json::from_str(json).unwrap();
         assert!(config.enabled);
-        assert_eq!(config.interval_seconds, 5000);
+        assert_eq!(config.interval_s, 5000);
     }
 
     #[tokio::test]
@@ -76,7 +78,7 @@ mod config_serialization {
         let json = r#"{"enabled": false}"#;
         let config: HeartbeatConfig = serde_json::from_str(json).unwrap();
         assert!(!config.enabled);
-        assert_eq!(config.interval_seconds, 1800);
+        assert_eq!(config.interval_s, 1800);
     }
 }
 
@@ -85,8 +87,6 @@ mod error_types {
 
     #[test]
     fn error_variants_can_be_created() {
-        let _ = HeartbeatError::AlreadyRunning;
-        let _ = HeartbeatError::NotRunning;
         let _ = HeartbeatError::Disabled;
         let _ = HeartbeatError::InvalidConfig("test".to_string());
         let _ = HeartbeatError::FileRead(std::io::Error::new(std::io::ErrorKind::NotFound, "not found"));
@@ -104,40 +104,29 @@ mod error_types {
 }
 
 mod lifecycle_management {
-    use std::sync::Arc;
-
     use super::*;
 
     #[tokio::test]
-    async fn service_can_be_started_and_stopped() {
+    async fn service_can_be_started_and_aborted() {
         let config = HeartbeatConfig::default();
         let provider = MockProvider::new();
         let workspace = PathBuf::from("/tmp/test_workspace");
 
-        let service = Arc::new(HeartbeatService::new(workspace, provider, config, None, None));
+        let service = HeartbeatService::new(workspace, provider, config, None, None);
 
-        assert!(!service.is_running().await);
+        // Start the service in a background task
+        let task = tokio::spawn(async move {
+            let _ = service.start().await;
+        });
 
-        Arc::clone(&service).start().await.unwrap();
-        assert!(service.is_running().await);
+        // Give the service a moment to start
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
-        service.stop().await;
-        assert!(!service.is_running().await);
-    }
+        // Abort the task
+        task.abort();
 
-    #[tokio::test]
-    async fn service_cannot_start_when_already_running() {
-        let config = HeartbeatConfig::default();
-        let provider = MockProvider::new();
-        let workspace = PathBuf::from("/tmp/test_workspace");
-
-        let service = Arc::new(HeartbeatService::new(workspace, provider, config, None, None));
-
-        Arc::clone(&service).start().await.unwrap();
-        let result = Arc::clone(&service).start().await;
-        assert!(matches!(result, Err(HeartbeatError::AlreadyRunning)));
-
-        service.stop().await;
+        // Wait for the task to be aborted
+        let _ = tokio::time::timeout(tokio::time::Duration::from_millis(500), task).await;
     }
 
     #[tokio::test]
@@ -146,29 +135,13 @@ mod lifecycle_management {
         let provider = MockProvider::new();
         let workspace = PathBuf::from("/tmp/test_workspace");
 
-        let service = Arc::new(HeartbeatService::new(workspace, provider, config, None, None));
+        let service = HeartbeatService::new(workspace, provider, config, None, None);
 
-        let result = Arc::clone(&service).start().await;
+        let result = service.start().await;
         assert!(matches!(result, Err(HeartbeatError::Disabled)));
-        assert!(!service.is_running().await);
-    }
-
-    #[tokio::test]
-    async fn status_returns_correct_information() {
-        let config = HeartbeatConfig::default();
-        let provider = MockProvider::new();
-        let workspace = PathBuf::from("/tmp/test_workspace");
-
-        let service: HeartbeatService<MockProvider> = HeartbeatService::new(workspace, provider, config, None, None);
-
-        let status = service.status().await;
-        assert!(status["enabled"].as_bool().unwrap());
-        assert!(!status["running"].as_bool().unwrap());
-        assert_eq!(status["interval_seconds"].as_u64().unwrap(), 1800);
     }
 }
 
-// ... existing code ...
 struct MockProvider {
     _marker: std::marker::PhantomData<()>,
 }
@@ -207,19 +180,19 @@ mod two_phase_decision {
     use super::*;
 
     #[tokio::test]
-    async fn manual_trigger_skips_when_heartbeat_not_found() {
+    async fn tick_skips_when_heartbeat_not_found() {
         let config = HeartbeatConfig::default();
         let provider = MockProvider::new();
         let workspace = PathBuf::from("/tmp/nonexistent_workspace");
 
         let service: HeartbeatService<MockProvider> = HeartbeatService::new(workspace, provider, config, None, None);
 
-        let result = service.trigger_now().await;
-        assert!(result.is_none());
+        let result = service.tick().await;
+        assert!(matches!(result, Ok(None)));
     }
 
     #[tokio::test]
-    async fn manual_trigger_skips_when_heartbeat_empty() {
+    async fn tick_skips_when_heartbeat_empty() {
         let config = HeartbeatConfig::default();
         let provider = MockProvider::new();
         let temp_dir = tempfile::tempdir().unwrap();
@@ -232,12 +205,12 @@ mod two_phase_decision {
 
         let service: HeartbeatService<MockProvider> = HeartbeatService::new(workspace, provider, config, None, None);
 
-        let result = service.trigger_now().await;
-        assert!(result.is_none());
+        let result = service.tick().await;
+        assert!(matches!(result, Ok(None)));
     }
 
     #[tokio::test]
-    async fn manual_trigger_executes_callback_when_action_is_run() {
+    async fn tick_skips_when_no_execute_callback_configured() {
         let config = HeartbeatConfig::default();
         let provider = MockProvider::new();
         let temp_dir = tempfile::tempdir().unwrap();
@@ -252,62 +225,26 @@ mod two_phase_decision {
 
         // Note: This test requires the MockProvider to actually return a tool call
         // Since our current mock returns empty assistant response, the test will skip
-        let result = service.trigger_now().await;
-        assert!(result.is_none());
+        let result = service.tick().await;
+        assert!(matches!(result, Ok(None)));
     }
 }
 
 // Exception scenarios and edge cases tests
 mod exception_scenarios {
-    use std::sync::Arc;
-
     use super::*;
 
     #[tokio::test]
-    async fn heartbeat_returns_error_when_file_read_fails() {
+    async fn tick_skips_when_file_read_fails() {
         let config = HeartbeatConfig::default();
         let provider = MockProvider::new();
-        let workspace = PathBuf::from("/root/permission_denied_workspace");
+        let temp_dir = tempfile::tempdir().unwrap();
+        let workspace = temp_dir.path().to_path_buf();
 
         let service: HeartbeatService<MockProvider> = HeartbeatService::new(workspace, provider, config, None, None);
 
-        let result = service.trigger_now().await;
-        // The result should be None when file not found (not an error)
-        assert!(result.is_none());
-    }
-
-    #[tokio::test]
-    async fn service_can_handle_concurrent_stop_requests() {
-        let config = HeartbeatConfig::default();
-        let provider = MockProvider::new();
-        let workspace = PathBuf::from("/tmp/test_workspace");
-
-        let service: HeartbeatService<MockProvider> = HeartbeatService::new(workspace, provider, config, None, None);
-        let service = Arc::new(service);
-
-        Arc::clone(&service).start().await.unwrap();
-        assert!(service.is_running().await);
-
-        // Stop concurrently
-        let stop1 = service.stop();
-        let stop2 = service.stop();
-        let stop3 = service.stop();
-
-        // Use join instead of try_join since stop returns ()
-        let _ = tokio::join!(stop1, stop2, stop3);
-        assert!(!service.is_running().await);
-    }
-
-    #[tokio::test]
-    async fn service_status_handles_invalid_workspace_path() {
-        let config = HeartbeatConfig::default();
-        let provider = MockProvider::new();
-        let workspace = PathBuf::from("/nonexistent/path");
-
-        let service: HeartbeatService<MockProvider> = HeartbeatService::new(workspace, provider, config, None, None);
-
-        let status = service.status().await;
-        assert!(status["enabled"].as_bool().unwrap());
-        assert!(!status["running"].as_bool().unwrap());
+        let result = service.tick().await;
+        // The result should be Ok(None) when file not found (not an error)
+        assert!(matches!(result, Ok(None)));
     }
 }

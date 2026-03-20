@@ -5,12 +5,6 @@ use thiserror::Error;
 /// Heartbeat service errors
 #[derive(Error, Debug)]
 pub enum HeartbeatError {
-    #[error("heartbeat service is already running")]
-    AlreadyRunning,
-
-    #[error("heartbeat service is not running")]
-    NotRunning,
-
     #[error("heartbeat service is disabled")]
     Disabled,
 
