@@ -3,9 +3,6 @@
 //! This crate provides MCP client functionality, allowing AI Agents to call
 //! tools provided by MCP servers through the unified Tool trait interface.
 
-pub mod wrapper;
+mod wrapper;
 
 pub use wrapper::{McpError, McpToolWrapper, connect};
-
-#[cfg(test)]
-mod tests;

@@ -13,7 +13,7 @@ use anyhow::Result;
 use nanobot_config::AgentDefaults;
 use nanobot_context::ContextBuilder;
 use nanobot_cron::{CronService, CronTool};
-use nanobot_mcp::wrapper::connect;
+use nanobot_mcp::connect;
 use nanobot_provider::{Message, Provider};
 use nanobot_session::SessionManager;
 use nanobot_subagent::{SpawnTool, SubagentManager};

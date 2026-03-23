@@ -43,6 +43,9 @@ pub enum McpError {
 
     #[error("Invalid configuration: {0}")]
     InvalidConfig(String),
+
+    #[error("Failed to parse tool schema: {0}")]
+    SchemaParseFailed(String),
 }
 
 /// 创建 MCP 客户端信息
@@ -163,7 +166,7 @@ pub async fn connect(configs: HashMap<String, McpServerConfig>) -> Result<Vec<Mc
 
         // 为每个工具创建包装器
         for tool in tools.tools {
-            let wrapper = McpToolWrapper::new(service.clone(), name.clone(), tool, tool_timeout);
+            let wrapper = McpToolWrapper::new(service.clone(), name.clone(), tool, tool_timeout)?;
             all_tools.push(wrapper);
         }
 
@@ -190,6 +193,8 @@ pub struct McpToolWrapper {
     tool_timeout: Duration,
     /// 包装后的工具名称（mcp_{server_name}_{original_name}）
     wrapped_name: String,
+    /// 预解析的参数 Schema
+    parameters_schema: Schema,
 }
 
 impl Drop for McpToolWrapper {
@@ -218,12 +223,23 @@ impl McpToolWrapper {
         server_name: impl Into<String>,
         tool_def: McpTool,
         tool_timeout: u64,
-    ) -> Self {
+    ) -> Result<Self, McpError> {
         let server_name = server_name.into();
         let original_name = tool_def.name.to_string();
         let wrapped_name = format!("mcp_{server_name}_{original_name}");
 
-        Self { service, server_name, tool_def, tool_timeout: Duration::from_secs(tool_timeout), wrapped_name }
+        // 预解析参数 Schema
+        let parameters_schema = Schema::try_from(tool_def.schema_as_json_value())
+            .map_err(|e| McpError::SchemaParseFailed(e.to_string()))?;
+
+        Ok(Self {
+            service,
+            server_name,
+            tool_def,
+            tool_timeout: Duration::from_secs(tool_timeout),
+            wrapped_name,
+            parameters_schema,
+        })
     }
 
     /// 获取原始工具名称
@@ -292,10 +308,9 @@ impl Tool for McpToolWrapper {
 
     /// 返回工具参数 Schema
     ///
-    /// 将 MCP 工具的 inputSchema 转换为 Schema
+    /// 返回预解析的 Schema，避免重复解析
     fn parameters(&self) -> Schema {
-        // 将 MCP 工具的 schema_as_json_value 转换为 Schema
-        Schema::try_from(self.tool_def.schema_as_json_value()).expect("MCP tool schema should be valid JSON Schema")
+        self.parameters_schema.clone()
     }
 
     /// 执行工具调用
