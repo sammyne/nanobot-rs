@@ -783,3 +783,51 @@ fn mcp_tool_name_format() {
     let wrapped_name = format!("mcp_{server_name}_{original_name}");
     assert_eq!(wrapped_name, "mcp_test-server_read_file");
 }
+
+// ==================== Config::from_env 测试 ====================
+
+#[test]
+fn from_env_returns_defaults_when_no_vars() {
+    temp_env::with_var_unset("NANOBOT_AGENTS__DEFAULTS__MODEL", || {
+        let config = Config::from_env().unwrap();
+        assert_eq!(config.agents.defaults.model, "anthropic/claude-opus-4-5");
+        assert_eq!(config.agents.defaults.max_tokens, 8192);
+        assert!(!config.gateway.host.is_empty());
+        assert_eq!(config.gateway.port, 18790);
+    });
+}
+
+#[test]
+fn from_env_with_feishu_env_vars() {
+    temp_env::with_vars(
+        [
+            ("NANOBOT_CHANNELS__FEISHU__ENABLED", Some("true")),
+            ("NANOBOT_CHANNELS__FEISHU__APP_ID", Some("test-app-id")),
+            ("NANOBOT_CHANNELS__FEISHU__APP_SECRET", Some("test-secret")),
+        ],
+        || {
+            let config = Config::from_env().unwrap();
+            let feishu = config.channels.feishu.unwrap();
+            assert!(feishu.enabled);
+            assert_eq!(feishu.app_id, "test-app-id");
+            assert_eq!(feishu.app_secret, "test-secret");
+            assert!(feishu.allow_from.is_empty());
+        },
+    );
+}
+
+#[test]
+fn from_env_overrides_model() {
+    temp_env::with_var("NANOBOT_AGENTS__DEFAULTS__MODEL", Some("gpt-4o"), || {
+        let config = Config::from_env().unwrap();
+        assert_eq!(config.agents.defaults.model, "gpt-4o");
+    });
+}
+
+#[test]
+fn from_env_overrides_gateway_port() {
+    temp_env::with_var("NANOBOT_GATEWAY__PORT", Some("9999"), || {
+        let config = Config::from_env().unwrap();
+        assert_eq!(config.gateway.port, 9999);
+    });
+}

@@ -229,6 +229,29 @@ impl Config {
         if let Some(custom) = &self.providers.custom { custom.clone() } else { ProviderConfig::default() }
     }
 
+    /// 从环境变量创建配置（不读取文件）
+    ///
+    /// 如果没有设置任何环境变量，返回完全默认的配置。
+    pub fn from_env() -> Result<Self, ConfigError> {
+        let mut config: Config = config::Config::builder()
+            .add_source(
+                config::Environment::with_prefix("NANOBOT")
+                    .prefix_separator("_")
+                    .separator("__")
+                    .convert_case(config::Case::Camel)
+                    .ignore_empty(true),
+            )
+            .build()
+            .map_err(|e| ConfigError::Parse(format!("环境变量解析失败: {e}")))?
+            .try_deserialize()
+            .map_err(|e| ConfigError::Parse(format!("配置反序列化失败: {e}")))?;
+
+        config.agents.defaults.workspace = expand_tilde(&config.agents.defaults.workspace);
+        config.validate()?;
+
+        Ok(config)
+    }
+
     /// 从指定路径加载配置（内部实现）
     ///
     /// 统一的配置加载逻辑，供测试和生产环境共用。

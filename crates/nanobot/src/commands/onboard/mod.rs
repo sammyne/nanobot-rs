@@ -30,7 +30,7 @@ impl OnboardCmd {
                 let overwrite = Confirm::new().with_prompt("Overwrite?").default(false).interact()?;
 
                 if overwrite {
-                    let config = Config::default();
+                    let config = Config::from_env()?;
                     config.save()?;
                     println!("\x1b[32m✓\x1b[0m Config reset to defaults at {}", config_path.display());
                     config
@@ -44,7 +44,7 @@ impl OnboardCmd {
                 }
             }
             None => {
-                let config = Config::default();
+                let config = Config::from_env()?;
                 config.save()?;
                 println!("\x1b[32m✓\x1b[0m Created config at {}", config_path.display());
                 config
