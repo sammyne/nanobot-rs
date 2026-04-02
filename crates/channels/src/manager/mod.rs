@@ -77,16 +77,12 @@ impl ChannelManager {
         };
 
         // 创建启用的通道
-        if let Some(dingtalk_config) = &manager.config.dingtalk
-            && dingtalk_config.enabled
-        {
-            manager.add_dingtalk_channel(dingtalk_config.clone()).await?;
+        if manager.config.dingtalk.enabled {
+            manager.add_dingtalk_channel(manager.config.dingtalk.clone()).await?;
         }
 
-        if let Some(feishu_config) = &manager.config.feishu
-            && feishu_config.enabled
-        {
-            manager.add_feishu_channel(feishu_config.clone()).await?;
+        if manager.config.feishu.enabled {
+            manager.add_feishu_channel(manager.config.feishu.clone()).await?;
         }
 
         info!("通道管理器初始化完成，共 {} 个通道", manager.channels.len());

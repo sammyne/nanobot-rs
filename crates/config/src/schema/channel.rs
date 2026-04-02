@@ -32,13 +32,11 @@ pub struct DingTalkConfig {
 impl DingTalkConfig {
     /// 验证配置
     pub fn validate(&self) -> Result<(), ConfigError> {
-        if self.enabled {
-            if self.client_id.is_empty() {
-                return Err(ConfigError::Validation("启用的钉钉通道必须配置 client_id".to_string()));
-            }
-            if self.client_secret.is_empty() {
-                return Err(ConfigError::Validation("启用的钉钉通道必须配置 client_secret".to_string()));
-            }
+        if self.client_id.is_empty() {
+            return Err(ConfigError::Validation("启用的钉钉通道必须配置 client_id".to_string()));
+        }
+        if self.client_secret.is_empty() {
+            return Err(ConfigError::Validation("启用的钉钉通道必须配置 client_secret".to_string()));
         }
 
         Ok(())
@@ -71,13 +69,11 @@ pub struct FeishuConfig {
 impl FeishuConfig {
     /// 验证配置
     pub fn validate(&self) -> Result<(), ConfigError> {
-        if self.enabled {
-            if self.app_id.is_empty() {
-                return Err(ConfigError::Validation("启用的飞书通道必须配置 app_id".to_string()));
-            }
-            if self.app_secret.is_empty() {
-                return Err(ConfigError::Validation("启用的飞书通道必须配置 app_secret".to_string()));
-            }
+        if self.app_id.is_empty() {
+            return Err(ConfigError::Validation("启用的飞书通道必须配置 app_id".to_string()));
+        }
+        if self.app_secret.is_empty() {
+            return Err(ConfigError::Validation("启用的飞书通道必须配置 app_secret".to_string()));
         }
 
         Ok(())
@@ -90,9 +86,9 @@ impl FeishuConfig {
 pub struct ChannelsConfig {
     /// 钉钉通道配置
     #[serde(default)]
-    pub dingtalk: Option<DingTalkConfig>,
+    pub dingtalk: DingTalkConfig,
 
     /// 飞书通道配置
     #[serde(default)]
-    pub feishu: Option<FeishuConfig>,
+    pub feishu: FeishuConfig,
 }
