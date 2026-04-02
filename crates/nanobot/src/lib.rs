@@ -7,4 +7,3 @@ pub mod logging;
 pub mod utils;
 
 pub use commands::{AgentCmd, CronCmd, GatewayCmd, OnboardCmd};
-pub use logging::init as init_logging;

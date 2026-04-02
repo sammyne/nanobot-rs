@@ -5,7 +5,7 @@
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
-use nanobot::{AgentCmd, CronCmd, GatewayCmd, OnboardCmd, init_logging};
+use nanobot::{AgentCmd, CronCmd, GatewayCmd, OnboardCmd, logging};
 
 /// Nanobot - AI Agent 命令行工具
 #[derive(Parser, Debug)]
@@ -36,7 +36,7 @@ enum Commands {
 #[tokio::main]
 async fn main() -> ExitCode {
     // 初始化日志
-    init_logging();
+    logging::init();
 
     let cli = Cli::parse();
 
