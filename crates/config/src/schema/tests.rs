@@ -475,7 +475,7 @@ fn env_override_boolean_field() {
         let result = Config::load_from_path(&config_path).unwrap().unwrap();
 
         // 验证环境变量覆盖了配置文件中的值
-        assert!(result.channels.dingtalk.as_ref().unwrap().enabled);
+        assert!(result.channels.dingtalk.enabled);
     });
 }
 
@@ -807,7 +807,7 @@ fn from_env_with_feishu_env_vars() {
         ],
         || {
             let config = Config::from_env().unwrap();
-            let feishu = config.channels.feishu.unwrap();
+            let feishu = &config.channels.feishu;
             assert!(feishu.enabled);
             assert_eq!(feishu.app_id, "test-app-id");
             assert_eq!(feishu.app_secret, "test-secret");

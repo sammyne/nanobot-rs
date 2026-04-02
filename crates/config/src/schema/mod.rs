@@ -385,12 +385,11 @@ impl Config {
         }
 
         // 验证 channels 配置
-        if let Some(dingtalk) = &self.channels.dingtalk {
-            dingtalk.validate()?;
+        if self.channels.dingtalk.enabled {
+            self.channels.dingtalk.validate()?;
         }
-
-        if let Some(feishu) = &self.channels.feishu {
-            feishu.validate()?;
+        if self.channels.feishu.enabled {
+            self.channels.feishu.validate()?;
         }
 
         // 验证 gateway 配置
