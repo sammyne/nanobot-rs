@@ -82,6 +82,10 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends ca-certificates curl jq && \
     rm -rf /var/lib/apt/lists/*
 
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
+    mkdir -p ~/.config/uv &&\
+    echo 'index-url = "https://pypi.tuna.tsinghua.edu.cn/simple"' > ~/.config/uv/uv.toml
+
 # 创建安装目录
 RUN mkdir -p /opt/nanobot/bin
 
@@ -92,8 +96,9 @@ COPY --from=builder /app/target/release/nanobot /opt/nanobot/bin/nanobot
 COPY --from=builder /root/.nanobot /root/.nanobot
 
 # 配置环境变量
-ENV PATH="/opt/nanobot/bin:${PATH}"
+ENV PATH="/opt/nanobot/bin:/root/.local/bin:${PATH}"
 
 # 设置入口点
 ENTRYPOINT ["nanobot"]
+
 CMD ["gateway"]
