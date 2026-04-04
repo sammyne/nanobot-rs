@@ -7,3 +7,5 @@ pub mod logging;
 pub mod utils;
 
 pub use commands::{AgentCmd, CronCmd, GatewayCmd, OnboardCmd};
+
+pub const VERSION: &str = concat!(env!("CARGO_PKG_VERSION"), "-", env!("GIT_REV"));

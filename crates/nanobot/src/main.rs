@@ -5,12 +5,12 @@
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
-use nanobot::{AgentCmd, CronCmd, GatewayCmd, OnboardCmd, logging};
+use nanobot::{AgentCmd, CronCmd, GatewayCmd, OnboardCmd, VERSION, logging};
 
 /// Nanobot - AI Agent 命令行工具
 #[derive(Parser, Debug)]
 #[command(name = "nanobot")]
-#[command(author, version, about, long_about = None)]
+#[command(author, version=VERSION, about, long_about = None)]
 struct Cli {
     /// 子命令
     #[command(subcommand)]
