@@ -26,6 +26,7 @@ use tokio::sync::mpsc;
 use tokio_util::sync::{CancellationToken, DropGuard};
 use tracing::{error, info, warn};
 
+use crate::VERSION;
 use crate::utils::init_cron_service;
 
 /// Gateway 命令
@@ -149,7 +150,7 @@ impl GatewayCmd {
         println!("  ║         🤖 Nanobot Gateway            ║");
         println!("  ╚═══════════════════════════════════════╝");
         println!();
-        println!("  🚀 启动 nanobot gateway on port {port}...");
+        println!("  🚀 启动 nanobot gateway version {VERSION} on port {port}...");
         println!("  📋 端口来源: {port_source}");
     }
 
