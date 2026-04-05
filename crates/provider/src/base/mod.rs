@@ -64,6 +64,28 @@ impl ToolCall {
     {
         serde_json::from_str(&self.arguments)
     }
+
+    /// 生成工具调用的预览字符串
+    ///
+    /// 将工具调用格式化为易读的字符串，例如 `web_search(input="query")`。
+    /// 如果第一个参数值超过 40 个字符，会被截断并添加省略号。
+    pub fn preview(&self) -> String {
+        use serde_json::Value;
+
+        let args = match serde_json::from_str::<Value>(&self.arguments) {
+            Ok(Value::Object(v)) => v,
+            _ => return self.name.clone(),
+        };
+
+        match args.iter().find(|(_, v)| !(v.is_array() || v.is_object())) {
+            Some((k, Value::String(v))) => match nanobot_utils::strings::truncate(v, 40) {
+                Some(vv) => format!("{}({k}=\"{vv}…\")", self.name),
+                None => format!("{}({k}=\"{v}\")", self.name),
+            },
+            Some((k, v)) => format!("{}({k}={v})", self.name),
+            None => self.name.clone(),
+        }
+    }
 }
 
 /// 聊天消息枚举
@@ -210,3 +232,6 @@ pub trait Provider: Send + Sync + Clone + 'static {
     /// * `tools` - 工具定义列表，将被用于后续的聊天请求
     fn bind_tools(&mut self, tools: Vec<ToolDefinition>);
 }
+
+#[cfg(test)]
+mod tests;

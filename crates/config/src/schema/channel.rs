@@ -91,4 +91,16 @@ pub struct ChannelsConfig {
     /// 飞书通道配置
     #[serde(default)]
     pub feishu: FeishuConfig,
+
+    /// 是否发送工具提示（CLI 模式）
+    #[serde(default)]
+    pub send_tool_hints: bool,
+
+    /// 是否发送进度信息（CLI 模式）
+    #[serde(default = "default_send_progress")]
+    pub send_progress: bool,
+}
+
+fn default_send_progress() -> bool {
+    true
 }

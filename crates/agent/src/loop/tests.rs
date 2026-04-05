@@ -110,7 +110,7 @@ async fn process_direct_returns_expected_response() {
 
         let session_key = case.session_id.unwrap_or("cli:direct");
         let result = agent
-            .process_direct(case.input, session_key, None, None)
+            .process_direct(case.input, session_key, None, None, None)
             .await
             .unwrap_or_else(|e| panic!("case[{}]: process_direct failed: {}", case.name, e));
 
@@ -128,7 +128,8 @@ async fn process_direct_handles_empty_message() {
         .await
         .expect("AgentLoop creation should succeed");
 
-    let result = agent.process_direct("", "cli:direct", None, None).await.expect("empty message should be handled");
+    let result =
+        agent.process_direct("", "cli:direct", None, None, None).await.expect("empty message should be handled");
 
     assert_eq!(result, "OK");
 }
@@ -271,7 +272,7 @@ async fn process_message_routes_system_message_correctly() {
         let inbound = InboundMessage::new("system", "scheduler", case.chat_id, "Test content");
 
         // 调用 process_message
-        let outbound = agent.process_message(inbound, None).await;
+        let outbound = agent.process_message(inbound, None, None).await;
 
         // 验证路由信息
         assert_eq!(outbound.channel, case.expect_channel, "case[{}]: channel mismatch", case.name);
@@ -293,7 +294,7 @@ async fn process_message_preserves_non_system_routing() {
     let inbound = InboundMessage::new("cli", "user", "chat123", "Hello");
 
     // 调用 process_message
-    let outbound = agent.process_message(inbound, None).await;
+    let outbound = agent.process_message(inbound, None, None).await;
 
     // 验证路由信息保持不变
     assert_eq!(outbound.channel, "cli", "channel should be unchanged");
@@ -379,7 +380,7 @@ async fn consolidation_triggers_when_message_window_reached() {
 
         // 处理一条消息
         let inbound = InboundMessage::new("test", "user", "consolidation", "trigger test");
-        let _ = agent.process_message(inbound, Some(session_key)).await;
+        let _ = agent.process_message(inbound, Some(session_key), None).await;
 
         // 验证整合状态
         // 注意：由于 try_consolidate 是同步执行的，处理完成后 consolidating 应该已经清空
@@ -430,7 +431,7 @@ async fn consolidation_rejected_when_already_in_progress() {
 
     // 处理消息 - 由于会话已标记为整合中，应该跳过整合
     let inbound = InboundMessage::new("test", "user", "concurrent", "test");
-    let _ = agent.process_message(inbound, Some(session_key)).await;
+    let _ = agent.process_message(inbound, Some(session_key), None).await;
 
     // 验证：consolidating 应该仍然只包含我们手动添加的标记
     // （因为整合被跳过，不会清除标记）
@@ -484,7 +485,7 @@ async fn consolidation_state_properly_managed() {
 
     // 处理消息 - 应该触发整合
     let inbound = InboundMessage::new("test", "user", "state_management", "test");
-    let _ = agent.process_message(inbound, Some(session_key)).await;
+    let _ = agent.process_message(inbound, Some(session_key), None).await;
 
     // 整合完成后：consolidating 应该被清空
     {
@@ -536,7 +537,7 @@ async fn consolidation_state_independent_across_sessions() {
 
     // 处理 session_2 的消息 - 应该能正常触发整合（不受 session_1 状态影响）
     let inbound = InboundMessage::new("test", "user", "session_2", "test");
-    let _ = agent.process_message(inbound, Some(session_key_2)).await;
+    let _ = agent.process_message(inbound, Some(session_key_2), None).await;
 
     // 验证：session_1 仍然标记为整合中，session_2 已完成
     {
@@ -595,7 +596,7 @@ async fn consolidation_state_thread_safe() {
 
             // 处理消息
             let inbound = InboundMessage::new("test", "user", format!("concurrent_{i}"), "test");
-            let _ = agent_clone.process_message(inbound, Some(&session_key)).await;
+            let _ = agent_clone.process_message(inbound, Some(&session_key), None).await;
 
             // 验证：处理完成后，该会话不应该在 consolidating 中
             {
@@ -660,7 +661,7 @@ async fn mutex_prevents_concurrent_consolidation_same_session() {
 
     let handle1 = tokio::spawn(async move {
         let inbound = InboundMessage::new("test", "user", "same_session", "message 1");
-        agent_clone.process_message(inbound, Some(&session_key_clone)).await
+        agent_clone.process_message(inbound, Some(&session_key_clone), None).await
     });
 
     // 稍微延迟，确保第一个任务已经开始处理
@@ -671,7 +672,7 @@ async fn mutex_prevents_concurrent_consolidation_same_session() {
 
     let handle2 = tokio::spawn(async move {
         let inbound = InboundMessage::new("test", "user", "same_session", "message 2");
-        agent_clone2.process_message(inbound, Some(&session_key_clone2)).await
+        agent_clone2.process_message(inbound, Some(&session_key_clone2), None).await
     });
 
     // 等待两个任务完成
@@ -808,7 +809,7 @@ async fn process_message_integrates_command_handling() {
 
     // 测试命令消息
     let inbound_cmd = InboundMessage::new("cli", "user", "test123", "/help");
-    let outbound_cmd = agent.process_message(inbound_cmd, None).await;
+    let outbound_cmd = agent.process_message(inbound_cmd, None, None).await;
 
     assert_eq!(
         outbound_cmd.content, "🐈 nanobot commands:\n/new — Start a new conversation\n/help — Show available commands",
@@ -819,7 +820,7 @@ async fn process_message_integrates_command_handling() {
 
     // 测试非命令消息
     let inbound_normal = InboundMessage::new("cli", "user", "test123", "Hello");
-    let outbound_normal = agent.process_message(inbound_normal, None).await;
+    let outbound_normal = agent.process_message(inbound_normal, None, None).await;
 
     assert_eq!(outbound_normal.content, "test response", "non-command should be processed by LLM");
     assert_eq!(outbound_normal.channel, "cli", "channel should be preserved");
@@ -839,7 +840,7 @@ async fn command_handling_does_not_create_session_history() {
 
     // 处理命令消息
     let inbound = InboundMessage::new("cli", "user", "test123", "/help");
-    let _ = agent.process_message(inbound, Some(session_key)).await;
+    let _ = agent.process_message(inbound, Some(session_key), None).await;
 
     // 验证会话没有历史消息
     let session = agent.sessions.get_or_create(session_key);
@@ -859,7 +860,7 @@ async fn command_handling_does_not_trigger_consolidation() {
 
     // 处理命令消息
     let inbound = InboundMessage::new("cli", "user", "test123", "/help");
-    let _ = agent.process_message(inbound, Some(session_key)).await;
+    let _ = agent.process_message(inbound, Some(session_key), None).await;
 
     // 验证 consolidating 为空（没有触发整合）
     {
@@ -968,7 +969,7 @@ async fn new_command_clears_session_history() {
 
     // 处理 /new 命令
     let inbound = InboundMessage::new(channel, "user", chat_id, "/new");
-    let _ = agent.process_message(inbound, Some(session_key)).await;
+    let _ = agent.process_message(inbound, Some(session_key), None).await;
 
     // 验证会话被清除
     let session_after = agent.sessions.get_or_create(session_key);
@@ -1011,7 +1012,7 @@ async fn new_command_handles_concurrent_requests() {
 
         let handle = tokio::spawn(async move {
             let inbound = InboundMessage::new(&channel_clone, "user", &chat_id_clone, "/new");
-            agent_clone.process_message(inbound, Some(&session_key_clone)).await
+            agent_clone.process_message(inbound, Some(&session_key_clone), None).await
         });
 
         handles.push(handle);
@@ -1054,7 +1055,7 @@ async fn new_command_returns_error_when_consolidating() {
 
     // 处理 /new 命令
     let inbound = InboundMessage::new("cli", "user", "test123", "/new");
-    let result = agent.process_message(inbound, Some(session_key)).await;
+    let result = agent.process_message(inbound, Some(session_key), None).await;
 
     // 验证返回错误消息
     assert!(
@@ -1066,5 +1067,123 @@ async fn new_command_returns_error_when_consolidating() {
     {
         let mut consolidating = agent.consolidating.lock().await;
         consolidating.remove(session_key);
+    }
+}
+
+/// strip_think 测试用例结构
+struct StripThinkCase {
+    name: &'static str,
+    input: &'static str,
+    expected: &'static str,
+}
+
+/// 验证 strip_think 正确清理 think 标签
+#[test]
+fn strip_think_removes_tags() {
+    let test_vector = [
+        StripThinkCase {
+            name: "正常内容 - 无标签", input: "这是一段正常内容", expected: "这是一段正常内容"
+        },
+        StripThinkCase {
+            name: "包含 think 标签",
+            input: "开始<think>这是一段思考内容</think>结束",
+            expected: "开始结束",
+        },
+        StripThinkCase { name: "空字符串", input: "", expected: "" },
+        StripThinkCase { name: "仅 think 标签", input: "<think>仅有的内容</think>", expected: "" },
+        StripThinkCase {
+            name: "多个 think 标签",
+            input: "前<think>思考1</think>中<think>思考2</think>后",
+            expected: "前中后",
+        },
+        StripThinkCase {
+            name: "带换行的 think 标签",
+            input: "开始<think>\n多行\n思考\n</think>结束",
+            expected: "开始结束",
+        },
+        StripThinkCase {
+            name: "标签前后有空白", input: "内容 <think>思考</think> 尾部", expected: "内容  尾部"
+        },
+    ];
+
+    for case in test_vector {
+        let result = super::strip_think(case.input);
+        assert_eq!(result, case.expected, "case[{}]: mismatch", case.name);
+    }
+}
+
+/// format_tool_hint 测试用例结构
+struct FormatToolHintCase {
+    name: &'static str,
+    tool_calls: Vec<(/* id */ &'static str, /* name */ &'static str, /* arguments */ &'static str)>,
+    expected: &'static str,
+}
+
+/// 验证 format_tool_hint 正确格式化工具调用
+#[test]
+fn format_tool_hint_formats_correctly() {
+    let test_vector = [
+        FormatToolHintCase {
+            name: "单个工具 - 短参数",
+            tool_calls: vec![("call_1", "web_search", r#"{"query": "test"}"#)],
+            expected: r#"web_search(query="test")"#,
+        },
+        FormatToolHintCase {
+            name: "单个工具 - 长参数截断",
+            tool_calls: vec![(
+                "call_1",
+                "read_file",
+                r#"{"path": "this_is_a_very_long_file_path_that_should_be_truncated"}"#,
+            )],
+            expected: r#"read_file(path="this_is_a_very_long_file_path_that_shoul…")"#,
+        },
+        FormatToolHintCase {
+            name: "多个工具",
+            tool_calls: vec![("call_1", "tool1", r#"{"arg": "value1"}"#), ("call_2", "tool2", r#"{"arg": "value2"}"#)],
+            expected: r#"tool1(arg="value1"), tool2(arg="value2")"#,
+        },
+        FormatToolHintCase {
+            name: "空参数",
+            tool_calls: vec![("call_1", "list_files", r#"{}"#)],
+            expected: "list_files",
+        },
+        FormatToolHintCase {
+            name: "参数值为非字符串",
+            tool_calls: vec![("call_1", "calculate", r#"{"number": 42}"#)],
+            expected: "calculate(number=42)",
+        },
+        FormatToolHintCase {
+            name: "无效 JSON 参数",
+            tool_calls: vec![("call_1", "some_tool", r#"invalid json"#)],
+            expected: "some_tool",
+        },
+        FormatToolHintCase {
+            name: "恰好 40 字符参数",
+            tool_calls: vec![("call_1", "test", r#"{"arg": "1234567890123456789012345678901234567890"}"#)],
+            expected: r#"test(arg="1234567890123456789012345678901234567890")"#,
+        },
+        FormatToolHintCase {
+            name: "41 字符参数截断",
+            tool_calls: vec![("call_1", "test", r#"{"arg": "12345678901234567890123456789012345678901"}"#)],
+            expected: r#"test(arg="1234567890123456789012345678901234567890…")"#,
+        },
+    ];
+
+    for case in test_vector {
+        // 注意：ToolCall 的 arguments 字段在序列化时会自动加引号
+        // 所以我们需要手动设置 arguments 字符串
+        let tool_calls: Vec<nanobot_provider::ToolCall> = case
+            .tool_calls
+            .iter()
+            .map(|(id, name, args)| {
+                let mut tc = nanobot_provider::ToolCall::new(*id, *name, serde_json::Value::Null);
+                // 重新设置 arguments 为原始字符串
+                tc.arguments = args.to_string();
+                tc
+            })
+            .collect();
+
+        let result = super::format_tool_hint(&tool_calls);
+        assert_eq!(result, case.expected, "case[{}]: mismatch", case.name);
     }
 }

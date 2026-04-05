@@ -546,7 +546,7 @@ pub fn process_data(input: &str) -> Result<String, LibraryError> {
 使用 `rustfmt` 保持一致的代码格式：
 
 ```bash
-cargo fmt
+cargo +nightly fmt
 ```
 
 ### Lint 检查
@@ -554,7 +554,7 @@ cargo fmt
 使用 `clippy` 进行额外的 lint 检查：
 
 ```bash
-cargo clippy -- -D warnings
+cargo clippy -- -D warnings -D clippy::uninlined_format_args
 ```
 
 ### 提交前检查
@@ -562,8 +562,8 @@ cargo clippy -- -D warnings
 提交代码前，运行以下命令：
 
 ```bash
-cargo fmt
-cargo clippy -- -D warnings
+cargo +nightly fmt
+cargo clippy -- -D warnings -D clippy::uninlined_format_args
 cargo test
 cargo doc --no-deps
 ```

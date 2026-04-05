@@ -7,7 +7,7 @@
 //! 4. 返回响应（通过出站消息发送端）
 
 use std::collections::HashSet;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 
 use anyhow::Result;
 use nanobot_config::AgentDefaults;
@@ -171,7 +171,13 @@ impl<P: Provider> AgentLoop<P> {
     ///
     /// # Returns
     /// ReActResult 包含最终结果、工具使用列表和消息历史
-    pub async fn re_act(&self, mut messages: Vec<Message>, channel: &str, chat_id: &str) -> Result<ReActResult> {
+    pub async fn re_act(
+        &self,
+        mut messages: Vec<Message>,
+        channel: &str,
+        chat_id: &str,
+        on_progress: Option<std::sync::Arc<dyn crate::ProgressTracker>>,
+    ) -> Result<ReActResult> {
         let max_iterations = self.config.max_tool_iterations;
         let mut iteration = 0;
         let mut tools_used: Vec<String> = Vec::new();
@@ -191,18 +197,25 @@ impl<P: Provider> AgentLoop<P> {
                 // 提取文本内容
                 let content = response.content().to_string();
 
+                // 发送进度通知
+                if let Some(ref tracker) = on_progress {
+                    // 1. 发送清理后的思考内容（如果有）
+                    let cleaned = strip_think(&content);
+                    if !cleaned.is_empty()
+                        && let Err(e) = tracker.track(cleaned, false).await
+                    {
+                        error!("发送思考进度失败: {}", e);
+                    }
+
+                    // 2. 发送工具提示
+                    let hint = format_tool_hint(tool_calls);
+                    if let Err(e) = tracker.track(hint, true).await {
+                        error!("发送工具提示失败: {}", e);
+                    }
+                }
+
                 // 记录工具调用
-                let tool_hints: Vec<String> = tool_calls
-                    .iter()
-                    .map(|tc| {
-                        let first_arg = tc.arguments.chars().take(40).collect::<String>();
-                        if tc.arguments.len() > 40 {
-                            format!("{}({}...)", tc.name, first_arg)
-                        } else {
-                            format!("{}({})", tc.name, tc.arguments)
-                        }
-                    })
-                    .collect();
+                let tool_hints: Vec<String> = tool_calls.iter().map(|tc| tc.preview()).collect();
                 debug!("工具调用: {}", tool_hints.join(", "));
 
                 // 将助手消息（带工具调用）添加到历史
@@ -277,6 +290,7 @@ impl<P: Provider> AgentLoop<P> {
         session_key: &str,
         channel: Option<&str>,
         chat_id: Option<&str>,
+        on_progress: Option<std::sync::Arc<dyn crate::ProgressTracker>>,
     ) -> Result<String> {
         info!("直接处理消息: {}", content);
 
@@ -286,7 +300,7 @@ impl<P: Provider> AgentLoop<P> {
 
         // 构造入站消息并复用 process_message
         let inbound = InboundMessage::new(channel, "user", chat_id, content);
-        let outbound = self.process_message(inbound, Some(session_key)).await;
+        let outbound = self.process_message(inbound, Some(session_key), on_progress).await;
 
         Ok(outbound.content)
     }
@@ -316,8 +330,15 @@ impl<P: Provider> AgentLoop<P> {
                 Some(msg) => {
                     debug!("收到入站消息: channel={}, chat_id={}", msg.channel, msg.chat_id);
 
+                    // 创建默认进度追踪器
+                    let on_progress = std::sync::Arc::new(crate::ChannelProgressTracker::new(
+                        outbound_tx.clone(),
+                        msg.channel.clone(),
+                        msg.chat_id.clone(),
+                    ));
+
                     // 处理消息并发送响应（使用 inbound 的 session_key）
-                    let outbound = self.process_message(msg, None).await;
+                    let outbound = self.process_message(msg, None, Some(on_progress)).await;
                     if let Err(e) = outbound_tx.send(outbound).await {
                         error!("发送出站消息失败: {}", e);
                     }
@@ -367,7 +388,7 @@ impl<P: Provider> AgentLoop<P> {
                 let skip = messages.len() - 1;
 
                 // 执行 ReAct 循环
-                match self.re_act(messages, target_channel, target_chat_id).await {
+                match self.re_act(messages, target_channel, target_chat_id, None).await {
                     Ok(result) => {
                         // 保存本回合消息
                         session.save_turn(&result.messages, skip);
@@ -446,9 +467,15 @@ impl<P: Provider> AgentLoop<P> {
     /// # Arguments
     /// * `inbound` - 入站消息
     /// * `session_key` - 可选的会话标识，格式为 "channel:chat_id"；不存在时从 inbound.session_key() 获取
+    /// * `on_progress` - 可选的进度追踪器
     ///
     /// 注意：此方法总是返回 OutboundMessage，错误会被转换为错误消息内容
-    async fn process_message(&self, inbound: InboundMessage, session_key: Option<&str>) -> OutboundMessage {
+    async fn process_message(
+        &self,
+        inbound: InboundMessage,
+        session_key: Option<&str>,
+        on_progress: Option<std::sync::Arc<dyn crate::ProgressTracker>>,
+    ) -> OutboundMessage {
         // 系统消息：从 chat_id 解析目标路由（格式为 "channel:chat_id"）
         if inbound.channel == "system" {
             return self.process_system_message(inbound).await;
@@ -496,7 +523,7 @@ impl<P: Provider> AgentLoop<P> {
         let skip = messages.len() - 1; // 跳过系统消息 + 历史消息（不包括新消息）
 
         // 执行 ReAct 循环（支持工具调用）
-        let result = match self.re_act(messages, &channel, &chat_id).await {
+        let result = match self.re_act(messages, &channel, &chat_id, on_progress).await {
             Ok(v) => v,
             Err(e) => {
                 error!("处理消息失败: {}", e);
@@ -538,6 +565,26 @@ impl<P: Provider> AgentLoop<P> {
     pub fn config(&self) -> &AgentDefaults {
         &self.config
     }
+}
+
+/// 清理思考内容中的特殊标记
+///
+/// 移除某些模型在内容中嵌入的 `<think>…</think>` 标签块。
+/// 参考 Python 版本的 `_strip_think` 方法。
+fn strip_think(text: &str) -> String {
+    /// 用于匹配 think 标签的正则表达式
+    static THINK_REGEX: LazyLock<regex::Regex> =
+        LazyLock::new(|| regex::Regex::new(r"<think>[\s\S]*?</think>").expect("Invalid regex pattern"));
+
+    THINK_REGEX.replace_all(text, "").trim().to_string()
+}
+
+/// 格式化工具调用为简洁提示
+///
+/// 将工具调用列表格式化为易读的字符串，例如 `web_search("query")`。
+/// 参考 Python 版本的 `_tool_hint` 方法。
+fn format_tool_hint(tool_calls: &[nanobot_provider::ToolCall]) -> String {
+    tool_calls.iter().map(|tc| tc.preview()).collect::<Vec<_>>().join(", ")
 }
 
 /// 执行记忆整合的异步函数
