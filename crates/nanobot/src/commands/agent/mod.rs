@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use clap::Args;
-use nanobot_agent::{AgentLoop, InboundMessage, OutboundMessage};
+use nanobot_agent::{AgentLoop, InboundMessage, OutboundMessage, ProgressTracker};
 use nanobot_config::Config;
 use nanobot_cron::CronService;
 use nanobot_provider::OpenAILike;
@@ -81,7 +81,19 @@ impl AgentCmd {
         )
         .await?;
 
-        match agent.process_direct(input, &self.session, None, None).await {
+        let send_tool_hints = config.channels.send_tool_hints;
+        let send_progress = config.channels.send_progress;
+        let on_progress: Arc<dyn ProgressTracker> = Arc::new(move |content: String, is_tool_hint: bool| {
+            if is_tool_hint && !send_tool_hints {
+                return;
+            }
+            if !is_tool_hint && !send_progress {
+                return;
+            }
+            println!("\x1b[2m  ↳ {content}\x1b[0m");
+        });
+
+        match agent.process_direct(input, &self.session, None, None, Some(on_progress)).await {
             Ok(response) => {
                 println!("{response}");
                 Ok(())

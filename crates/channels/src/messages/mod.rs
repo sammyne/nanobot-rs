@@ -108,13 +108,18 @@ impl OutboundMessage {
     /// 创建进度消息
     ///
     /// 进度消息用于通知用户当前处理进度，可选择是否标记为工具提示。
-    pub fn progress(content: impl Into<String>, is_tool_hint: bool) -> Self {
+    pub fn progress(
+        channel: impl Into<String>,
+        chat_id: impl Into<String>,
+        content: impl Into<String>,
+        is_tool_hint: bool,
+    ) -> Self {
         let mut metadata = HashMap::new();
         metadata.insert("_progress".to_string(), serde_json::Value::Bool(true));
         if is_tool_hint {
             metadata.insert("_tool_hint".to_string(), serde_json::Value::Bool(true));
         }
-        Self { channel: String::new(), chat_id: String::new(), content: content.into(), media: Vec::new(), metadata }
+        Self { channel: channel.into(), chat_id: chat_id.into(), content: content.into(), media: Vec::new(), metadata }
     }
 
     /// 检查是否为进度消息

@@ -19,6 +19,8 @@ fn inbound_message_construct() {
 /// 出站消息测试用例结构
 struct OutboundCase {
     name: &'static str,
+    channel: &'static str,
+    chat_id: &'static str,
     content: &'static str,
     is_tool_hint: bool,
     #[allow(dead_code)]
@@ -32,6 +34,8 @@ fn outbound_message_progress_construct() {
     let test_vector = [
         OutboundCase {
             name: "普通进度消息",
+            channel: "cli",
+            chat_id: "chat1",
             content: "thinking...",
             is_tool_hint: false,
             expect_is_progress: true,
@@ -39,6 +43,8 @@ fn outbound_message_progress_construct() {
         },
         OutboundCase {
             name: "工具提示消息",
+            channel: "telegram",
+            chat_id: "chat2",
             content: "using tool...",
             is_tool_hint: true,
             expect_is_progress: true,
@@ -47,11 +53,13 @@ fn outbound_message_progress_construct() {
     ];
 
     for case in test_vector {
-        let msg = OutboundMessage::progress(case.content, case.is_tool_hint);
+        let msg = OutboundMessage::progress(case.channel, case.chat_id, case.content, case.is_tool_hint);
 
         assert!(msg.is_progress(), "case[{}]: expected is_progress() to be true", case.name);
         assert_eq!(msg.is_tool_hint(), case.expect_is_tool_hint, "case[{}]: is_tool_hint() mismatch", case.name);
         assert_eq!(msg.content, case.content, "case[{}]: content mismatch", case.name);
+        assert_eq!(msg.channel, case.channel, "case[{}]: channel mismatch", case.name);
+        assert_eq!(msg.chat_id, case.chat_id, "case[{}]: chat_id mismatch", case.name);
     }
 }
 
@@ -70,7 +78,7 @@ fn outbound_message_construct() {
 #[test]
 fn outbound_message_progress_detection() {
     // 进度消息
-    let progress_msg = OutboundMessage::progress("thinking...", false);
+    let progress_msg = OutboundMessage::progress("cli", "chat1", "thinking...", false);
     assert!(progress_msg.is_progress());
 
     // 普通消息
@@ -86,11 +94,11 @@ fn outbound_message_progress_detection() {
 #[test]
 fn outbound_message_tool_hint_detection() {
     // 工具提示消息
-    let tool_hint = OutboundMessage::progress("using tool...", true);
+    let tool_hint = OutboundMessage::progress("cli", "chat1", "using tool...", true);
     assert!(tool_hint.is_tool_hint());
 
     // 普通进度消息
-    let normal_progress = OutboundMessage::progress("thinking...", false);
+    let normal_progress = OutboundMessage::progress("cli", "chat1", "thinking...", false);
     assert!(!normal_progress.is_tool_hint());
 
     // 普通消息

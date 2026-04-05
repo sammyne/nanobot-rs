@@ -283,7 +283,7 @@ impl GatewayCmd {
                     let session_key = "heartbeat";
 
                     // 调用 AgentLoop::process_direct
-                    match agent.process_direct(&task_summary, session_key, Some(&channel), Some(&chat_id)).await {
+                    match agent.process_direct(&task_summary, session_key, Some(&channel), Some(&chat_id), None).await {
                         Ok(response) => {
                             info!("Heartbeat 任务执行成功");
                             Ok(response)
@@ -358,7 +358,7 @@ impl GatewayCmd {
                 };
 
                 // 执行消息
-                match agent.process_direct(&message, "cli:direct", None, None).await {
+                match agent.process_direct(&message, "cli:direct", None, None, None).await {
                     Ok(response) => {
                         info!("Cron job '{}' executed successfully", job.id);
                         Ok(response)
