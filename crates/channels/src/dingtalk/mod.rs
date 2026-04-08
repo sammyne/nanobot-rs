@@ -250,11 +250,8 @@ impl Channel for DingTalk {
             self.config.client_id.clone(),
         );
 
-        // 发送 Markdown 消息
-        let markdown_content = format!("**Nanobot Reply**\n\n{}", msg.content);
-
         replier
-            .reply_markdown("Nanobot", &markdown_content, &incoming_msg)
+            .reply_markdown("Nanobot", &msg.content, &incoming_msg)
             .await
             .map_err(|e| ChannelError::SendFailed(format!("发送钉钉消息失败: {e}")))?;
 
