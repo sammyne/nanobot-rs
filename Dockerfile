@@ -86,6 +86,11 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
     mkdir -p ~/.config/uv &&\
     echo 'index-url = "https://pypi.tuna.tsinghua.edu.cn/simple"' > ~/.config/uv/uv.toml
 
+RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.4/install.sh | bash &&\
+    . $HOME/.nvm/nvm.sh &&\
+    nvm install 24.14.1 &&\
+    npm config set registry https://registry.npmmirror.com
+
 # 创建安装目录
 RUN mkdir -p /opt/nanobot/bin
 
