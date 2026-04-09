@@ -12,13 +12,13 @@ if [ -z "$GIT_COMMIT_ID" ]; then
 fi
 
 # 从 crates/cli/Cargo.toml 提取 package.version
-CARGO_TOML_PATH="crates/cli/Cargo.toml"
+CARGO_TOML_PATH="crates/nanobot/Cargo.toml"
 if [ ! -f "$CARGO_TOML_PATH" ]; then
     echo "错误：找不到 $CARGO_TOML_PATH"
     exit 1
 fi
 
-PACKAGE_VERSION=$(grep -E '^version\s*=\s*"' "$CARGO_TOML_PATH" | head -1 | sed 's/version\s*=\s*"\([^"]*\)"/\1/')
+PACKAGE_VERSION=$(grep -E '^version\s*=\s*"' "$CARGO_TOML_PATH" | head -1 | awk -F'"' '{print $2}')
 if [ -z "$PACKAGE_VERSION" ]; then
     echo "错误：无法从 $CARGO_TOML_PATH 提取版本号"
     exit 1
@@ -38,7 +38,7 @@ echo "Docker 镜像: $DOCKER_IMAGE"
 echo "=========================================="
 
 # 构建 Docker 镜像
-docker build -t "$DOCKER_IMAGE" .
+podman build -t "$DOCKER_IMAGE" .
 
 if [ $? -eq 0 ]; then
     echo "=========================================="
