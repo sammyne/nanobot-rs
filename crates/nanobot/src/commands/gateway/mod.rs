@@ -16,7 +16,7 @@ use anyhow::{Context, Result};
 use clap::Args;
 use nanobot_agent::{AgentLoop, InboundMessage, OutboundMessage};
 use nanobot_channels::ChannelManager;
-use nanobot_config::{Config, HeartbeatConfig};
+use nanobot_config::{CONFIG_PATH, Config, HeartbeatConfig};
 use nanobot_cron::{CronJob, CronService};
 use nanobot_heartbeat::{HeartbeatService, OnExecuteCallback, OnNotifyCallback};
 use nanobot_provider::{OpenAILike, Provider};
@@ -199,28 +199,26 @@ impl GatewayCmd {
 
     /// 加载配置
     fn load_config(&self) -> Result<Config> {
+        let path = CONFIG_PATH.clone();
+
         Config::load()
-            .context(
-                "加载配置失败。请先运行 'nanobot onboard' 进行配置，\
-                 或检查 ~/.nanobot/config.json 文件是否存在。",
-            )?
+            .with_context(|| {
+                format!("加载配置失败。请先运行 'nanobot onboard' 进行配置，或检查 {path:?} 文件是否存在。")
+            })?
             .ok_or_else(|| {
-                anyhow::anyhow!(
-                    "配置文件不存在。请先运行 'nanobot onboard' 进行配置，\
-                     或检查 ~/.nanobot/config.json 文件是否存在。"
-                )
+                anyhow::anyhow!("配置文件不存在。请先运行 'nanobot onboard' 进行配置，或检查 {path:?} 文件是否存在。")
             })
     }
 
     /// 初始化 LLM Provider
     fn init_provider(&self, config: &Config) -> Result<OpenAILike> {
         let provider_config = config.provider();
+        let path = CONFIG_PATH.clone();
 
         // 验证 API Key
         if provider_config.api_key.is_empty() {
             anyhow::bail!(
-                "API Key 未配置。请在 ~/.nanobot/config.json 中设置 provider.api_key。\n\
-                 获取 API Key: https://openrouter.ai/keys"
+                "API Key 未配置。请在 {path:?} 中设置 provider.api_key。获取 API Key: https://openrouter.ai/keys"
             );
         }
 
