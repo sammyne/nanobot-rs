@@ -78,8 +78,10 @@ LABEL org.opencontainers.image.title="nanobot" \
 WORKDIR /opt/nanobot
 
 # 安装运行时依赖（如需要）
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends ca-certificates curl jq && \
+RUN apt update && \
+    apt install -y --no-install-recommends ca-certificates curl jq python3.13 && \
+    ln -sf /usr/bin/python3.13 /usr/bin/python3 && \
+    ln -sf /usr/bin/python3.13 /usr/bin/python && \
     rm -rf /var/lib/apt/lists/*
 
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
