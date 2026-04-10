@@ -111,7 +111,7 @@ impl GatewayCmd {
         );
 
         // 设置 cron 回调，复用同一个 AgentLoop
-        self.setup_cron_callback(&cron_service, agent_loop.clone()).await;
+        self.setup_cron_callback(&cron_service, agent_loop.clone(), outbound_tx.clone()).await;
 
         // 使用 Config 中的 channels 配置创建 ChannelManager
         let channel_manager = ChannelManager::new(config.channels.clone(), outbound_rx, inbound_tx)
@@ -340,25 +340,34 @@ impl GatewayCmd {
     }
 
     /// 设置 cron 回调，复用同一个 AgentLoop
-    async fn setup_cron_callback(&self, cron_service: &Arc<CronService>, agent_loop: Arc<AgentLoop<OpenAILike>>) {
+    async fn setup_cron_callback(
+        &self,
+        cron_service: &CronService,
+        agent_loop: Arc<AgentLoop<OpenAILike>>,
+        outbound_tx: mpsc::Sender<OutboundMessage>,
+    ) {
         let callback: nanobot_cron::JobCallback = Arc::new(move |job: CronJob| {
             let agent = agent_loop.clone();
+            let outbound_tx = outbound_tx.clone();
 
             Box::pin(async move {
-                let payload = &job.payload;
+                let payload = job.payload;
 
-                // 使用 payload 中的消息作为输入
-                let message = if payload.message.is_empty() {
-                    // 如果没有消息，使用任务名称
-                    job.name.clone()
-                } else {
-                    payload.message.clone()
-                };
+                let channel = payload.channel.as_deref().unwrap_or("cli");
+                let chat_id = payload.to.as_deref().unwrap_or("direct");
+                let session_key = format!("cron:{}", job.id);
 
-                // 执行消息
-                match agent.process_direct(&message, "cli:direct", None, None, None).await {
+                match agent.process_direct(&payload.message, &session_key, Some(channel), Some(chat_id), None).await {
                     Ok(response) => {
                         info!("Cron job '{}' executed successfully", job.id);
+
+                        if payload.deliver && payload.to.is_some() {
+                            let msg = OutboundMessage::new(channel, chat_id, &response);
+                            if let Err(e) = outbound_tx.send(msg).await {
+                                error!("Failed to deliver cron job response: {}", e);
+                            }
+                        }
+
                         Ok(response)
                     }
                     Err(e) => {
