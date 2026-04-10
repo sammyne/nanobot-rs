@@ -1,5 +1,13 @@
 # nanobot-rs 开发指南
 
+## 安装 git 钩子
+
+> 用于执行 git 提交之前的代码规范检查。
+
+```bash
+cp .githooks/* .git/hooks/
+```
+
 ## Rust 版本要求
 
 本项目要求 **Rust >= 1.93**。
