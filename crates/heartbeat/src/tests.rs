@@ -248,3 +248,128 @@ mod exception_scenarios {
         assert!(matches!(result, Ok(None)));
     }
 }
+
+// Parse retry mechanism tests
+mod parse_retry {
+    use nanobot_provider::Message;
+
+    use super::*;
+
+    /// MockProvider that returns invalid JSON arguments for first N calls, then valid
+    struct RetryMockProvider {
+        /// Number of times to return invalid arguments before succeeding
+        fail_count: usize,
+        /// Whether to return valid result after fail_count exhausted
+        succeed_on_retry: bool,
+    }
+
+    impl Clone for RetryMockProvider {
+        fn clone(&self) -> Self {
+            Self { fail_count: self.fail_count, succeed_on_retry: self.succeed_on_retry }
+        }
+    }
+
+    impl RetryMockProvider {
+        fn new(fail_count: usize, succeed_on_retry: bool) -> Self {
+            Self { fail_count, succeed_on_retry }
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl nanobot_provider::Provider for RetryMockProvider {
+        fn bind_tools(&mut self, _tools: Vec<nanobot_tools::ToolDefinition>) {}
+
+        async fn chat(
+            &self,
+            messages: &[nanobot_provider::Message],
+            _options: &nanobot_provider::Options,
+        ) -> Result<nanobot_provider::Message, anyhow::Error> {
+            // Count how many tool messages with "Invalid arguments format" we have received
+            let retry_count = messages
+                .iter()
+                .filter(|m| matches!(m, Message::Tool { content, .. } if content.contains("Invalid arguments format")))
+                .count();
+
+            // Check if we should succeed based on retry count
+            let should_succeed = if self.succeed_on_retry { retry_count >= self.fail_count } else { false };
+
+            if should_succeed {
+                // Return valid Skip action
+                Ok(Message::assistant_with_tools(
+                    String::new(),
+                    vec![nanobot_provider::ToolCall::new("call_test", "heartbeat", serde_json::json!("skip"))],
+                ))
+            } else {
+                // Return invalid JSON arguments
+                Ok(Message::assistant_with_tools(
+                    String::new(),
+                    vec![nanobot_provider::ToolCall::new(
+                        "call_test",
+                        "heartbeat",
+                        serde_json::json!({"invalid": "format"}),
+                    )],
+                ))
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn parse_retry_succeeds_on_second_attempt() {
+        let config = HeartbeatConfig::default();
+        // First attempt fails, second succeeds
+        let provider = RetryMockProvider::new(1, true);
+        let temp_dir = tempfile::tempdir().unwrap();
+        let workspace = temp_dir.path().to_path_buf();
+
+        // Create HEARTBEAT.md with content
+        let heartbeat_path = workspace.join("HEARTBEAT.md");
+        tokio::fs::write(&heartbeat_path, b"# Tasks\n\n- Task 1").await.unwrap();
+
+        let service: HeartbeatService<RetryMockProvider> =
+            HeartbeatService::new(workspace, provider, config, None, None);
+
+        let result = service.tick().await;
+        // Should succeed and return None (Skip action)
+        assert!(matches!(result, Ok(None)));
+    }
+
+    #[tokio::test]
+    async fn parse_retry_falls_back_to_skip_after_max_retries() {
+        let config = HeartbeatConfig::default();
+        // Always fail (will retry once, then degrade to skip)
+        let provider = RetryMockProvider::new(10, false);
+        let temp_dir = tempfile::tempdir().unwrap();
+        let workspace = temp_dir.path().to_path_buf();
+
+        // Create HEARTBEAT.md with content
+        let heartbeat_path = workspace.join("HEARTBEAT.md");
+        tokio::fs::write(&heartbeat_path, b"# Tasks\n\n- Task 1").await.unwrap();
+
+        let service: HeartbeatService<RetryMockProvider> =
+            HeartbeatService::new(workspace, provider, config, None, None);
+
+        let result = service.tick().await;
+        // Should degrade to skip after max retries
+        assert!(matches!(result, Ok(None)));
+    }
+
+    #[tokio::test]
+    async fn parse_retry_max_retries_is_one() {
+        let config = HeartbeatConfig::default();
+        // First attempt fails, second also fails (but we only retry once)
+        let provider = RetryMockProvider::new(1, false);
+        let temp_dir = tempfile::tempdir().unwrap();
+        let workspace = temp_dir.path().to_path_buf();
+
+        // Create HEARTBEAT.md with content
+        let heartbeat_path = workspace.join("HEARTBEAT.md");
+        tokio::fs::write(&heartbeat_path, b"# Tasks\n\n- Task 1").await.unwrap();
+
+        let service: HeartbeatService<RetryMockProvider> =
+            HeartbeatService::new(workspace, provider, config, None, None);
+
+        let result = service.tick().await;
+        // Should degrade to skip (1 initial + 1 retry = 2 total attempts)
+        assert!(matches!(result, Ok(None)));
+    }
+}

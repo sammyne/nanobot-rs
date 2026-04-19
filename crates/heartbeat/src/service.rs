@@ -7,7 +7,7 @@ use nanobot_config::HeartbeatConfig;
 use nanobot_provider::{Message, Provider};
 use schemars::JsonSchema;
 use tokio::sync::RwLock;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 use crate::{HeartbeatError, OnExecuteCallback, OnNotifyCallback};
 
@@ -31,6 +31,9 @@ static HEARTBEAT_TOOL: std::sync::LazyLock<nanobot_tools::ToolDefinition> =
         description: "Decide whether to execute tasks based on HEARTBEAT.md content".to_string(),
         parameters: schemars::schema_for!(Action).to_value(),
     });
+
+/// Maximum retries when tool argument parsing fails
+const MAX_PARSE_RETRIES: u8 = 1;
 
 /// Heartbeat service for periodic task checking
 pub struct HeartbeatService<P>
@@ -174,7 +177,8 @@ where
 
     /// Phase 1: Check heartbeat - Decision phase
     ///
-    /// Reads HEARTBEAT.md and asks LLM to decide if tasks need execution
+    /// Reads HEARTBEAT.md and asks LLM to decide if tasks need execution.
+    /// Includes retry mechanism when tool argument parsing fails.
     ///
     /// # Returns
     ///
@@ -201,34 +205,70 @@ where
             return Ok(None);
         }
 
-        // Prepare messages for LLM
-        let messages = vec![
+        // Prepare initial messages for LLM
+        let mut messages = vec![
             Message::system("You are a heartbeat agent. Call the heartbeat tool to report your decision."),
             Message::user(format!(
                 "Review the following HEARTBEAT.md and decide whether there are active tasks.\n\n{content}"
             )),
         ];
 
-        // Call provider (tools are already bound during initialization)
         let options = nanobot_provider::Options::default();
-        let response = self.provider.chat(&messages, &options).await.map_err(HeartbeatError::Provider)?;
 
-        match response.tool_calls().first() {
-            Some(tool_call) if tool_call.name == "heartbeat" => {
-                let action: Action = tool_call
-                    .parse_arguments()
-                    .map_err(|e| HeartbeatError::Parse(format!("Failed to parse tool arguments: {e}")))?;
-                Ok(Some(action))
-            }
-            Some(tool_call) => {
-                error!("Unexpected tool name: {}", tool_call.name);
-                Ok(Some(Action::Skip))
-            }
-            None => {
+        // Retry loop: if parsing fails, feed the error back to LLM for correction
+        for attempt in 0..=MAX_PARSE_RETRIES {
+            let response = self.provider.chat(&messages, &options).await.map_err(HeartbeatError::Provider)?;
+
+            // Handle case: no tool call returned
+            let Some(tool_call) = response.tool_calls().first() else {
                 info!("LLM did not return a tool call, treating as skip");
-                Ok(Some(Action::Skip))
+                return Ok(Some(Action::Skip));
+            };
+
+            // Handle case: wrong tool name
+            if tool_call.name != "heartbeat" {
+                warn!("Unexpected tool name: {}, treating as skip", tool_call.name);
+                return Ok(Some(Action::Skip));
+            }
+
+            // Try to parse the arguments
+            match tool_call.parse_arguments::<Action>() {
+                Ok(action) => return Ok(Some(action)),
+                Err(e) if attempt < MAX_PARSE_RETRIES => {
+                    // Build error feedback for LLM
+                    let error_msg = format!(
+                        "Invalid arguments format. Error: {e}.\n\
+                         Expected JSON format:\n\
+                         - To skip: \"skip\"\n\
+                         - To run tasks: {{\"run\": {{\"tasks\": \"<task description>\"}}}}\n\
+                         Please retry with a valid format."
+                    );
+
+                    warn!(
+                        "Failed to parse heartbeat tool arguments (attempt {}): {}. \
+                         Feeding error back to LLM for correction.",
+                        attempt + 1,
+                        e
+                    );
+
+                    // Add tool result message with error feedback
+                    messages.push(Message::tool(&tool_call.id, error_msg));
+
+                    // Also add LLM's text response (if any) to continue the conversation
+                    if !response.content().is_empty() {
+                        messages.push(Message::assistant(response.content()));
+                    }
+                }
+                Err(e) => {
+                    // Final attempt failed - log and degrade to skip
+                    error!("Failed to parse heartbeat tool arguments after {} retries: {}", MAX_PARSE_RETRIES + 1, e);
+                    return Ok(Some(Action::Skip));
+                }
             }
         }
+
+        // Should not reach here, but safety net
+        Ok(Some(Action::Skip))
     }
 
     // ========== Public API ==========
