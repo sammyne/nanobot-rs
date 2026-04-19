@@ -213,30 +213,22 @@ where
         let options = nanobot_provider::Options::default();
         let response = self.provider.chat(&messages, &options).await.map_err(HeartbeatError::Provider)?;
 
-        // Parse response - Message may contain tool_calls
-        let tool_calls = response.tool_calls();
-        if tool_calls.is_empty() {
-            info!("LLM did not return a tool call, treating as skip");
-            return Ok(Some(Action::Skip));
+        match response.tool_calls().first() {
+            Some(tool_call) if tool_call.name == "heartbeat" => {
+                let action: Action = tool_call
+                    .parse_arguments()
+                    .map_err(|e| HeartbeatError::Parse(format!("Failed to parse tool arguments: {e}")))?;
+                Ok(Some(action))
+            }
+            Some(tool_call) => {
+                error!("Unexpected tool name: {}", tool_call.name);
+                Ok(Some(Action::Skip))
+            }
+            None => {
+                info!("LLM did not return a tool call, treating as skip");
+                Ok(Some(Action::Skip))
+            }
         }
-
-        // Extract tool call
-        let tool_call = response
-            .tool_calls()
-            .first()
-            .ok_or_else(|| HeartbeatError::Parse("No tool call in response".to_string()))?;
-
-        if tool_call.name != "heartbeat" {
-            error!("Unexpected tool name: {}", tool_call.name);
-            return Ok(Some(Action::Skip));
-        }
-
-        // Parse arguments directly into Action type
-        let action: Action = tool_call
-            .parse_arguments()
-            .map_err(|e| HeartbeatError::Parse(format!("Failed to parse tool arguments: {e}")))?;
-
-        Ok(Some(action))
     }
 
     // ========== Public API ==========
