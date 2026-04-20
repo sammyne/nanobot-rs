@@ -18,16 +18,32 @@ static CRON_PARAMETERS: LazyLock<Schema> = LazyLock::new(|| schemars::schema_for
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "lowercase")]
 pub enum CronScheduleArgs {
-    /// Recurring execution at fixed intervals (in seconds)
-    Every { every_seconds: u64 },
-    /// Cron expression based scheduling
+    /// Interval-based scheduling: runs every N seconds after the job starts.
+    ///
+    /// This is NOT time-based. For "daily at 8 AM", use `Cron` with expr `"0 8 * * *"`.
+    Every {
+        /// Number of seconds between each execution.
+        /// The interval is measured from when the job starts, not from a fixed clock time.
+        every_seconds: u64,
+    },
+    /// Time-based scheduling using a cron expression.
     Cron {
+        /// Cron expression in 6-field format (sec min hour day month weekday).
+        ///
+        /// Examples:
+        /// - `"0 8 * * *"` — daily at 8:00 AM
+        /// - `"0 9 * * 1-5"` — every weekday at 9:00 AM
+        /// - `"0 */2 * * *"` — every 2 hours
         expr: String,
+        /// IANA timezone name (e.g., "Asia/Shanghai", "America/Vancouver"). Uses UTC if omitted.
         #[serde(skip_serializing_if = "Option::is_none")]
         tz: Option<String>,
     },
-    /// One-time execution at specific datetime (ISO 8601 format)
-    At { at: String },
+    /// One-time execution at a specific datetime.
+    At {
+        /// ISO 8601 datetime string (e.g., "2024-01-01T09:00:00+08:00").
+        at: String,
+    },
 }
 
 /// Cron tool arguments for different actions
@@ -38,7 +54,10 @@ pub enum CronArgs {
     Add {
         /// Reminder message to display
         message: String,
-        /// Schedule definition
+        /// Schedule definition.
+        ///
+        /// Use `cron` for time-based scheduling (e.g., "daily at 8 AM").
+        /// Use `every` only for interval-based scheduling (e.g., "every 60 seconds").
         schedule: CronScheduleArgs,
     },
     /// List all scheduled jobs
