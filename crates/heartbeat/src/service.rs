@@ -246,9 +246,10 @@ where
 
                     warn!(
                         "Failed to parse heartbeat tool arguments (attempt {}): {}. \
-                         Feeding error back to LLM for correction.",
+                         Raw args: '{}'. Feeding error back to LLM for correction.",
                         attempt + 1,
-                        e
+                        e,
+                        tool_call.arguments
                     );
 
                     // Clone id before moving response in the retry branch
