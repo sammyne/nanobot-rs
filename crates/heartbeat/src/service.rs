@@ -251,17 +251,16 @@ where
                         e
                     );
 
-                    // Add tool result message with error feedback
-                    messages.push(Message::tool(&tool_call.id, error_msg));
+                    // Clone id before moving response in the retry branch
+                    let tool_call_id = tool_call.id.clone();
 
-                    // Also add LLM's text response (if any) to continue the conversation
-                    if !response.content().is_empty() {
-                        messages.push(Message::assistant(response.content()));
-                    }
+                    // Add assistant response (carries tool_calls) then tool result
+                    messages.push(response);
+                    messages.push(Message::tool(&tool_call_id, error_msg));
                 }
                 Err(e) => {
                     // Final attempt failed - log and degrade to skip
-                    error!("Failed to parse heartbeat tool arguments after {} retries: {}", MAX_PARSE_RETRIES + 1, e);
+                    error!("Failed to parse heartbeat tool arguments after {} retries: {}", MAX_PARSE_RETRIES, e);
                     return Ok(Some(Action::Skip));
                 }
             }
