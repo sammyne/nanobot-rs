@@ -2,7 +2,6 @@
 target/
 
 # Git 相关文件
-.git/
 .gitignore
 .github/
 
