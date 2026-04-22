@@ -175,7 +175,10 @@ impl Tool for CronTool {
     }
 
     fn description(&self) -> &str {
-        "Schedule reminders and recurring tasks. Actions: add, list, remove."
+        "Schedule reminders and recurring tasks. Actions:\n\
+        - add: Create a new scheduled job. Use when user asks to 'remind me', 'schedule', 'add a task', or 'set up a recurring task'.\n\
+        - list: Show all scheduled jobs. Use when user asks to 'list tasks', 'show my reminders', or 'what tasks do I have'.\n\
+        - remove: Delete a job by ID. Use when user asks to 'delete', 'cancel', or 'remove' a scheduled task."
     }
 
     fn parameters(&self) -> Schema {
