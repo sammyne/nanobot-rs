@@ -54,6 +54,10 @@ WORKDIR /app
 COPY Cargo.toml Cargo.lock ./
 COPY crates/ ./crates/
 
+# 复制 .git 目录（用于 build.rs 获取 git commit id）
+# 注意：builder 阶段的 .git 不会进入最终 runtime 镜像
+COPY .git/ ./.git/
+
 # 编译 CLI 二进制文件
 RUN cargo build --release --bin nanobot
 
