@@ -3,6 +3,18 @@ use tempfile::tempdir;
 
 use super::*;
 
+/// 验证 CronArgs 的 JSON Schema 不包含 $ref 字段
+///
+/// 使用 #[schemars(inline)] 属性确保 CronScheduleArgs 被内联而非引用
+#[test]
+fn cron_args_schema_has_no_ref() {
+    let schema = schemars::schema_for!(CronArgs);
+    let json = serde_json::to_string_pretty(&schema).unwrap();
+
+    // 确保 schema JSON 中不包含 $ref
+    assert!(!json.contains(r#""$ref""#), "CronArgs schema should not contain $ref, but found it in:\n{}", json);
+}
+
 /// 创建测试用的 ToolContext
 fn test_context() -> ToolContext {
     ToolContext::new("test-channel".to_string(), "12345".to_string())
