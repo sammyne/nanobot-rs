@@ -16,6 +16,7 @@ static CRON_PARAMETERS: LazyLock<Schema> = LazyLock::new(|| schemars::schema_for
 
 /// Schedule definition for adding a cron job
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[schemars(inline)]
 #[serde(tag = "kind", rename_all = "lowercase")]
 pub enum CronScheduleArgs {
     /// Interval-based scheduling: runs every N seconds after the job starts.
