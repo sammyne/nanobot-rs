@@ -16,7 +16,7 @@ use anyhow::{Context, Result};
 use clap::Args;
 use nanobot_agent::{AgentLoop, InboundMessage, OutboundMessage};
 use nanobot_channels::ChannelManager;
-use nanobot_config::{CONFIG_PATH, Config, HeartbeatConfig};
+use nanobot_config::{CONFIG_PATH, Config, HeartbeatConfig, resolve_config_path};
 use nanobot_cron::{CronJob, CronService};
 use nanobot_heartbeat::{HeartbeatService, OnExecuteCallback, OnNotifyCallback};
 use nanobot_provider::{AnyProvider, Provider};
@@ -171,7 +171,10 @@ impl GatewayCmd {
 
         if status.is_empty() {
             println!("  ⚠️  警告: 没有启用的通道");
-            println!("     请在 ~/.nanobot/config.json 中配置 channels 字段");
+            println!(
+                "     请在 {} 中配置 channels 字段",
+                resolve_config_path().unwrap_or_else(|| CONFIG_PATH.clone()).display()
+            );
         } else {
             println!("  ✓ 已启用的通道:");
             for s in status {

@@ -5,7 +5,7 @@ mod workspace;
 use anyhow::Result;
 use clap::Args;
 use dialoguer::Confirm;
-use nanobot_config::{CONFIG_PATH, Config};
+use nanobot_config::{CONFIG_PATH, Config, resolve_config_path};
 use tracing::info;
 use workspace::initializer::WorkspaceInitializer;
 
@@ -64,7 +64,10 @@ impl OnboardCmd {
         // 输出准备就绪信息
         println!("\n⚡ nanobot is ready!");
         println!("\nNext steps:");
-        println!("  1. Add your API key to \x1b[36m~/.nanobot/config.json\x1b[0m");
+        println!(
+            "  1. Add your API key to \x1b[36m{}\x1b[0m",
+            resolve_config_path().unwrap_or_else(|| CONFIG_PATH.clone()).display()
+        );
         println!("     Get one at: https://openrouter.ai/keys");
         println!("  2. Chat: \x1b[36mnanobot agent -m \"Hello!\"\x1b[0m");
         println!("\n\x1b[2mWant Telegram/WhatsApp? See: https://github.com/HKUDS/nanobot#-chat-apps\x1b[0m");

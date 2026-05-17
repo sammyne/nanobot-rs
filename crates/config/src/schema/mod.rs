@@ -4,11 +4,13 @@
 //!
 //! # 配置文件格式
 //!
-//! 配置文件位于 `~/.nanobot/config.json`，采用 JSON 格式。
+//! 支持 JSON 和 YAML 两种格式，配置文件位于 `~/.nanobot/` 目录下。
+//! 加载时按 `config.json` > `config.yaml` > `config.yml` 的优先级查找。
+//! 新建配置默认使用 YAML 格式（`config.yaml`）。
 //!
 //! # 配置示例
 //!
-//! ## 使用 OpenAI 兼容端点（Custom）
+//! ## JSON 格式
 //!
 //! ```json
 //! {
@@ -26,21 +28,16 @@
 //! }
 //! ```
 //!
-//! ## 使用 Anthropic Messages API
+//! ## YAML 格式
 //!
-//! ```json
-//! {
-//!   "providers": {
-//!     "anthropic": {
-//!       "apiKey": "sk-ant-your-api-key"
-//!     }
-//!   },
-//!   "agents": {
-//!     "defaults": {
-//!       "model": "anthropic/claude-opus-4-5"
-//!     }
-//!   }
-//! }
+//! ```yaml
+//! providers:
+//!   custom:
+//!     apiKey: sk-your-api-key
+//!     apiBase: https://api.example.com/v1
+//! agents:
+//!   defaults:
+//!     model: gpt-4
 //! ```
 //!
 //! # MCP 服务器配置
@@ -124,7 +121,7 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::{CONFIG_PATH, NANOBOT_HOME_DIR};
+use crate::{CONFIG_PATH, NANOBOT_HOME_DIR, resolve_config_path};
 
 mod agent;
 mod channel;
@@ -160,6 +157,9 @@ pub enum ConfigError {
     #[error("JSON 序列化错误: {0}")]
     Json(String),
 
+    #[error("YAML 序列化错误: {0}")]
+    Yaml(String),
+
     #[error("环境变量解析错误: {0}")]
     Environment(String),
 }
@@ -167,6 +167,12 @@ pub enum ConfigError {
 impl From<serde_json::Error> for ConfigError {
     fn from(e: serde_json::Error) -> Self {
         ConfigError::Json(e.to_string())
+    }
+}
+
+impl From<serde_yaml::Error> for ConfigError {
+    fn from(e: serde_yaml::Error) -> Self {
+        ConfigError::Yaml(e.to_string())
     }
 }
 
@@ -249,9 +255,9 @@ impl Config {
         }
 
         // 使用 config 库统一从文件和环境变量加载配置
-        // 环境变量使用 convert_case 将 snake_case 转换为 camelCase，与 JSON 文件的 key 匹配
+        // 环境变量使用 convert_case 将 snake_case 转换为 camelCase，与配置文件的 key 匹配
         let mut config: Config = config::Config::builder()
-            .add_source(config::File::from(path).format(config::FileFormat::Json))
+            .add_source(config::File::from(path))
             .add_source(
                 config::Environment::with_prefix("NANOBOT")
                     .prefix_separator("_")
@@ -275,7 +281,7 @@ impl Config {
     /// 从文件加载配置
     ///
     /// 配置加载顺序：
-    /// 1. 从 `~/.nanobot/config.json` 加载基础配置
+    /// 1. 按 `config.json` > `config.yaml` > `config.yml` 优先级查找配置文件
     /// 2. 从环境变量覆盖配置项（环境变量优先级更高）
     ///
     /// # 环境变量命名规范
@@ -298,22 +304,35 @@ impl Config {
     /// - `Ok(None)` - 配置文件不存在
     /// - `Err(e)` - 配置加载或验证失败
     pub fn load() -> Result<Option<Self>, ConfigError> {
-        let path = CONFIG_PATH.clone();
-        Self::load_from_path(&path)
+        match resolve_config_path() {
+            Some(path) => Self::load_from_path(&path),
+            None => Ok(None),
+        }
     }
 
     /// 保存配置到文件
+    ///
+    /// 如果已有配置文件存在，保存到该文件并保持原格式（JSON 或 YAML）。
+    /// 如果不存在任何配置文件，默认保存为 YAML 格式到 `~/.nanobot/config.yaml`。
     pub fn save(&self) -> Result<(), ConfigError> {
         let config_dir = NANOBOT_HOME_DIR.clone();
-        let config_path = CONFIG_PATH.clone();
+        let config_path = resolve_config_path().unwrap_or_else(|| CONFIG_PATH.clone());
 
         // 创建配置目录（如果不存在）
         if !config_dir.exists() {
             fs::create_dir_all(&config_dir)?;
         }
 
-        // 序列化配置为 JSON
-        let content = serde_json::to_string_pretty(self)?;
+        // 根据文件扩展名选择序列化格式
+        let content = match config_path.extension().and_then(|e| e.to_str()) {
+            Some("yaml" | "yml") => {
+                // 先转为 serde_json::Value 再转 YAML，避免 serde_yaml 对枚举使用 YAML tag（如 !custom）
+                // 而 config crate 期望 table-with-one-key 格式（如 custom: {...}）
+                let json_value = serde_json::to_value(self)?;
+                serde_yaml::to_string(&json_value)?
+            }
+            _ => serde_json::to_string_pretty(self)?,
+        };
 
         // 写入文件
         let mut file = fs::File::create(&config_path)?;

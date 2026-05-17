@@ -64,7 +64,7 @@ version = "0.10"
 
 [workspace.dependencies.config]
 version = "0.15"
-features = ["json", "convert-case"]
+features = ["json", "yaml", "convert-case"]
 
 [workspace.dependencies.cron]
 version = "0.15"

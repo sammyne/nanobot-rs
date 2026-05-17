@@ -887,3 +887,109 @@ fn providers_config_anthropic_validate_success() {
     }));
     assert!(config.validate().is_ok());
 }
+
+// ==================== YAML 配置测试 ====================
+
+#[test]
+fn load_yaml_config() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let config_path = temp_dir.path().join("config.yaml");
+
+    let yaml_content = r#"
+providers:
+  custom:
+    apiKey: sk-yaml-test-key-12345
+    apiBase: https://api.example.com/v1
+agents:
+  defaults:
+    model: gpt-4
+"#;
+    std::fs::write(&config_path, yaml_content).unwrap();
+
+    temp_env::with_var_unset("NANOBOT_PROVIDERS__CUSTOM__API_KEY", || {
+        let config = Config::load_from_path(&config_path).unwrap().unwrap();
+        assert_eq!(config.providers.provider_config().api_key, "sk-yaml-test-key-12345");
+        assert_eq!(config.providers.provider_config().api_base, Some("https://api.example.com/v1".to_string()));
+        assert_eq!(config.agents.defaults.model, "gpt-4");
+    });
+}
+
+#[test]
+fn load_yml_config() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let config_path = temp_dir.path().join("config.yml");
+
+    let yml_content = r#"
+providers:
+  custom:
+    apiKey: sk-yml-test-key-12345
+agents:
+  defaults:
+    model: claude-3
+"#;
+    std::fs::write(&config_path, yml_content).unwrap();
+
+    temp_env::with_var_unset("NANOBOT_PROVIDERS__CUSTOM__API_KEY", || {
+        let config = Config::load_from_path(&config_path).unwrap().unwrap();
+        assert_eq!(config.providers.provider_config().api_key, "sk-yml-test-key-12345");
+        assert_eq!(config.agents.defaults.model, "claude-3");
+    });
+}
+
+#[test]
+fn yaml_env_override() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let config_path = temp_dir.path().join("config.yaml");
+
+    let yaml_content = r#"
+providers:
+  custom:
+    apiKey: original-yaml-key
+"#;
+    std::fs::write(&config_path, yaml_content).unwrap();
+
+    temp_env::with_var("NANOBOT_PROVIDERS__CUSTOM__API_KEY", Some("env-override-key"), || {
+        let result = Config::load_from_path(&config_path).unwrap().unwrap();
+        assert_eq!(result.providers.provider_config().api_key, "env-override-key");
+    });
+}
+
+#[test]
+fn save_yaml_format() {
+    // 创建一个配置
+    let config = Config::new(ProvidersConfig::Custom(ProviderConfig {
+        api_key: "sk-save-test-key".to_string(),
+        api_base: Some("https://api.example.com/v1".to_string()),
+        extra_headers: None,
+    }));
+
+    // 序列化为 YAML（通过 serde_json::Value 中转，避免 serde_yaml 对枚举使用 YAML tag）
+    let json_value = serde_json::to_value(&config).unwrap();
+    let serialized = serde_yaml::to_string(&json_value).unwrap();
+
+    // 验证输出是 YAML 格式（不以 { 开头）
+    assert!(!serialized.trim_start().starts_with('{'), "保存的内容应为 YAML 格式");
+
+    // 验证关键字段存在
+    assert!(serialized.contains("apiKey: sk-save-test-key"));
+    assert!(serialized.contains("apiBase:"));
+}
+
+#[test]
+fn save_json_format_when_json_exists() {
+    let config = Config::new(ProvidersConfig::Custom(ProviderConfig {
+        api_key: "sk-json-save-key".to_string(),
+        api_base: Some("https://api.example.com/v1".to_string()),
+        extra_headers: None,
+    }));
+
+    // 序列化为 JSON
+    let serialized = serde_json::to_string_pretty(&config).unwrap();
+
+    // 验证输出是 JSON 格式（以 { 开头）
+    assert!(serialized.trim_start().starts_with('{'), "保存的内容应为 JSON 格式，应以 {{ 开头");
+
+    // 验证可以重新反序列化
+    let reloaded: Config = serde_json::from_str(&serialized).unwrap();
+    assert_eq!(reloaded.providers.provider_config().api_key, "sk-json-save-key");
+}
