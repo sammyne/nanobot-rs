@@ -130,50 +130,6 @@ fn bind_tools_converts_to_anthropic_format() {
     assert!(provider.tools[0].input_schema["properties"]["location"].is_object());
 }
 
-#[test]
-fn bind_tools_adds_missing_type_field() {
-    let config = ProviderConfig { api_key: "test".to_string(), api_base: None, extra_headers: None };
-    let mut provider = AnthropicLike::new(&config, "claude-sonnet-4-20250514").unwrap();
-
-    let tools = vec![ToolDefinition {
-        name: "mcp_tool".to_string(),
-        description: "An MCP tool".to_string(),
-        parameters: json!({
-            "properties": {
-                "input": {"type": "string"}
-            }
-        }),
-    }];
-
-    provider.bind_tools(tools);
-
-    assert_eq!(provider.tools[0].input_schema["type"], "object");
-    assert!(provider.tools[0].input_schema["properties"]["input"].is_object());
-}
-
-#[test]
-fn bind_tools_strips_top_level_combinators() {
-    let config = ProviderConfig { api_key: "test".to_string(), api_base: None, extra_headers: None };
-    let mut provider = AnthropicLike::new(&config, "claude-sonnet-4-20250514").unwrap();
-
-    let tools = vec![ToolDefinition {
-        name: "complex_tool".to_string(),
-        description: "A tool with oneOf".to_string(),
-        parameters: json!({
-            "oneOf": [
-                {"type": "object", "properties": {"a": {"type": "string"}}},
-                {"type": "object", "properties": {"b": {"type": "number"}}}
-            ]
-        }),
-    }];
-
-    provider.bind_tools(tools);
-
-    // oneOf 应被移除，type 应被补充
-    assert!(provider.tools[0].input_schema.get("oneOf").is_none());
-    assert_eq!(provider.tools[0].input_schema["type"], "object");
-}
-
 // ============ AnthropicResponse 反序列化测试 ============
 
 #[test]

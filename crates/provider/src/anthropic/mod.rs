@@ -303,36 +303,16 @@ impl Provider for AnthropicLike {
             tools
                 .into_iter()
                 .map(|td| {
-                    let input_schema = sanitize_input_schema(td.parameters);
                     debug!(
                         "工具 '{}' input_schema: {}",
                         td.name,
-                        serde_json::to_string(&input_schema).unwrap_or_default()
+                        serde_json::to_string(&td.parameters).unwrap_or_default()
                     );
-                    AnthropicTool { name: td.name, description: td.description, input_schema }
+                    AnthropicTool { name: td.name, description: td.description, input_schema: td.parameters }
                 })
                 .collect(),
         );
     }
-}
-
-/// 清理 input_schema 使其符合 Anthropic 要求
-///
-/// - 必须包含 `type` 字段
-/// - 顶层不支持 `oneOf`、`allOf`、`anyOf`
-fn sanitize_input_schema(mut schema: serde_json::Value) -> serde_json::Value {
-    if let Some(obj) = schema.as_object_mut() {
-        // 移除 Anthropic 不支持的顶层组合关键字
-        obj.remove("oneOf");
-        obj.remove("allOf");
-        obj.remove("anyOf");
-
-        // 确保有 type 字段
-        if !obj.contains_key("type") {
-            obj.insert("type".to_string(), serde_json::Value::String("object".to_string()));
-        }
-    }
-    schema
 }
 
 #[cfg(test)]
