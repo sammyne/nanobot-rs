@@ -14,7 +14,7 @@ async-trait.workspace = true
 serde_yaml.workspace = true
 
 # HTTP 客户端
-reqwest = { version = "0.12", features = ["json"] }
+reqwest.workspace = true
 
 # 用于钉钉 API
 chrono = { workspace = true, features = ["serde"] }

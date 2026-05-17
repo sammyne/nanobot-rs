@@ -8,6 +8,8 @@
 //!
 //! # 配置示例
 //!
+//! ## 使用 OpenAI 兼容端点（Custom）
+//!
 //! ```json
 //! {
 //!   "providers": {
@@ -18,45 +20,24 @@
 //!   },
 //!   "agents": {
 //!     "defaults": {
-//!       "workspace": "~/nanobot/workspace",
-//!       "model": "anthropic/claude-opus-4-5",
-//!       "maxTokens": 8192,
-//!       "temperature": 0.1
+//!       "model": "gpt-4"
+//!     }
+//!   }
+//! }
+//! ```
+//!
+//! ## 使用 Anthropic Messages API
+//!
+//! ```json
+//! {
+//!   "providers": {
+//!     "anthropic": {
+//!       "apiKey": "sk-ant-your-api-key"
 //!     }
 //!   },
-//!   "channels": {
-//!     "dingtalk": {
-//!       "enabled": true,
-//!       "clientId": "your-client-id",
-//!       "clientSecret": "your-client-secret",
-//!       "allowFrom": ["user1", "user2"]
-//!     }
-//!   },
-//!   "gateway": {
-//!     "host": "0.0.0.0",
-//!     "port": 18790
-//!   },
-//!   "tools": {
-//!     "restrictToWorkspace": false,
-//!     "exec": {
-//!       "timeout": 60,
-//!       "pathAppend": ""
-//!     },
-//!     "mcpServers": {
-//!       "filesystem": {
-//!         "command": "npx",
-//!         "args": ["@modelcontextprotocol/server-filesystem", "/path/to/allowed/directory"],
-//!         "env": {
-//!           "NODE_ENV": "production"
-//!         }
-//!       },
-//!       "remote-mcp": {
-//!         "url": "https://mcp-server.example.com/sse",
-//!         "headers": {
-//!           "Authorization": "Bearer your-token"
-//!         },
-//!         "toolTimeout": 30
-//!       }
+//!   "agents": {
+//!     "defaults": {
+//!       "model": "anthropic/claude-opus-4-5"
 //!     }
 //!   }
 //! }
@@ -214,9 +195,9 @@ pub struct Config {
 
 impl Config {
     /// 创建新配置
-    pub fn new(provider: ProviderConfig) -> Self {
+    pub fn new(providers: ProvidersConfig) -> Self {
         Self {
-            providers: ProvidersConfig { custom: Some(provider) },
+            providers,
             agents: AgentsConfig::default(),
             channels: ChannelsConfig::default(),
             gateway: GatewayConfig::default(),
@@ -224,9 +205,9 @@ impl Config {
         }
     }
 
-    /// 获取 ProviderConfig（兼容简化版接口）
+    /// 获取 ProviderConfig
     pub fn provider(&self) -> ProviderConfig {
-        if let Some(custom) = &self.providers.custom { custom.clone() } else { ProviderConfig::default() }
+        self.providers.provider_config().clone()
     }
 
     /// 从环境变量创建配置（不读取文件）
@@ -366,22 +347,22 @@ impl Config {
             return Err(ConfigError::Validation("max_tokens 必须大于 0".to_string()));
         }
 
-        // 验证 providers.custom
-        if let Some(custom) = &self.providers.custom {
-            // api_base 可以是 None（使用默认值）或有效 URL
-            if let Some(api_base) = &custom.api_base
-                && !api_base.is_empty()
-                && !api_base.starts_with("http://")
-                && !api_base.starts_with("https://")
-            {
-                return Err(ConfigError::Validation("api_base 必须以 http:// 或 https:// 开头".to_string()));
-            }
+        // 验证 providers
+        let pc = self.providers.provider_config();
 
-            // api_key 可以是 None（某些 OAuth 提供者不需要）
-            // 如果不是空字符串，验证长度
-            if !custom.api_key.is_empty() && custom.api_key.len() < 3 {
-                return Err(ConfigError::Validation("api_key 长度不能少于 3 个字符".to_string()));
-            }
+        // api_base 可以是 None（使用默认值）或有效 URL
+        if let Some(api_base) = &pc.api_base
+            && !api_base.is_empty()
+            && !api_base.starts_with("http://")
+            && !api_base.starts_with("https://")
+        {
+            return Err(ConfigError::Validation("api_base 必须以 http:// 或 https:// 开头".to_string()));
+        }
+
+        // api_key 可以是空字符串（某些 OAuth 提供者不需要）
+        // 如果不是空字符串，验证长度
+        if !pc.api_key.is_empty() && pc.api_key.len() < 3 {
+            return Err(ConfigError::Validation("api_key 长度不能少于 3 个字符".to_string()));
         }
 
         // 验证 channels 配置
@@ -400,7 +381,7 @@ impl Config {
 
     /// 脱敏的 API Key（用于日志显示）
     pub fn masked_api_key(&self) -> String {
-        let key = self.providers.custom.as_ref().map(|c| c.api_key.as_str()).unwrap_or("");
+        let key = &self.providers.provider_config().api_key;
         nanobot_utils::strings::redact(key)
     }
 }

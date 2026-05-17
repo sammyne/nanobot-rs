@@ -38,7 +38,7 @@ fn validate_zero_max_tokens() {
 #[test]
 fn validate_invalid_api_base() {
     let mut config = Config::default();
-    config.providers.custom = Some(ProviderConfig {
+    config.providers = ProvidersConfig::Custom(ProviderConfig {
         api_key: "test-key".to_string(),
         api_base: Some("invalid-url".to_string()),
         extra_headers: None,
@@ -49,7 +49,7 @@ fn validate_invalid_api_base() {
 #[test]
 fn validate_short_api_key() {
     let mut config = Config::default();
-    config.providers.custom = Some(ProviderConfig {
+    config.providers = ProvidersConfig::Custom(ProviderConfig {
         api_key: "ab".to_string(),
         api_base: Some("https://api.example.com".to_string()),
         extra_headers: None,
@@ -59,11 +59,11 @@ fn validate_short_api_key() {
 
 #[test]
 fn validate_success() {
-    let config = Config::new(ProviderConfig {
+    let config = Config::new(ProvidersConfig::Custom(ProviderConfig {
         api_base: Some("https://api.openai.com/v1".to_string()),
         api_key: "test-api-key-12345".to_string(),
         extra_headers: None,
-    });
+    }));
     assert!(config.validate().is_ok());
 }
 
@@ -76,11 +76,11 @@ fn validate_without_custom_provider() {
 
 #[test]
 fn masked_api_key() {
-    let config = Config::new(ProviderConfig {
+    let config = Config::new(ProvidersConfig::Custom(ProviderConfig {
         api_base: Some("https://api.openai.com/v1".to_string()),
         api_key: "sk-1234567890abcdefghijklmnop".to_string(),
         extra_headers: None,
-    });
+    }));
     let masked = config.masked_api_key();
     assert!(masked.starts_with("sk-1"));
     assert!(masked.ends_with("mnop"));
@@ -90,7 +90,7 @@ fn masked_api_key() {
 #[test]
 fn masked_api_key_short() {
     let mut config = Config::default();
-    config.providers.custom = Some(ProviderConfig {
+    config.providers = ProvidersConfig::Custom(ProviderConfig {
         api_key: "abc".to_string(),
         api_base: Some("https://api.example.com".to_string()),
         extra_headers: None,
@@ -117,7 +117,8 @@ fn load_hkuds_config() {
 
     // 验证可以反序列化为 HKUDS 格式
     let config: Config = serde_json::from_str(hkuds_json).unwrap();
-    assert_eq!(config.providers.custom.as_ref().unwrap().api_key, "ms-9b01b6f2-1336-4f0d-ac2b-7922f1d66119");
+    assert_eq!(config.providers.provider_config().api_key, "ms-9b01b6f2-1336-4f0d-ac2b-7922f1d66119");
+    assert!(matches!(config.providers, ProvidersConfig::Custom(_)));
     assert_eq!(config.agents.defaults.model, "MiniMax/MiniMax-M2.5");
 
     // 验证 provider() 方法
@@ -134,7 +135,7 @@ fn config_from_provider() {
         extra_headers: None,
     };
 
-    let config = Config::new(provider_config.clone());
+    let config = Config::new(ProvidersConfig::Custom(provider_config.clone()));
     assert!(config.validate().is_ok());
 
     let retrieved = config.provider();
@@ -156,7 +157,7 @@ fn load_partial_config_fill_defaults() {
     let config: Config = serde_json::from_str(partial_json).unwrap();
 
     // api_base 应该自动填充为 None
-    assert_eq!(config.providers.custom.as_ref().unwrap().api_base, None);
+    assert_eq!(config.providers.provider_config().api_base, None);
 
     // agents.defaults 应该使用默认值
     assert_eq!(config.agents.defaults.model, "anthropic/claude-opus-4-5");
@@ -193,10 +194,11 @@ fn load_config_with_all_fields_present() {
     let config: Config = serde_json::from_str(full_json).unwrap();
 
     // 验证使用的是提供的值而非默认值
-    assert_eq!(config.providers.custom.as_ref().unwrap().api_key, "sk-custom-key");
-    assert_eq!(config.providers.custom.as_ref().unwrap().api_base, Some("https://custom.api.com/v1".to_string()));
+    let pc = config.providers.provider_config();
+    assert_eq!(pc.api_key, "sk-custom-key");
+    assert_eq!(pc.api_base, Some("https://custom.api.com/v1".to_string()));
     assert_eq!(
-        config.providers.custom.as_ref().unwrap().extra_headers,
+        pc.extra_headers,
         Some({
             let mut headers = std::collections::HashMap::new();
             headers.insert("X-Custom-Header".to_string(), "value".to_string());
@@ -219,8 +221,9 @@ fn load_empty_config_fill_all_defaults() {
 
     let config: Config = serde_json::from_str(empty_json).unwrap();
 
-    // providers.custom 应该为 None（因为它是 Option 类型且有 default）
-    assert!(config.providers.custom.is_none());
+    // providers 应该使用默认值（Custom 变体，空 ProviderConfig）
+    assert!(matches!(config.providers, ProvidersConfig::Custom(_)));
+    assert_eq!(config.providers.provider_config().api_key, "");
 
     // agents.defaults 应该自动填充默认值（~ 会被替换为 HOME）
     assert_eq!(config.agents.defaults.workspace, HOME.join(".nanobot/workspace"));
@@ -246,7 +249,7 @@ fn provider_config_with_extra_headers() {
         extra_headers: Some(headers.clone()),
     };
 
-    let config = Config::new(provider_config);
+    let config = Config::new(ProvidersConfig::Custom(provider_config));
     let retrieved = config.provider();
 
     assert_eq!(retrieved.extra_headers, Some(headers));
@@ -286,7 +289,7 @@ fn extra_headers_skip_serializing_if_none() {
         extra_headers: None,
     };
 
-    let config = Config::new(provider_config);
+    let config = Config::new(ProvidersConfig::Custom(provider_config));
     let json = serde_json::to_string_pretty(&config).unwrap();
 
     // 验证 JSON 中不包含 extraHeaders 字段
@@ -309,7 +312,7 @@ fn extra_headers_serialize_when_some() {
         extra_headers: Some(headers),
     };
 
-    let config = Config::new(provider_config);
+    let config = Config::new(ProvidersConfig::Custom(provider_config));
     let json = serde_json::to_string_pretty(&config).unwrap();
 
     // 验证 JSON 中包含 extraHeaders 字段
@@ -423,7 +426,7 @@ fn env_override_string_field() {
         let result = Config::load_from_path(&config_path).unwrap().unwrap();
 
         // 验证环境变量覆盖了配置文件中的值
-        assert_eq!(result.providers.custom.as_ref().unwrap().api_key, "env-override-key");
+        assert_eq!(result.providers.provider_config().api_key, "env-override-key");
     });
 }
 
@@ -526,7 +529,7 @@ fn env_no_override_when_not_set() {
         let result = Config::load_from_path(&config_path).unwrap().unwrap();
 
         // 验证使用配置文件中的值
-        assert_eq!(result.providers.custom.as_ref().unwrap().api_key, "file-key");
+        assert_eq!(result.providers.provider_config().api_key, "file-key");
     });
 }
 
@@ -558,11 +561,8 @@ fn env_override_multiple_fields() {
             let result = Config::load_from_path(&config_path).unwrap().unwrap();
 
             // 验证所有环境变量都生效
-            assert_eq!(result.providers.custom.as_ref().unwrap().api_key, "new-key");
-            assert_eq!(
-                result.providers.custom.as_ref().unwrap().api_base,
-                Some("https://original.api.com".to_string())
-            ); // 未被覆盖
+            assert_eq!(result.providers.provider_config().api_key, "new-key");
+            assert_eq!(result.providers.provider_config().api_base, Some("https://original.api.com".to_string())); // 未被覆盖
             assert_eq!(result.gateway.port, 9000);
         },
     );
@@ -589,7 +589,7 @@ fn env_empty_value_ignored() {
         let result = Config::load_from_path(&config_path).unwrap().unwrap();
 
         // 验证空值被忽略，使用配置文件中的值
-        assert_eq!(result.providers.custom.as_ref().unwrap().api_key, "file-key");
+        assert_eq!(result.providers.provider_config().api_key, "file-key");
     });
 }
 
@@ -830,4 +830,60 @@ fn from_env_overrides_gateway_port() {
         let config = Config::from_env().unwrap();
         assert_eq!(config.gateway.port, 9999);
     });
+}
+
+// ==================== ProvidersConfig 枚举测试 ====================
+
+#[test]
+fn providers_config_deserialize_custom() {
+    let json = r#"{"providers":{"custom":{"apiKey":"sk-xxx","apiBase":"https://api.openai.com/v1"}}}"#;
+    let config: Config = serde_json::from_str(json).unwrap();
+    assert!(matches!(config.providers, ProvidersConfig::Custom(_)));
+    assert_eq!(config.providers.provider_config().api_key, "sk-xxx");
+}
+
+#[test]
+fn providers_config_deserialize_anthropic() {
+    let json = r#"{"providers":{"anthropic":{"apiKey":"sk-ant-xxx"}}}"#;
+    let config: Config = serde_json::from_str(json).unwrap();
+    assert!(matches!(config.providers, ProvidersConfig::Anthropic(_)));
+    assert_eq!(config.providers.provider_config().api_key, "sk-ant-xxx");
+}
+
+#[test]
+fn providers_config_provider_config_from_both_variants() {
+    let custom = ProvidersConfig::Custom(ProviderConfig {
+        api_key: "key-a".to_string(),
+        api_base: Some("https://a.com".to_string()),
+        extra_headers: None,
+    });
+    assert_eq!(custom.provider_config().api_key, "key-a");
+
+    let anthropic = ProvidersConfig::Anthropic(ProviderConfig {
+        api_key: "key-b".to_string(),
+        api_base: Some("https://b.com".to_string()),
+        extra_headers: None,
+    });
+    assert_eq!(anthropic.provider_config().api_key, "key-b");
+}
+
+#[test]
+fn providers_config_anthropic_validate_invalid_api_base() {
+    let mut config = Config::default();
+    config.providers = ProvidersConfig::Anthropic(ProviderConfig {
+        api_key: "sk-ant-test-key".to_string(),
+        api_base: Some("invalid-url".to_string()),
+        extra_headers: None,
+    });
+    assert!(config.validate().is_err());
+}
+
+#[test]
+fn providers_config_anthropic_validate_success() {
+    let config = Config::new(ProvidersConfig::Anthropic(ProviderConfig {
+        api_key: "sk-ant-test-key-12345".to_string(),
+        api_base: Some("https://api.anthropic.com".to_string()),
+        extra_headers: None,
+    }));
+    assert!(config.validate().is_ok());
 }
