@@ -19,7 +19,7 @@ use nanobot_channels::ChannelManager;
 use nanobot_config::{CONFIG_PATH, Config, HeartbeatConfig};
 use nanobot_cron::{CronJob, CronService};
 use nanobot_heartbeat::{HeartbeatService, OnExecuteCallback, OnNotifyCallback};
-use nanobot_provider::{OpenAILike, Provider};
+use nanobot_provider::{AnyProvider, Provider};
 use nanobot_session::SessionInfo;
 use nanobot_subagent::SubagentManager;
 use tokio::sync::mpsc;
@@ -211,7 +211,7 @@ impl GatewayCmd {
     }
 
     /// 初始化 LLM Provider
-    fn init_provider(&self, config: &Config) -> Result<OpenAILike> {
+    fn init_provider(&self, config: &Config) -> Result<AnyProvider> {
         let provider_config = config.provider();
         let path = CONFIG_PATH.clone();
 
@@ -228,7 +228,7 @@ impl GatewayCmd {
             provider_config.api_base.as_deref().unwrap_or("(默认)")
         );
 
-        OpenAILike::from_config(config).context("初始化 LLM Provider 失败")
+        AnyProvider::from_config(config).context("初始化 LLM Provider 失败")
     }
 
     /// 设置 HeartbeatService（包含回调）
@@ -247,11 +247,11 @@ impl GatewayCmd {
     fn setup_heartbeat_service(
         &self,
         workspace_path: std::path::PathBuf,
-        provider: OpenAILike,
+        provider: AnyProvider,
         config: HeartbeatConfig,
-        agent_loop: Arc<AgentLoop<OpenAILike>>,
+        agent_loop: Arc<AgentLoop<AnyProvider>>,
         outbound_tx: mpsc::Sender<OutboundMessage>,
-    ) -> Result<HeartbeatService<OpenAILike>> {
+    ) -> Result<HeartbeatService<AnyProvider>> {
         info!("设置 HeartbeatService: enabled={}, interval_s={}", config.enabled, config.interval_s);
 
         // 创建 SessionManager 用于访问会话列表
@@ -343,7 +343,7 @@ impl GatewayCmd {
     async fn setup_cron_callback(
         &self,
         cron_service: &CronService,
-        agent_loop: Arc<AgentLoop<OpenAILike>>,
+        agent_loop: Arc<AgentLoop<AnyProvider>>,
         outbound_tx: mpsc::Sender<OutboundMessage>,
     ) {
         let callback: nanobot_cron::JobCallback = Arc::new(move |job: CronJob| {
@@ -384,7 +384,7 @@ impl GatewayCmd {
     /// 启动服务并等待关闭信号
     async fn run_services(
         &self,
-        ctx: ServicesContext<OpenAILike>,
+        ctx: ServicesContext<AnyProvider>,
         config: &Config,
         health_check_port: Option<u16>,
     ) -> Result<()> {

@@ -108,6 +108,9 @@ pub enum Message {
         content: String,
         /// 工具调用列表
         tool_calls: Vec<ToolCall>,
+        /// 思考过程（不透明数据，由 provider 写入和读取）
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        thinking: Option<serde_json::Value>,
     },
     /// 工具消息（工具调用结果）
     Tool {
@@ -126,12 +129,21 @@ impl Message {
 
     /// 创建助手消息
     pub fn assistant(content: impl Into<String>) -> Self {
-        Self::Assistant { content: content.into(), tool_calls: Vec::new() }
+        Self::Assistant { content: content.into(), tool_calls: Vec::new(), thinking: None }
     }
 
     /// 创建带工具调用的助手消息
     pub fn assistant_with_tools(content: impl Into<String>, tool_calls: Vec<ToolCall>) -> Self {
-        Self::Assistant { content: content.into(), tool_calls }
+        Self::Assistant { content: content.into(), tool_calls, thinking: None }
+    }
+
+    /// 创建带思考过程的助手消息
+    pub fn assistant_with_thinking(
+        content: impl Into<String>,
+        tool_calls: Vec<ToolCall>,
+        thinking: serde_json::Value,
+    ) -> Self {
+        Self::Assistant { content: content.into(), tool_calls, thinking: Some(thinking) }
     }
 
     /// 创建系统消息
@@ -178,6 +190,14 @@ impl Message {
     pub fn tool_call_id(&self) -> Option<&str> {
         match self {
             Self::Tool { tool_call_id, .. } => Some(tool_call_id),
+            _ => None,
+        }
+    }
+
+    /// 获取思考过程（仅 Assistant 消息）
+    pub fn thinking(&self) -> Option<&serde_json::Value> {
+        match self {
+            Self::Assistant { thinking: Some(t), .. } => Some(t),
             _ => None,
         }
     }

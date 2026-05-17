@@ -10,7 +10,7 @@ use clap::Args;
 use nanobot_agent::{AgentLoop, InboundMessage, OutboundMessage, ProgressTracker};
 use nanobot_config::Config;
 use nanobot_cron::CronService;
-use nanobot_provider::OpenAILike;
+use nanobot_provider::AnyProvider;
 use nanobot_subagent::SubagentManager;
 use tracing::{debug, error, info};
 /// 退出命令集合
@@ -46,7 +46,7 @@ impl AgentCmd {
         );
 
         // 初始化 LLM Provider
-        let provider = OpenAILike::from_config(&config)?;
+        let provider = AnyProvider::from_config(&config)?;
         debug!("LLM Provider 初始化成功");
 
         // 初始化 CronService（使用配置中的 workspace）
@@ -64,7 +64,7 @@ impl AgentCmd {
     /// 单次消息模式
     async fn run_once(
         &self,
-        provider: OpenAILike,
+        provider: AnyProvider,
         config: &Config,
         cron_service: &Arc<CronService>,
         input: &str,
@@ -113,7 +113,7 @@ impl AgentCmd {
     /// - AgentLoop 持有 inbound_rx（接收用户输入）和 outbound_tx（发送助手回复）
     async fn run_interactive(
         &self,
-        provider: OpenAILike,
+        provider: AnyProvider,
         config: &Config,
         cron_service: &Arc<CronService>,
     ) -> Result<()> {

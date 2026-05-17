@@ -74,7 +74,7 @@ impl TryFrom<&Message> for ChatCompletionRequestMessage {
             Message::User { content } => ChatCompletionRequestMessage::User(
                 ChatCompletionRequestUserMessageArgs::default().content(content.as_str()).build()?,
             ),
-            Message::Assistant { content, tool_calls } => {
+            Message::Assistant { content, tool_calls, .. } => {
                 let mut assistant_msg =
                     ChatCompletionRequestAssistantMessageArgs::default().content(content.as_str()).build()?;
 
