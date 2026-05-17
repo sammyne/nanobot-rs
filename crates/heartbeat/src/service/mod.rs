@@ -12,8 +12,9 @@ use tracing::{error, info, warn};
 use crate::{HeartbeatError, OnExecuteCallback, OnNotifyCallback};
 
 /// Action enum for heartbeat decision
-#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, JsonSchema)]
+#[schemars(with = "ActionSchema")]
+#[serde(tag = "action", rename_all = "camelCase")]
 enum Action {
     /// Skip execution
     Skip,
@@ -22,6 +23,23 @@ enum Action {
         /// Natural language summary of active tasks to execute
         tasks: String,
     },
+}
+
+/// Mirror struct for Action schema generation.
+///
+/// Must stay in sync with Action — interop tests will catch drift.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+struct ActionSchema {
+    /// skip: no active tasks, do nothing
+    /// run: execute the described tasks (requires tasks)
+    #[schemars(extend("enum" = ["skip", "run"]))]
+    action: String,
+
+    /// Natural language summary of active tasks to execute.
+    /// Required when action="run".
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    tasks: String,
 }
 
 /// Heartbeat tool definition for LLM decision making
@@ -239,8 +257,8 @@ where
                     let error_msg = format!(
                         "Invalid arguments format. Error: {e}.\n\
                          Expected JSON format:\n\
-                         - To skip: \"skip\"\n\
-                         - To run tasks: {{\"run\": {{\"tasks\": \"<task description>\"}}}}\n\
+                         - To skip: {{\"action\": \"skip\"}}\n\
+                         - To run tasks: {{\"action\": \"run\", \"tasks\": \"<task description>\"}}\n\
                          Please retry with a valid format."
                     );
 
@@ -273,3 +291,6 @@ where
 
     // ========== Public API ==========
 }
+
+#[cfg(test)]
+mod tests;

@@ -3,16 +3,55 @@ use tempfile::tempdir;
 
 use super::*;
 
-/// 验证 CronArgs 的 JSON Schema 不包含 $ref 字段
-///
-/// 使用 #[schemars(inline)] 属性确保 CronScheduleArgs 被内联而非引用
-#[test]
-fn cron_args_schema_has_no_ref() {
-    let schema = schemars::schema_for!(CronArgs);
-    let json = serde_json::to_string_pretty(&schema).unwrap();
+// ============ CronArgs ↔ CronArgsSchema 互操作测试 ============
 
-    // 确保 schema JSON 中不包含 $ref
-    assert!(!json.contains(r#""$ref""#), "CronArgs schema should not contain $ref, but found it in:\n{}", json);
+#[test]
+fn cron_args_add_interop() {
+    // enum → JSON → struct
+    let enum_val =
+        CronArgs::Add { message: "Daily standup".to_string(), schedule: CronScheduleArgs::Every { every_seconds: 60 } };
+    let json = serde_json::to_value(&enum_val).unwrap();
+    let struct_val: CronArgsSchema = serde_json::from_value(json).unwrap();
+    assert_eq!(struct_val.action, "add");
+    assert_eq!(struct_val.message, "Daily standup");
+    assert!(struct_val.schedule.is_some());
+
+    // struct → JSON → enum
+    let json = serde_json::to_value(&struct_val).unwrap();
+    let roundtrip: CronArgs = serde_json::from_value(json).unwrap();
+    assert!(matches!(roundtrip, CronArgs::Add { message, .. } if message == "Daily standup"));
+}
+
+#[test]
+fn cron_args_list_interop() {
+    // enum → JSON → struct
+    let enum_val = CronArgs::List;
+    let json = serde_json::to_value(&enum_val).unwrap();
+    let struct_val: CronArgsSchema = serde_json::from_value(json).unwrap();
+    assert_eq!(struct_val.action, "list");
+    assert!(struct_val.message.is_empty());
+    assert!(struct_val.schedule.is_none());
+    assert!(struct_val.job_id.is_empty());
+
+    // struct → JSON → enum
+    let json = serde_json::to_value(&struct_val).unwrap();
+    let roundtrip: CronArgs = serde_json::from_value(json).unwrap();
+    assert!(matches!(roundtrip, CronArgs::List));
+}
+
+#[test]
+fn cron_args_remove_interop() {
+    // enum → JSON → struct
+    let enum_val = CronArgs::Remove { job_id: "job-123".to_string() };
+    let json = serde_json::to_value(&enum_val).unwrap();
+    let struct_val: CronArgsSchema = serde_json::from_value(json).unwrap();
+    assert_eq!(struct_val.action, "remove");
+    assert_eq!(struct_val.job_id, "job-123");
+
+    // struct → JSON → enum
+    let json = serde_json::to_value(&struct_val).unwrap();
+    let roundtrip: CronArgs = serde_json::from_value(json).unwrap();
+    assert!(matches!(roundtrip, CronArgs::Remove { job_id } if job_id == "job-123"));
 }
 
 /// 创建测试用的 ToolContext

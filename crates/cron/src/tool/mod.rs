@@ -49,6 +49,7 @@ pub enum CronScheduleArgs {
 
 /// Cron tool arguments for different actions
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[schemars(with = "CronArgsSchema")]
 #[serde(tag = "action", rename_all = "lowercase")]
 pub enum CronArgs {
     /// Add a new scheduled job
@@ -68,6 +69,35 @@ pub enum CronArgs {
         /// Job ID to remove
         job_id: String,
     },
+}
+
+/// Mirror struct for CronArgs schema generation.
+///
+/// Fields are the union of all CronArgs variants.
+/// Must stay in sync with CronArgs — interop tests will catch drift.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+struct CronArgsSchema {
+    /// add: create a scheduled job (requires message, schedule)
+    /// list: show all jobs (no extra params)
+    /// remove: delete a job (requires job_id)
+    #[schemars(extend("enum" = ["add", "list", "remove"]))]
+    action: String,
+
+    /// Reminder message to display. Required when action="add".
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    message: String,
+
+    /// Schedule definition. Required when action="add".
+    ///
+    /// Use kind="cron" for time-based scheduling (e.g. daily at 8 AM).
+    /// Use kind="every" only for interval-based scheduling.
+    /// Use kind="at" for one-time execution.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    schedule: Option<CronScheduleArgs>,
+
+    /// Job ID to remove. Required when action="remove".
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    job_id: String,
 }
 
 /// Tool to schedule reminders and recurring tasks.
