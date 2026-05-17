@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 serde.workspace = true
 serde_json.workspace = true
+serde_yaml.workspace = true
 anyhow.workspace = true
 thiserror.workspace = true
 config.workspace = true
@@ -14,4 +15,3 @@ nanobot-utils.workspace = true
 [dev-dependencies]
 tempfile.workspace = true
 temp-env = "0.3"
-serde_yaml.workspace = true
