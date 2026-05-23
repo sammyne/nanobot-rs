@@ -191,12 +191,11 @@ impl<P: Provider> AgentLoop<P> {
             // 调用 LLM
             let response = self.call_llm(&messages).await?;
 
-            // 检查是否有工具调用
-            let tool_calls = response.tool_calls();
-            if !tool_calls.is_empty() {
-                // 提取文本内容
-                let content = response.content().to_string();
+            // 在消费 response 之前提取后续需要的数据
+            let content = response.content().to_string();
+            let tool_calls = response.tool_calls().to_vec();
 
+            if !tool_calls.is_empty() {
                 // 发送进度通知
                 if let Some(ref tracker) = on_progress {
                     // 1. 发送清理后的思考内容（如果有）
@@ -208,7 +207,7 @@ impl<P: Provider> AgentLoop<P> {
                     }
 
                     // 2. 发送工具提示
-                    let hint = format_tool_hint(tool_calls);
+                    let hint = format_tool_hint(&tool_calls);
                     if let Err(e) = tracker.track(hint, true).await {
                         error!("发送工具提示失败: {}", e);
                     }
@@ -218,11 +217,11 @@ impl<P: Provider> AgentLoop<P> {
                 let tool_hints: Vec<String> = tool_calls.iter().map(|tc| tc.preview()).collect();
                 debug!("工具调用: {}", tool_hints.join(", "));
 
-                // 将助手消息（带工具调用）添加到历史
-                messages.push(Message::assistant_with_tools(&content, tool_calls.to_vec()));
+                // 将原始 LLM 响应直接添加到历史（保留 thinking 等 provider 特定字段）
+                messages.push(response);
 
                 // 执行每个工具调用
-                for tool_call in tool_calls {
+                for tool_call in &tool_calls {
                     tools_used.push(tool_call.name.clone());
                     info!("执行工具 {}: {}", tool_call.name, tool_call.arguments);
 
@@ -253,13 +252,12 @@ impl<P: Provider> AgentLoop<P> {
                 }
             } else {
                 // 没有工具调用，返回最终结果
-                let final_content = response.content().to_string();
-                // 将助手消息添加到历史
-                messages.push(Message::assistant(&final_content));
+                // 将原始 LLM 响应直接添加到历史（保留 thinking 等 provider 特定字段）
+                messages.push(response);
 
-                info!("ReAct 循环完成: 迭代次数={}, 最终内容长度={} 字符", iteration, final_content.len());
+                info!("ReAct 循环完成: 迭代次数={}, 最终内容长度={} 字符", iteration, content.len());
 
-                return Ok(ReActResult { content: final_content, tools_used, messages });
+                return Ok(ReActResult { content, tools_used, messages });
             }
         }
 

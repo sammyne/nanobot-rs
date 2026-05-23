@@ -182,14 +182,14 @@ where
                 }
             };
 
-            // 检查是否有工具调用
-            let tool_calls = response.tool_calls();
+            // 在消费 response 之前提取工具调用数据
+            let tool_calls = response.tool_calls().to_vec();
             if !tool_calls.is_empty() {
-                // 添加助手消息（包含工具调用）到上下文
-                messages.push(Message::assistant_with_tools(response.content().to_string(), tool_calls.to_vec()));
+                // 将原始 LLM 响应直接添加到上下文（保留 thinking 等 provider 特定字段）
+                messages.push(response);
 
                 // 执行每个工具调用
-                for tool_call in tool_calls {
+                for tool_call in &tool_calls {
                     tracing::debug!(
                         task_id = %task.id,
                         tool = %tool_call.name,
