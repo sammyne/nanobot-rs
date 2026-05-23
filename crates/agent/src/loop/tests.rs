@@ -3,6 +3,8 @@
 //! 按照 AGENTS.md 规范编写的表驱动测试
 
 use std::path::PathBuf;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use async_trait::async_trait;
 use nanobot_config::AgentDefaults;
@@ -1186,4 +1188,77 @@ fn format_tool_hint_formats_correctly() {
         let result = super::format_tool_hint(&tool_calls);
         assert_eq!(result, case.expected, "case[{}]: mismatch", case.name);
     }
+}
+
+/// Mock Provider 返回带 thinking 数据的响应
+///
+/// 第一次调用返回带 thinking + tool call 的 assistant 消息，
+/// 第二次调用返回带 thinking 但无 tool call 的 assistant 消息。
+#[derive(Clone)]
+struct ThinkingMockProvider {
+    call_count: Arc<AtomicUsize>,
+}
+
+impl ThinkingMockProvider {
+    fn new() -> Self {
+        Self { call_count: Arc::new(AtomicUsize::new(0)) }
+    }
+}
+
+#[async_trait]
+impl Provider for ThinkingMockProvider {
+    async fn chat(&self, _messages: &[Message], _options: &nanobot_provider::Options) -> anyhow::Result<Message> {
+        let call = self.call_count.fetch_add(1, Ordering::SeqCst);
+        match call {
+            0 => {
+                // 第一次调用：返回带 thinking + tool call 的响应
+                let tool_call = nanobot_provider::ToolCall::new(
+                    "call_1",
+                    "read_file",
+                    serde_json::json!({"path": "/tmp/test.txt"}),
+                );
+                let thinking =
+                    serde_json::json!({"type": "thinking", "thinking": "Let me think...", "signature": "sig123"});
+                Ok(Message::assistant_with_thinking("thinking response", vec![tool_call], thinking))
+            }
+            _ => {
+                // 第二次调用：返回带 thinking 但无 tool call 的响应
+                let thinking =
+                    serde_json::json!({"type": "thinking", "thinking": "Done thinking.", "signature": "sig456"});
+                Ok(Message::assistant_with_thinking("final answer", vec![], thinking))
+            }
+        }
+    }
+
+    fn bind_tools(&mut self, _tools: Vec<ToolDefinition>) {}
+}
+
+/// 验证 re_act 在多轮工具调用中保留 thinking 数据
+#[tokio::test]
+async fn re_act_preserves_thinking_in_messages() {
+    let provider = ThinkingMockProvider::new();
+    let config = mock_config();
+    let agent = AgentLoop::new(provider, config, None, None, nanobot_config::ToolsConfig::default())
+        .await
+        .expect("AgentLoop creation should succeed");
+
+    let messages = vec![Message::system("You are helpful."), Message::user("Hello")];
+
+    let result = agent.re_act(messages, "cli", "test", None).await.expect("re_act should succeed");
+
+    // 收集所有 assistant 消息
+    let assistant_messages: Vec<&Message> = result.messages.iter().filter(|m| m.role() == "assistant").collect();
+
+    assert_eq!(assistant_messages.len(), 2, "should have 2 assistant messages (tool call + final)");
+
+    // 第一条 assistant 消息（带 tool call）应保留 thinking
+    let first_thinking = assistant_messages[0].thinking().expect("first assistant message should have thinking");
+    assert_eq!(first_thinking["thinking"], "Let me think...", "first thinking content mismatch");
+
+    // 第二条 assistant 消息（最终回复）应保留 thinking
+    let second_thinking = assistant_messages[1].thinking().expect("second assistant message should have thinking");
+    assert_eq!(second_thinking["thinking"], "Done thinking.", "second thinking content mismatch");
+
+    // 验证最终内容
+    assert_eq!(result.content, "final answer", "final content mismatch");
 }
