@@ -706,35 +706,35 @@ async fn try_handle_cmd_recognizes_and_processes_commands() {
             input: "/help",
             channel: "cli",
             chat_id: "test123",
-            expected_response: "🐈 nanobot commands:\n/new — Start a new conversation\n/help — Show available commands",
+            expected_response: "🐈 nanobot commands:\n/new — Start a new conversation\n/stop — Stop current processing and cancel background tasks\n/help — Show available commands",
         },
         CommandCase {
             name: "大小写不敏感 - /HELP",
             input: "/HELP",
             channel: "cli",
             chat_id: "test123",
-            expected_response: "🐈 nanobot commands:\n/new — Start a new conversation\n/help — Show available commands",
+            expected_response: "🐈 nanobot commands:\n/new — Start a new conversation\n/stop — Stop current processing and cancel background tasks\n/help — Show available commands",
         },
         CommandCase {
             name: "大小写不敏感 - /Help",
             input: "/Help",
             channel: "cli",
             chat_id: "test123",
-            expected_response: "🐈 nanobot commands:\n/new — Start a new conversation\n/help — Show available commands",
+            expected_response: "🐈 nanobot commands:\n/new — Start a new conversation\n/stop — Stop current processing and cancel background tasks\n/help — Show available commands",
         },
         CommandCase {
             name: "忽略前后空格 - /help ",
             input: "/help ",
             channel: "cli",
             chat_id: "test123",
-            expected_response: "🐈 nanobot commands:\n/new — Start a new conversation\n/help — Show available commands",
+            expected_response: "🐈 nanobot commands:\n/new — Start a new conversation\n/stop — Stop current processing and cancel background tasks\n/help — Show available commands",
         },
         CommandCase {
             name: "忽略前后空格 - /HELP  ",
             input: "/HELP  ",
             channel: "cli",
             chat_id: "test123",
-            expected_response: "🐈 nanobot commands:\n/new — Start a new conversation\n/help — Show available commands",
+            expected_response: "🐈 nanobot commands:\n/new — Start a new conversation\n/stop — Stop current processing and cancel background tasks\n/help — Show available commands",
         },
         CommandCase {
             name: "未知命令返回提示信息",
@@ -814,7 +814,8 @@ async fn process_message_integrates_command_handling() {
     let outbound_cmd = agent.process_message(inbound_cmd, None, None).await;
 
     assert_eq!(
-        outbound_cmd.content, "🐈 nanobot commands:\n/new — Start a new conversation\n/help — Show available commands",
+        outbound_cmd.content,
+        "🐈 nanobot commands:\n/new — Start a new conversation\n/stop — Stop current processing and cancel background tasks\n/help — Show available commands",
         "command should be processed and return help info"
     );
     assert_eq!(outbound_cmd.channel, "cli", "channel should be preserved");

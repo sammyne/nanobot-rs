@@ -25,10 +25,12 @@ pub trait Command: Send + Sync {
 // Command sub-modules
 mod help;
 mod new;
+mod stop;
 
 // Re-export common command types
 pub use help::HelpCmd;
 pub use new::NewCmd;
+pub use stop::StopCmd;
 
 #[cfg(test)]
 mod tests;

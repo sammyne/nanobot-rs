@@ -2,16 +2,20 @@
 //!
 //! SubagentManager 负责创建、管理和监控子代理任务的执行。
 
+use std::collections::HashMap;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
 
 use nanobot_channels::messages::InboundMessage;
 use nanobot_provider::{Message, Provider};
 use nanobot_tools::{ToolContext, ToolRegistry};
-use tokio::sync::mpsc;
+use tokio::sync::{Mutex, mpsc};
+use tokio::task::JoinHandle;
 
 use crate::error::SubagentResult;
 use crate::task::Task;
+
+/// 会话任务注册表：session_key → [(task_id, JoinHandle)]
+type SessionTasks = Arc<Mutex<HashMap<String, Vec<(String, JoinHandle<()>)>>>>;
 
 /// 子代理管理器
 ///
@@ -35,8 +39,8 @@ where
     max_tokens: u32,
     /// 工具执行超时时间（秒）
     tool_timeout_secs: u64,
-    /// 运行中的任务数量
-    running_tasks: AtomicUsize,
+    /// 按会话追踪运行中的子代理任务
+    session_tasks: SessionTasks,
 }
 
 impl<P> SubagentManager<P>
@@ -75,7 +79,7 @@ where
             temperature,
             max_tokens,
             tool_timeout_secs: 30,
-            running_tasks: AtomicUsize::new(0),
+            session_tasks: Arc::new(Mutex::new(HashMap::new())),
         })
     }
 
@@ -83,6 +87,7 @@ where
     ///
     /// # Arguments
     /// * `task` - 任务描述
+    /// * `session_key` - 会话标识，用于按会话追踪和取消任务
     /// * `label` - 任务标签（可选，默认使用描述的前 30 个字符）
     /// * `origin_channel` - 来源通道
     /// * `origin_chat_id` - 聊天标识
@@ -92,11 +97,13 @@ where
     pub async fn spawn(
         self: Arc<Self>,
         task: impl Into<String>,
+        session_key: impl Into<String>,
         label: Option<String>,
         origin_channel: impl Into<String>,
         origin_chat_id: impl Into<String>,
     ) -> SubagentResult<String> {
         let task = task.into();
+        let session_key = session_key.into();
         let label = label.unwrap_or_else(|| Task::label_from_description(&task));
         let origin_channel = origin_channel.into();
         let origin_chat_id = origin_chat_id.into();
@@ -107,32 +114,61 @@ where
         tracing::info!(
             task_id = %task_obj.id,
             label = %task_obj.label,
+            session_key = %session_key,
             "Spawning subagent"
         );
 
-        // 增加运行任务计数
-        self.running_tasks.fetch_add(1, Ordering::SeqCst);
+        // 克隆用于 spawned task 内部清理的引用
+        let session_tasks = Arc::clone(&self.session_tasks);
+        let task_id_for_cleanup = task_id.clone();
+        let session_key_for_cleanup = session_key.clone();
 
         // 克隆 Arc<Self> 以传递到异步任务
         let manager = self.clone();
 
         // 异步执行任务
-        tokio::spawn(async move {
+        let handle = tokio::spawn(async move {
             let result = manager.run_subagent(&task_obj).await;
-
-            // 减少运行任务计数
-            manager.running_tasks.fetch_sub(1, Ordering::SeqCst);
 
             // 通知完成
             manager.announce_result(&task_obj, result).await;
+
+            // 从 session_tasks 中移除自身条目
+            let mut tasks = session_tasks.lock().await;
+            if let Some(entries) = tasks.get_mut(&session_key_for_cleanup) {
+                entries.retain(|(id, _)| id != &task_id_for_cleanup);
+                if entries.is_empty() {
+                    tasks.remove(&session_key_for_cleanup);
+                }
+            }
         });
+
+        // 将 JoinHandle 存入 session_tasks
+        self.session_tasks.lock().await.entry(session_key).or_default().push((task_id.clone(), handle));
 
         Ok(format!("Subagent [{label}] started (id: {task_id}). I'll notify you when it completes."))
     }
 
+    /// 取消指定会话的所有子代理任务
+    ///
+    /// # Arguments
+    /// * `session_key` - 会话标识
+    ///
+    /// # Returns
+    /// 取消的任务数量
+    pub async fn cancel_by_session(&self, session_key: &str) -> usize {
+        let entries = self.session_tasks.lock().await.remove(session_key).unwrap_or_default();
+        let count = entries.len();
+        for (task_id, handle) in entries {
+            tracing::info!(task_id = %task_id, session_key = %session_key, "Cancelling subagent");
+            handle.abort();
+        }
+        count
+    }
+
     /// 获取当前运行中的子代理数量
-    pub fn get_running_count(&self) -> usize {
-        self.running_tasks.load(Ordering::SeqCst)
+    pub async fn get_running_count(&self) -> usize {
+        self.session_tasks.lock().await.values().map(|v| v.len()).sum()
     }
 
     /// 执行子代理任务（与 Python 版本的 _run_subagent 对应）

@@ -139,14 +139,16 @@ impl AgentCmd {
         );
 
         // 创建 AgentLoop（不再传递通道）
-        let agent_loop = AgentLoop::new(
-            provider,
-            config.agents.defaults.clone(),
-            Some(cron_service.clone()),
-            Some(subagent_manager),
-            config.tools.clone(),
-        )
-        .await?;
+        let agent_loop = Arc::new(
+            AgentLoop::new(
+                provider,
+                config.agents.defaults.clone(),
+                Some(cron_service.clone()),
+                Some(subagent_manager),
+                config.tools.clone(),
+            )
+            .await?,
+        );
 
         // 打印欢迎信息
         println!("🤖 Nanobot Agent - 交互式 AI 助手");
