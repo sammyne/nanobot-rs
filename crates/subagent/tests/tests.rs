@@ -74,23 +74,23 @@ async fn subagent_creation_and_management() {
     let manager = SubagentManager::new(provider, std::path::PathBuf::from("/tmp/workspace"), sender, 0.7, 4096);
 
     // 验证初始运行计数为 0
-    assert_eq!(manager.get_running_count(), 0, "Initial running count should be 0");
+    assert_eq!(manager.get_running_count().await, 0, "Initial running count should be 0");
 
     // 创建任务 - clone Arc for spawn
     let result = manager
         .clone()
-        .spawn("Test task description", None, "test_channel", "chat_123")
+        .spawn("Test task description", "test_channel:chat_123", None, "test_channel", "chat_123")
         .await
         .expect("Failed to spawn task");
 
     assert!(result.contains("started"));
 
     // 验证运行计数为 1
-    assert_eq!(manager.get_running_count(), 1, "Running count should be 1 after task creation");
+    assert_eq!(manager.get_running_count().await, 1, "Running count should be 1 after task creation");
 
     // 等待任务完成
     tokio::time::timeout(tokio::time::Duration::from_secs(5), async {
-        while manager.get_running_count() > 0 {
+        while manager.get_running_count().await > 0 {
             tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
         }
     })
@@ -139,13 +139,13 @@ async fn task_execution_with_tools() {
     // 创建任务 - clone Arc for spawn
     let _result = manager
         .clone()
-        .spawn("Write a test file", None, "test_channel", "chat_456")
+        .spawn("Write a test file", "test_channel:chat_456", None, "test_channel", "chat_456")
         .await
         .expect("Failed to spawn task");
 
     // 等待任务完成
     tokio::time::timeout(tokio::time::Duration::from_secs(5), async {
-        while manager.get_running_count() > 0 {
+        while manager.get_running_count().await > 0 {
             tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
         }
     })
@@ -195,12 +195,15 @@ async fn error_handling() {
     let manager = SubagentManager::new(FailingProvider, std::path::PathBuf::from("/tmp/workspace"), sender, 0.7, 4096);
 
     // 创建任务 - clone Arc for spawn
-    let _result =
-        manager.clone().spawn("Failing task", None, "test_channel", "chat_789").await.expect("Failed to spawn task");
+    let _result = manager
+        .clone()
+        .spawn("Failing task", "test_channel:chat_789", None, "test_channel", "chat_789")
+        .await
+        .expect("Failed to spawn task");
 
     // 等待任务完成（应该失败）
     tokio::time::timeout(tokio::time::Duration::from_secs(5), async {
-        while manager.get_running_count() > 0 {
+        while manager.get_running_count().await > 0 {
             tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
         }
     })
@@ -236,13 +239,13 @@ async fn multiple_concurrent_tasks() {
     for i in 0..task_count {
         let _result = manager
             .clone()
-            .spawn(format!("Concurrent task {i}"), None, "test_channel", format!("chat_{i}"))
+            .spawn(format!("Concurrent task {i}"), "test_channel:concurrent", None, "test_channel", format!("chat_{i}"))
             .await
             .expect("Failed to spawn task");
     }
 
     // 验证运行计数
-    assert_eq!(manager.get_running_count(), task_count, "Running count should match task count");
+    assert_eq!(manager.get_running_count().await, task_count, "Running count should match task count");
 
     // 等待所有任务完成
     let mut completed_count = 0;
@@ -257,7 +260,7 @@ async fn multiple_concurrent_tasks() {
     .expect("Tasks did not complete in time");
 
     // 验证所有任务都已完成
-    assert_eq!(manager.get_running_count(), 0, "All tasks should be completed");
+    assert_eq!(manager.get_running_count().await, 0, "All tasks should be completed");
 
     println!("✓ Multiple concurrent tasks test passed (completed {task_count} tasks)");
 }
@@ -299,13 +302,13 @@ async fn maximum_iterations_limit() {
     // 创建任务 - clone Arc for spawn
     let _result = manager
         .clone()
-        .spawn("Long running task", None, "test_channel", "chat_999")
+        .spawn("Long running task", "test_channel:chat_999", None, "test_channel", "chat_999")
         .await
         .expect("Failed to spawn task");
 
     // 等待任务完成（应该因达到最大迭代次数而终止）
     tokio::time::timeout(tokio::time::Duration::from_secs(10), async {
-        while manager.get_running_count() > 0 {
+        while manager.get_running_count().await > 0 {
             tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
         }
     })
@@ -336,7 +339,7 @@ async fn manager_construction() {
     let manager = SubagentManager::new(provider, std::path::PathBuf::from("/tmp/workspace"), sender, 0.7, 4096);
 
     // 验证初始状态
-    assert_eq!(manager.get_running_count(), 0);
+    assert_eq!(manager.get_running_count().await, 0);
 
     println!("✓ Manager construction test passed");
 }
@@ -421,4 +424,91 @@ fn tool_call_construction() {
     assert_eq!(args["query"], "rust");
 
     println!("✓ ToolCall construction test passed");
+}
+
+// ==================== Test: Cancel By Session ====================
+
+/// 测试按会话取消子代理任务
+///
+/// 验证：
+/// - cancel_by_session 能 abort 指定会话的所有任务
+/// - 返回正确的取消数量
+/// - 取消后 running_count 为 0
+#[tokio::test]
+async fn cancel_by_session_aborts_tasks() {
+    let (sender, _receiver) = create_test_channel();
+
+    // 使用一个会阻塞的 provider，确保任务在取消前不会自行完成
+    #[derive(Clone)]
+    struct SlowProvider;
+
+    #[async_trait::async_trait]
+    impl Provider for SlowProvider {
+        async fn chat(&self, _messages: &[Message], _options: &nanobot_provider::Options) -> anyhow::Result<Message> {
+            tokio::time::sleep(tokio::time::Duration::from_secs(60)).await;
+            Ok(Message::assistant("done"))
+        }
+
+        fn bind_tools(&mut self, _tools: Vec<ToolDefinition>) {}
+    }
+
+    let manager = SubagentManager::new(SlowProvider, std::path::PathBuf::from("/tmp/workspace"), sender, 0.7, 4096);
+
+    let session_key = "test:cancel";
+
+    // Spawn 2 个任务到同一 session
+    manager.clone().spawn("Task 1", session_key, None, "test", "cancel").await.unwrap();
+    manager.clone().spawn("Task 2", session_key, None, "test", "cancel").await.unwrap();
+
+    assert_eq!(manager.get_running_count().await, 2);
+
+    // 取消该会话的所有任务
+    let cancelled = manager.cancel_by_session(session_key).await;
+    assert_eq!(cancelled, 2, "should cancel 2 tasks");
+
+    // 等待 abort 生效
+    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
+    assert_eq!(manager.get_running_count().await, 0, "running count should be 0 after cancel");
+}
+
+/// 测试 cancel_by_session 只影响目标会话
+///
+/// 验证：
+/// - 取消一个会话的任务不影响其他会话
+#[tokio::test]
+async fn cancel_by_session_only_affects_target() {
+    let (sender, _receiver) = create_test_channel();
+
+    #[derive(Clone)]
+    struct SlowProvider;
+
+    #[async_trait::async_trait]
+    impl Provider for SlowProvider {
+        async fn chat(&self, _messages: &[Message], _options: &nanobot_provider::Options) -> anyhow::Result<Message> {
+            tokio::time::sleep(tokio::time::Duration::from_secs(60)).await;
+            Ok(Message::assistant("done"))
+        }
+
+        fn bind_tools(&mut self, _tools: Vec<ToolDefinition>) {}
+    }
+
+    let manager = SubagentManager::new(SlowProvider, std::path::PathBuf::from("/tmp/workspace"), sender, 0.7, 4096);
+
+    // Spawn 到两个不同的 session
+    manager.clone().spawn("Task A", "session:a", None, "test", "a").await.unwrap();
+    manager.clone().spawn("Task B", "session:b", None, "test", "b").await.unwrap();
+
+    assert_eq!(manager.get_running_count().await, 2);
+
+    // 只取消 session:a
+    let cancelled = manager.cancel_by_session("session:a").await;
+    assert_eq!(cancelled, 1);
+
+    // session:b 不受影响
+    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+    assert_eq!(manager.get_running_count().await, 1, "session:b task should still be running");
+
+    // 清理：取消剩余任务
+    manager.cancel_by_session("session:b").await;
 }

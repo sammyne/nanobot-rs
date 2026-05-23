@@ -21,7 +21,7 @@ use nanobot_tools::{Tool, ToolContext, ToolRegistry};
 use tokio::sync::{Mutex, mpsc};
 use tracing::{debug, error, info, warn};
 
-use crate::cmd::{Command, HelpCmd, NewCmd};
+use crate::cmd::{Command, HelpCmd, NewCmd, StopCmd};
 use crate::utils::parse_system_message_target;
 use crate::{InboundMessage, OutboundMessage};
 
@@ -57,6 +57,9 @@ pub struct AgentLoop<P: Provider> {
 
     /// 正在进行记忆整合的会话集合
     consolidating: Arc<Mutex<HashSet<String>>>,
+
+    /// 子代理管理器（用于 /stop 命令取消子代理）
+    subagent_manager: Option<Arc<SubagentManager<P>>>,
 }
 
 impl<P: Provider> AgentLoop<P> {
@@ -142,6 +145,7 @@ impl<P: Provider> AgentLoop<P> {
             tool_registry,
             context,
             consolidating: Arc::new(Mutex::new(HashSet::new())),
+            subagent_manager,
         })
     }
 
@@ -316,41 +320,120 @@ impl<P: Provider> AgentLoop<P> {
     /// * `inbound_rx` - 入站消息接收端（CLI -> AgentLoop）
     /// * `outbound_tx` - 出站消息发送端（AgentLoop -> CLI）
     pub async fn run(
-        &self,
+        self: Arc<Self>,
         mut inbound_rx: mpsc::Receiver<InboundMessage>,
         outbound_tx: mpsc::Sender<OutboundMessage>,
     ) -> Result<()> {
         info!("AgentLoop 后台循环已启动");
 
+        // 缓冲在处理期间到达的非 /stop 消息
+        let mut pending: std::collections::VecDeque<InboundMessage> = std::collections::VecDeque::new();
+
         loop {
-            // 消费入站消息
-            match inbound_rx.recv().await {
-                Some(msg) => {
-                    debug!("收到入站消息: channel={}, chat_id={}", msg.channel, msg.chat_id);
-
-                    // 创建默认进度追踪器
-                    let on_progress = std::sync::Arc::new(crate::ChannelProgressTracker::new(
-                        outbound_tx.clone(),
-                        msg.channel.clone(),
-                        msg.chat_id.clone(),
-                    ));
-
-                    // 处理消息并发送响应（使用 inbound 的 session_key）
-                    let outbound = self.process_message(msg, None, Some(on_progress)).await;
-                    if let Err(e) = outbound_tx.send(outbound).await {
-                        error!("发送出站消息失败: {}", e);
+            // 优先从 pending 缓冲区取消息，否则从 inbound_rx recv
+            let msg = if let Some(msg) = pending.pop_front() {
+                msg
+            } else {
+                match inbound_rx.recv().await {
+                    Some(msg) => msg,
+                    None => {
+                        info!("入站通道已关闭，退出后台循环");
+                        break;
                     }
                 }
-                None => {
-                    // 通道关闭，退出循环
-                    info!("入站通道已关闭，退出后台循环");
-                    break;
+            };
+
+            debug!("收到入站消息: channel={}, chat_id={}", msg.channel, msg.chat_id);
+
+            // /stop 在空闲时（无任务运行）直接处理
+            if is_stop_cmd(&msg.content) {
+                self.handle_stop(&msg, &outbound_tx).await;
+                continue;
+            }
+
+            // 将 process_message 作为 tokio task 启动，以便 /stop 可以中断
+            let self_clone = Arc::clone(&self);
+            let channel = msg.channel.clone();
+            let chat_id = msg.chat_id.clone();
+            let on_progress = std::sync::Arc::new(crate::ChannelProgressTracker::new(
+                outbound_tx.clone(),
+                channel.clone(),
+                chat_id.clone(),
+            ));
+
+            let mut handle =
+                tokio::spawn(async move { self_clone.process_message(msg, None, Some(on_progress)).await });
+
+            // 等待任务完成，同时监听 /stop 命令
+            loop {
+                tokio::select! {
+                    result = &mut handle => {
+                        // 处理完成
+                        match result {
+                            Ok(outbound) => {
+                                if let Err(e) = outbound_tx.send(outbound).await {
+                                    error!("发送出站消息失败: {e}");
+                                }
+                            }
+                            Err(e) if e.is_cancelled() => {
+                                debug!("处理任务已被 /stop 取消");
+                            }
+                            Err(e) => {
+                                error!("处理任务 panic: {e}");
+                            }
+                        }
+                        break;
+                    }
+                    new_msg = inbound_rx.recv() => {
+                        match new_msg {
+                            Some(new_msg) if is_stop_cmd(&new_msg.content) => {
+                                // /stop 到达：abort 主任务并取消子代理
+                                handle.abort();
+                                self.handle_stop(&new_msg, &outbound_tx).await;
+                                let _ = handle.await; // 等待 abort 完成
+                                break;
+                            }
+                            Some(new_msg) => {
+                                // 非 /stop 消息：缓冲到下一轮处理
+                                pending.push_back(new_msg);
+                            }
+                            None => {
+                                // 入站通道关闭：abort 当前任务并退出
+                                handle.abort();
+                                let _ = handle.await;
+                                info!("入站通道已关闭，退出后台循环");
+                                return Ok(());
+                            }
+                        }
+                    }
                 }
             }
         }
 
         info!("AgentLoop 后台循环已停止");
         Ok(())
+    }
+
+    /// 处理 /stop 命令：取消子代理并发送响应
+    async fn handle_stop(&self, msg: &InboundMessage, outbound_tx: &mpsc::Sender<OutboundMessage>) {
+        let session_key = msg.session_key();
+        let mut cancelled = 0;
+
+        if let Some(ref manager) = self.subagent_manager {
+            cancelled = manager.cancel_by_session(&session_key).await;
+        }
+
+        let response = if cancelled > 0 {
+            format!("Stopped. Cancelled {cancelled} background task(s).")
+        } else {
+            "Stopped.".to_string()
+        };
+
+        info!("处理 /stop 命令: session_key={session_key}, cancelled={cancelled}");
+
+        if let Err(e) = outbound_tx.send(OutboundMessage::new(&msg.channel, &msg.chat_id, &response)).await {
+            error!("发送 /stop 响应失败: {e}");
+        }
     }
 
     /// 处理系统消息
@@ -446,6 +529,10 @@ impl<P: Provider> AgentLoop<P> {
                     self.consolidating.clone(),
                 );
                 new_cmd.run(msg, session_key.to_string()).await
+            }
+            "stop" => {
+                let stop_cmd = StopCmd::new(self.subagent_manager.clone());
+                stop_cmd.run(msg, session_key.to_string()).await
             }
             // 不支持的命令返回提示信息
             _ => Err(format!("❌ Unsupported command: /{cmd}\nTry /help for available commands")),
@@ -563,6 +650,11 @@ impl<P: Provider> AgentLoop<P> {
     pub fn config(&self) -> &AgentDefaults {
         &self.config
     }
+}
+
+/// 检查消息内容是否为 /stop 命令
+fn is_stop_cmd(content: &str) -> bool {
+    content.trim_end().eq_ignore_ascii_case("/stop")
 }
 
 /// 清理思考内容中的特殊标记

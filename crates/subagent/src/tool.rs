@@ -74,10 +74,13 @@ where
         let params: SpawnParams =
             serde_json::from_value(params).map_err(|e| ToolError::validation("params", e.to_string()))?;
 
+        // 构造 session_key，与 InboundMessage::session_key() 格式一致
+        let session_key = format!("{}:{}", ctx.channel, ctx.chat_id);
+
         // Spawn the subagent
         self.manager
             .clone()
-            .spawn(params.task, params.label, ctx.channel.clone(), ctx.chat_id.clone())
+            .spawn(params.task, session_key, params.label, ctx.channel.clone(), ctx.chat_id.clone())
             .await
             .map_err(|e| ToolError::execution(e.to_string()))
     }
