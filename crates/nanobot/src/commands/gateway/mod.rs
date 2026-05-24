@@ -284,7 +284,10 @@ impl GatewayCmd {
                     let session_key = "heartbeat";
 
                     // 调用 AgentLoop::process_direct
-                    match agent.process_direct(&task_summary, session_key, Some(&channel), Some(&chat_id), None).await {
+                    match agent
+                        .process_direct(&task_summary, session_key, Some(&channel), Some(&chat_id), None, None)
+                        .await
+                    {
                         Ok(response) => {
                             info!("Heartbeat 任务执行成功");
                             Ok(response)
@@ -360,7 +363,10 @@ impl GatewayCmd {
                 let chat_id = payload.to.as_deref().unwrap_or("direct");
                 let session_key = format!("cron:{}", job.id);
 
-                match agent.process_direct(&payload.message, &session_key, Some(channel), Some(chat_id), None).await {
+                match agent
+                    .process_direct(&payload.message, &session_key, Some(channel), Some(chat_id), None, None)
+                    .await
+                {
                     Ok(response) => {
                         info!("Cron job '{}' executed successfully", job.id);
 

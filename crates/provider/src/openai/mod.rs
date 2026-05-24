@@ -8,8 +8,10 @@ use async_openai::Client;
 use async_openai::config::OpenAIConfig;
 use async_openai::types::{
     ChatCompletionMessageToolCall, ChatCompletionRequestAssistantMessageArgs, ChatCompletionRequestMessage,
-    ChatCompletionRequestSystemMessageArgs, ChatCompletionRequestToolMessageArgs, ChatCompletionRequestUserMessageArgs,
-    ChatCompletionTool, ChatCompletionToolType, CreateChatCompletionRequestArgs, FunctionCall, FunctionObject,
+    ChatCompletionRequestMessageContentPartImage, ChatCompletionRequestMessageContentPartText,
+    ChatCompletionRequestSystemMessageArgs, ChatCompletionRequestToolMessageArgs,
+    ChatCompletionRequestUserMessageContent, ChatCompletionRequestUserMessageContentPart, ChatCompletionTool,
+    ChatCompletionToolType, CreateChatCompletionRequestArgs, FunctionCall, FunctionObject, ImageUrl,
 };
 use nanobot_config::{Config as NanobotConfig, ProviderConfig};
 use nanobot_tools::ToolDefinition;
@@ -71,9 +73,33 @@ impl TryFrom<&Message> for ChatCompletionRequestMessage {
             Message::System { content } => ChatCompletionRequestMessage::System(
                 ChatCompletionRequestSystemMessageArgs::default().content(content.as_str()).build()?,
             ),
-            Message::User { content } => ChatCompletionRequestMessage::User(
-                ChatCompletionRequestUserMessageArgs::default().content(content.as_str()).build()?,
-            ),
+            Message::User { content } => {
+                let user_content: ChatCompletionRequestUserMessageContent = match content {
+                    crate::UserContent::Text(text) => ChatCompletionRequestUserMessageContent::Text(text.clone()),
+                    crate::UserContent::Parts(parts) => {
+                        let openai_parts: Vec<ChatCompletionRequestUserMessageContentPart> = parts
+                            .iter()
+                            .map(|part| match part {
+                                crate::ContentPart::Text { text } => ChatCompletionRequestUserMessageContentPart::Text(
+                                    ChatCompletionRequestMessageContentPartText { text: text.clone() },
+                                ),
+                                crate::ContentPart::Image { media_type, data } => {
+                                    ChatCompletionRequestUserMessageContentPart::ImageUrl(
+                                        ChatCompletionRequestMessageContentPartImage {
+                                            image_url: ImageUrl {
+                                                url: format!("data:{media_type};base64,{data}"),
+                                                detail: None,
+                                            },
+                                        },
+                                    )
+                                }
+                            })
+                            .collect();
+                        ChatCompletionRequestUserMessageContent::Array(openai_parts)
+                    }
+                };
+                ChatCompletionRequestMessage::User(user_content.into())
+            }
             Message::Assistant { content, tool_calls, .. } => {
                 let mut assistant_msg =
                     ChatCompletionRequestAssistantMessageArgs::default().content(content.as_str()).build()?;

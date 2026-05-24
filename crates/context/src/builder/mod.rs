@@ -15,7 +15,7 @@ use std::sync::Arc;
 
 use chrono::{DateTime, Local};
 use nanobot_memory::MemoryStore;
-use nanobot_provider::Message;
+use nanobot_provider::{ContentPart, Message, UserContent};
 use nanobot_skills::SkillsLoader;
 use tracing::{info, warn};
 
@@ -238,72 +238,104 @@ Skills with available="false" need dependencies installed first - you can try in
 
         // Build user content with optional media
         let user_content = build_user_content(current_message, media)?;
-        let user_content = inject_runtime_context(&user_content, channel, chat_id);
-        messages.push(Message::user(&user_content));
+        let user_content = inject_runtime_context(user_content, channel, chat_id);
+        messages.push(Message::User { content: user_content });
 
         Ok(messages)
     }
 }
 
-/// Encode an image file to base64 data URL format.
+/// Encode an image file to base64.
 ///
-/// Returns `data:{mime};base64,{data}` format string.
+/// Returns `(media_type, base64_data)` tuple.
 /// Returns `None` if file doesn't exist or is not an image type.
-fn encode_image_to_base64(path: &PathBuf) -> Result<Option<String>, ContextError> {
+///
+/// MIME 类型优先通过文件头 magic bytes 检测，回退到文件扩展名猜测。
+/// 这避免了文件扩展名与实际内容不匹配的问题（如钉钉下载的 JPEG 图片保存为 .png）。
+fn encode_image_to_base64(path: &PathBuf) -> Result<Option<(String, String)>, ContextError> {
     if !path.is_file() {
         return Ok(None);
     }
 
-    // Guess MIME type from file extension
-    let mime = mime_guess::from_path(path).first().map(|m| m.to_string());
+    // Read file bytes first
+    let bytes = std::fs::read(path)?;
 
-    let mime = match mime {
-        Some(m) if m.starts_with("image/") => m,
-        _ => return Ok(None),
+    // Detect MIME type from magic bytes, fallback to extension
+    let mime = detect_image_mime(&bytes)
+        .or_else(|| mime_guess::from_path(path).first().map(|m| m.to_string()))
+        .filter(|m| m.starts_with("image/"));
+
+    let Some(mime) = mime else {
+        return Ok(None);
     };
 
-    // Read and encode file
-    let bytes = std::fs::read(path)?;
     let encoded = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &bytes);
 
-    Ok(Some(format!("data:{mime};base64,{encoded}")))
+    Ok(Some((mime, encoded)))
+}
+
+/// Detect image MIME type from file header magic bytes.
+fn detect_image_mime(bytes: &[u8]) -> Option<String> {
+    if bytes.len() < 4 {
+        return None;
+    }
+
+    if bytes.starts_with(&[0x89, 0x50, 0x4E, 0x47]) {
+        Some("image/png".to_string())
+    } else if bytes.starts_with(&[0xFF, 0xD8, 0xFF]) {
+        Some("image/jpeg".to_string())
+    } else if bytes.starts_with(b"GIF8") {
+        Some("image/gif".to_string())
+    } else if bytes.starts_with(b"RIFF") && bytes.len() >= 12 && &bytes[8..12] == b"WEBP" {
+        Some("image/webp".to_string())
+    } else {
+        None
+    }
 }
 
 /// Build user message content with optional base64-encoded images.
 ///
-/// Currently returns text content only. Media support can be extended
-/// when multimodal Message type is available.
-fn build_user_content(text: &str, media: Option<&[PathBuf]>) -> Result<String, ContextError> {
+/// Returns `UserContent::Text` for text-only messages,
+/// `UserContent::Parts` for messages with images.
+fn build_user_content(text: &str, media: Option<&[PathBuf]>) -> Result<UserContent, ContextError> {
     let media = match media {
         Some(m) if !m.is_empty() => m,
-        _ => return Ok(text.to_string()),
+        _ => return Ok(UserContent::Text(text.to_string())),
     };
 
-    // Process images - for now, just add info about attached media
-    // Full multimodal support would require extending Message type
-    let mut image_info = Vec::new();
+    // Encode images
+    let mut parts: Vec<ContentPart> = Vec::new();
+
+    // Text content first
+    if !text.is_empty() {
+        parts.push(ContentPart::Text { text: text.to_string() });
+    }
+
+    // Then images
     for path in media {
-        if let Some(_data_url) = encode_image_to_base64(path)? {
-            image_info.push(format!("[Image attached: {}]", path.display()));
+        if let Some((media_type, data)) = encode_image_to_base64(path)? {
+            parts.push(ContentPart::Image { media_type, data });
         }
     }
 
-    if image_info.is_empty() {
-        return Ok(text.to_string());
+    if parts.is_empty() {
+        return Ok(UserContent::Text(text.to_string()));
     }
 
-    Ok(format!("{}\n\n{}", image_info.join("\n"), text))
+    // If no images were added, return as plain text
+    let has_images = parts.iter().any(|p| matches!(p, ContentPart::Image { .. }));
+    if !has_images {
+        return Ok(UserContent::Text(text.to_string()));
+    }
+
+    Ok(UserContent::Parts(parts))
 }
 
 /// Inject runtime context into user message content.
 ///
-/// Appends current time and optional channel/chat_id information.
-///
-/// # Arguments
-/// * `content` - Original user message content
-/// * `channel` - Optional channel name (telegram, feishu, etc.)
-/// * `chat_id` - Optional chat/user ID
-fn inject_runtime_context(content: &str, channel: Option<&str>, chat_id: Option<&str>) -> String {
+/// For `UserContent::Text`, appends runtime context to the text string.
+/// For `UserContent::Parts`, appends a new text part with runtime context.
+fn inject_runtime_context(content: UserContent, channel: Option<&str>, chat_id: Option<&str>) -> UserContent {
     let now: DateTime<Local> = Local::now();
     let weekday = now.format("%A");
     let time_str = now.format("%Y-%m-%d %H:%M");
@@ -320,7 +352,14 @@ fn inject_runtime_context(content: &str, channel: Option<&str>, chat_id: Option<
     }
 
     let block = format!("[Runtime Context]\n{}", lines.join("\n"));
-    format!("{content}\n\n{block}")
+
+    match content {
+        UserContent::Text(text) => UserContent::Text(format!("{text}\n\n{block}")),
+        UserContent::Parts(mut parts) => {
+            parts.push(ContentPart::Text { text: format!("\n\n{block}") });
+            UserContent::Parts(parts)
+        }
+    }
 }
 
 #[cfg(test)]

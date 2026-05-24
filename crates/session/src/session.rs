@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 
 use chrono::{DateTime, Utc};
-use nanobot_provider::Message;
+use nanobot_provider::{ContentPart, Message, UserContent};
 use nanobot_utils::strings::truncate;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -124,11 +124,46 @@ impl Session {
                         .unwrap_or_else(|| content.clone());
                     Message::Tool { content: truncated, tool_call_id: tool_call_id.clone() }
                 }
+                Message::User { content } => Message::User { content: strip_images(content) },
                 other => other.clone(),
             };
             self.add_message(msg_to_save);
         }
         self.touch();
+    }
+}
+
+/// Strip image data from `UserContent` to prevent base64 bloat in session JSONL.
+///
+/// Replaces `ContentPart::Image` with `ContentPart::Text { text: "[image]" }`.
+/// If all parts become text after stripping, merges into `UserContent::Text`.
+fn strip_images(content: &UserContent) -> UserContent {
+    match content {
+        UserContent::Text(_) => content.clone(),
+        UserContent::Parts(parts) => {
+            let stripped: Vec<ContentPart> = parts
+                .iter()
+                .map(|part| match part {
+                    ContentPart::Image { .. } => ContentPart::Text { text: "[image]".to_string() },
+                    other => other.clone(),
+                })
+                .collect();
+
+            // If all parts are text, merge into a single Text
+            let all_text = stripped.iter().all(|p| matches!(p, ContentPart::Text { .. }));
+            if all_text {
+                let merged: Vec<&str> = stripped
+                    .iter()
+                    .filter_map(|p| match p {
+                        ContentPart::Text { text } => Some(text.as_str()),
+                        _ => None,
+                    })
+                    .collect();
+                UserContent::Text(merged.join("\n"))
+            } else {
+                UserContent::Parts(stripped)
+            }
+        }
     }
 }
 

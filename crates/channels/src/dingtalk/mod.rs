@@ -50,6 +50,9 @@ pub struct DingTalk {
 
     /// 消息上下文（chat_id -> 原始 ChatbotMessage）
     message_context: Arc<RwLock<HashMap<String, ChatbotMessage>>>,
+
+    /// 聊天机器人回复器（用于图片下载等 API 调用）
+    replier: Arc<RwLock<Option<ChatbotReplier>>>,
 }
 
 impl DingTalk {
@@ -82,6 +85,7 @@ impl DingTalk {
             name: "dingtalk".to_string(),
             inbound_tx,
             message_context: Arc::new(RwLock::new(HashMap::new())),
+            replier: Arc::new(RwLock::new(None)),
         })
     }
 
@@ -111,7 +115,10 @@ impl DingTalk {
         // 获取文本内容
         let content = msg.get_text_list().and_then(|list| list.into_iter().next()).unwrap_or_default();
 
-        if content.trim().is_empty() {
+        // 获取图片下载码
+        let image_codes = msg.get_image_list().unwrap_or_default();
+
+        if content.trim().is_empty() && image_codes.is_empty() {
             warn!("收到空消息");
             return;
         }
@@ -126,7 +133,13 @@ impl DingTalk {
             return;
         }
 
-        info!("收到钉钉消息，发送者: {} ({})，内容: {}", sender_nick, sender_id, content);
+        info!(
+            "收到钉钉消息，发送者: {} ({})，内容: {}，图片数: {}",
+            sender_nick,
+            sender_id,
+            content,
+            image_codes.len()
+        );
 
         // 获取聊天 ID（优先使用 conversation_id，其次使用 sender_id）
         let chat_id = msg.conversation_id.clone().unwrap_or_else(|| sender_id.clone());
@@ -139,14 +152,58 @@ impl DingTalk {
             message_context.write().await.insert(chat_id_clone, msg_clone);
         });
 
-        // 构造入站消息
-        let inbound_msg = InboundMessage::new("dingtalk", &sender_id, &chat_id, &content);
-
-        // 异步发送入站消息
+        // 异步处理图片下载和消息发送
         let inbound_tx = self.inbound_tx.clone();
+        let replier = Arc::clone(&self.replier);
         tokio::spawn(async move {
+            let mut media_paths: Vec<String> = Vec::new();
+
+            // 下载图片
+            if !image_codes.is_empty() {
+                let replier_guard = replier.read().await;
+                if let Some(ref replier) = *replier_guard {
+                    for code in &image_codes {
+                        match replier.get_image_download_url(code).await {
+                            Ok(url) => {
+                                // 下载图片字节
+                                match reqwest::get(&url).await {
+                                    Ok(resp) => match resp.bytes().await {
+                                        Ok(bytes) => {
+                                            let filename = format!("{}.png", uuid::Uuid::new_v4());
+                                            let temp_path = std::env::temp_dir().join(&filename);
+                                            match std::fs::write(&temp_path, &bytes) {
+                                                Ok(()) => {
+                                                    info!(
+                                                        "钉钉图片已下载: {} ({} bytes)",
+                                                        temp_path.display(),
+                                                        bytes.len()
+                                                    );
+                                                    media_paths.push(temp_path.display().to_string());
+                                                }
+                                                Err(e) => error!("保存钉钉图片失败: {e}"),
+                                            }
+                                        }
+                                        Err(e) => error!("下载钉钉图片失败: {e}"),
+                                    },
+                                    Err(e) => error!("请求钉钉图片 URL 失败: {e}"),
+                                }
+                            }
+                            Err(e) => error!("获取钉钉图片下载 URL 失败: {e}"),
+                        }
+                    }
+                } else {
+                    warn!("ChatbotReplier 未初始化，无法下载图片");
+                }
+            }
+
+            // 构造入站消息
+            let mut inbound_msg = InboundMessage::new("dingtalk", &sender_id, &chat_id, &content);
+            for path in media_paths {
+                inbound_msg = inbound_msg.add_media(path);
+            }
+
             if let Err(e) = inbound_tx.send(inbound_msg).await {
-                error!("发送入站消息失败: {}", e);
+                error!("发送入站消息失败: {e}");
             }
         });
     }
@@ -178,6 +235,9 @@ impl Channel for DingTalk {
         let mut client: DingTalkStreamClient = ClientBuilder::new(self.credential.clone())
             .register_async_chatbot_handler(ChatbotMessage::TOPIC, self.clone())
             .build();
+
+        // 获取 ChatbotReplier（用于图片下载等 API 调用）
+        *self.replier.write().await = Some(client.chatbot_replier());
 
         let running = self.running.clone();
 
@@ -281,6 +341,7 @@ impl Clone for DingTalk {
             name: self.name.clone(),
             inbound_tx: self.inbound_tx.clone(),
             message_context: Arc::clone(&self.message_context),
+            replier: Arc::clone(&self.replier),
         }
     }
 }

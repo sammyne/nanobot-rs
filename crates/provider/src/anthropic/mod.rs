@@ -54,6 +54,16 @@ enum ContentBlock {
         #[serde(default)]
         signature: Option<String>,
     },
+    /// 图片内容（请求中）
+    Image { source: ImageSource },
+}
+
+/// Anthropic 图片来源
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ImageSource {
+    r#type: String,
+    media_type: String,
+    data: String,
 }
 
 /// Anthropic 工具定义
@@ -162,10 +172,25 @@ fn convert_messages(messages: &[Message]) -> (Option<String>, Vec<AnthropicMessa
                 system_parts.push(content);
             }
             Message::User { content } => {
-                result.push(AnthropicMessage {
-                    role: "user".to_string(),
-                    content: vec![ContentBlock::Text { text: content.clone() }],
-                });
+                let blocks = match content {
+                    crate::UserContent::Text(text) => {
+                        vec![ContentBlock::Text { text: text.clone() }]
+                    }
+                    crate::UserContent::Parts(parts) => parts
+                        .iter()
+                        .map(|part| match part {
+                            crate::ContentPart::Text { text } => ContentBlock::Text { text: text.clone() },
+                            crate::ContentPart::Image { media_type, data } => ContentBlock::Image {
+                                source: ImageSource {
+                                    r#type: "base64".to_string(),
+                                    media_type: media_type.clone(),
+                                    data: data.clone(),
+                                },
+                            },
+                        })
+                        .collect(),
+                };
+                result.push(AnthropicMessage { role: "user".to_string(), content: blocks });
             }
             Message::Assistant { content, tool_calls, thinking } => {
                 let mut blocks = Vec::new();
@@ -280,6 +305,7 @@ impl Provider for AnthropicLike {
                     thinking = serde_json::to_value(&block).ok();
                 }
                 ContentBlock::ToolResult { .. } => {}
+                ContentBlock::Image { .. } => {} // 图片仅在请求中使用，响应中忽略
             }
         }
 
