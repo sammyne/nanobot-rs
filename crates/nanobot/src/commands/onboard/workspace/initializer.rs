@@ -1,7 +1,6 @@
 //! 工作空间初始化器模块
 
 use std::fs;
-use std::path::Path;
 
 use anyhow::{Context, Result};
 use tracing::{debug, info};
@@ -25,11 +24,14 @@ impl WorkspaceInitializer {
         // 1. 创建工作空间根目录
         self.create_workspace_dir()?;
 
-        // 2. 创建根级别模板文件
-        self.create_root_templates()?;
+        // 2. 同步模板文件
+        let created = crate::utils::sync_workspace_templates(&self.workspace_path)?;
+        for name in &created {
+            println!("\x1b[32m✓\x1b[0m Created file: {name}");
+        }
 
-        // 3. 创建 memory 子目录和文件
-        self.create_memory_dir()?;
+        // 3. 创建 memory 子目录和非模板文件
+        self.create_memory_extras()?;
 
         // 4. 创建 skills 子目录
         self.create_skills_dir()?;
@@ -49,37 +51,24 @@ impl WorkspaceInitializer {
         Ok(())
     }
 
-    /// 创建根级别模板文件
-    fn create_root_templates(&self) -> Result<()> {
-        let templates = vec![
-            ("USER.md", nanobot_templates::user_template()),
-            ("AGENTS.md", nanobot_templates::agents_template()),
-            ("SOUL.md", nanobot_templates::soul_template()),
-            ("TOOLS.md", nanobot_templates::tools_template()),
-            ("HEARTBEAT.md", nanobot_templates::heartbeat_template()),
-        ];
+    /// 创建 memory 子目录中的非模板文件（空的 HISTORY.md）
+    ///
+    /// memory/ 目录和 MEMORY.md 已由 `sync_workspace_templates` 处理。
+    fn create_memory_extras(&self) -> Result<()> {
+        let history_file = self.workspace_path.join("memory/HISTORY.md");
 
-        for (filename, content) in templates {
-            self.create_file_if_not_exists(&self.workspace_path.join(filename), content)?;
+        if history_file.exists() {
+            debug!("文件已存在，跳过: {:?}", history_file);
+            return Ok(());
         }
 
-        Ok(())
-    }
-
-    /// 创建 memory 子目录和文件
-    fn create_memory_dir(&self) -> Result<()> {
-        let memory_dir = self.workspace_path.join("memory");
-
-        if !memory_dir.exists() {
-            fs::create_dir_all(&memory_dir).with_context(|| format!("创建 memory 目录失败: {memory_dir:?}"))?;
-            println!("\x1b[32m✓\x1b[0m Created directory: memory/");
+        // 确保 memory/ 目录存在（sync 可能已创建，但以防万一）
+        if let Some(parent) = history_file.parent() {
+            fs::create_dir_all(parent).with_context(|| format!("创建 memory 目录失败: {}", parent.display()))?;
         }
 
-        // 创建 MEMORY.md
-        self.create_file_if_not_exists(&memory_dir.join("MEMORY.md"), nanobot_templates::memory_template())?;
-
-        // 创建空的 HISTORY.md
-        self.create_file_if_not_exists(&memory_dir.join("HISTORY.md"), "")?;
+        fs::write(&history_file, "").with_context(|| format!("创建文件失败: {}", history_file.display()))?;
+        println!("\x1b[32m✓\x1b[0m Created file: memory/HISTORY.md");
 
         Ok(())
     }
@@ -92,21 +81,6 @@ impl WorkspaceInitializer {
             fs::create_dir_all(&skills_dir).with_context(|| format!("创建 skills 目录失败: {skills_dir:?}"))?;
             println!("\x1b[32m✓\x1b[0m Created directory: skills/");
         }
-
-        Ok(())
-    }
-
-    /// 如果文件不存在则创建文件
-    fn create_file_if_not_exists(&self, path: &Path, content: &str) -> Result<()> {
-        if path.exists() {
-            debug!("文件已存在，跳过: {:?}", path);
-            return Ok(());
-        }
-
-        fs::write(path, content).with_context(|| format!("创建文件失败: {path:?}"))?;
-
-        let relative_path = path.strip_prefix(&self.workspace_path).unwrap_or(path);
-        println!("\x1b[32m✓\x1b[0m Created file: {}", relative_path.display());
 
         Ok(())
     }

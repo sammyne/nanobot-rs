@@ -65,6 +65,15 @@ impl GatewayCmd {
         // 加载配置（先加载配置以获取端口）
         let config = self.load_config()?;
 
+        // 同步工作空间模板文件
+        match crate::utils::sync_workspace_templates(&config.agents.defaults.workspace) {
+            Ok(created) if !created.is_empty() => {
+                info!("已同步 {} 个新模板文件: {}", created.len(), created.join(", "));
+            }
+            Err(e) => warn!("同步工作空间模板失败: {e}"),
+            _ => {}
+        }
+
         // 确定实际使用的端口：命令行参数优先，否则使用配置文件值
         let (actual_port, port_source) = match self.port {
             Some(port) => (port, "命令行"),

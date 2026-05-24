@@ -12,7 +12,7 @@ use nanobot_config::Config;
 use nanobot_cron::CronService;
 use nanobot_provider::AnyProvider;
 use nanobot_subagent::SubagentManager;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 /// 退出命令集合
 const EXIT_COMMANDS: &[&str] = &["exit", "quit", "/exit", "/quit", ":q"];
 
@@ -40,6 +40,15 @@ impl AgentCmd {
         // 加载配置
         let config =
             Config::load()?.ok_or_else(|| anyhow::anyhow!("配置文件不存在。请先运行 'nanobot onboard' 进行配置。"))?;
+
+        // 同步工作空间模板文件
+        match crate::utils::sync_workspace_templates(&config.agents.defaults.workspace) {
+            Ok(created) if !created.is_empty() => {
+                info!("已同步 {} 个新模板文件: {}", created.len(), created.join(", "));
+            }
+            Err(e) => warn!("同步工作空间模板失败: {e}"),
+            _ => {}
+        }
 
         let provider_config = config.provider();
 
