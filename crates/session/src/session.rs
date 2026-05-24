@@ -124,7 +124,7 @@ impl Session {
                         .unwrap_or_else(|| content.clone());
                     Message::Tool { content: truncated, tool_call_id: tool_call_id.clone() }
                 }
-                Message::User { content } => Message::User { content: strip_images(content) },
+                Message::User { content } => Message::User { content: strip_runtime_context(&strip_images(content)) },
                 other => other.clone(),
             };
             self.add_message(msg_to_save);
@@ -163,6 +163,42 @@ fn strip_images(content: &UserContent) -> UserContent {
             } else {
                 UserContent::Parts(stripped)
             }
+        }
+    }
+}
+
+// 须与 crates/context/src/builder/mod.rs 中 inject_runtime_context 的格式保持一致
+const RUNTIME_CONTEXT_MARKER: &str = "\n\n[Runtime Context]\n";
+
+/// Strip runtime context block from `UserContent` to prevent accumulation in session history.
+///
+/// The context builder appends `\n\n[Runtime Context]\n...` to user messages for each LLM request.
+/// This data is per-request and should not be persisted.
+fn strip_runtime_context(content: &UserContent) -> UserContent {
+    match content {
+        UserContent::Text(text) => match text.find(RUNTIME_CONTEXT_MARKER) {
+            Some(pos) => UserContent::Text(text[..pos].to_string()),
+            None => content.clone(),
+        },
+        UserContent::Parts(parts) => {
+            // inject_runtime_context appends a Text part starting with "\n\n[Runtime Context]\n"
+            if let Some(ContentPart::Text { text }) = parts.last()
+                && text.contains("[Runtime Context]\n")
+            {
+                let mut stripped = parts[..parts.len() - 1].to_vec();
+                // If the part has user text before the marker, preserve it
+                if let Some(pos) = text.find(RUNTIME_CONTEXT_MARKER)
+                    && pos > 0
+                {
+                    stripped.push(ContentPart::Text { text: text[..pos].to_string() });
+                }
+                return if stripped.is_empty() {
+                    UserContent::Text(String::new())
+                } else {
+                    UserContent::Parts(stripped)
+                };
+            }
+            content.clone()
         }
     }
 }

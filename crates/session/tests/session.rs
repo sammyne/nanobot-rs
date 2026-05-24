@@ -98,3 +98,41 @@ fn session_get_history_with_consolidation() {
     assert_eq!(history.len(), 5);
     assert_eq!(history[0].content(), "Message 5");
 }
+
+#[test]
+fn save_turn_strips_runtime_context() {
+    let mut session = Session::new("test:123");
+
+    let msg_with_context =
+        Message::user("帮我查一下今天的日程\n\n[Runtime Context]\nCurrent Time: 2026-05-24 10:00 (Saturday) (+08:00)");
+
+    session.save_turn(&[msg_with_context], 0);
+
+    assert_eq!(session.messages.len(), 1);
+    assert_eq!(session.messages[0].content(), "帮我查一下今天的日程");
+}
+
+#[test]
+fn save_turn_preserves_message_without_runtime_context() {
+    let mut session = Session::new("test:123");
+
+    let msg = Message::user("Hello, world!");
+
+    session.save_turn(&[msg], 0);
+
+    assert_eq!(session.messages.len(), 1);
+    assert_eq!(session.messages[0].content(), "Hello, world!");
+}
+
+#[test]
+fn save_turn_strips_runtime_context_with_channel_info() {
+    let mut session = Session::new("test:123");
+
+    let content = "查看群消息\n\n[Runtime Context]\nCurrent Time: 2026-05-24 10:00 (Saturday) (+08:00)\nChannel: feishu\nChat ID: oc_xxx";
+    let msg = Message::user(content);
+
+    session.save_turn(&[msg], 0);
+
+    assert_eq!(session.messages.len(), 1);
+    assert_eq!(session.messages[0].content(), "查看群消息");
+}
