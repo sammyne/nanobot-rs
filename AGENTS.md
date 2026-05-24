@@ -135,3 +135,7 @@ cargo clippy -- -D warnings -D clippy::uninlined_format_args
 cargo test
 cargo doc --no-deps
 ```
+
+## 版本控制
+
+- `.opencode/plans/` 目录下的需求文档和 TODO 文件需要纳入版本控制，提交代码时一并 commit
