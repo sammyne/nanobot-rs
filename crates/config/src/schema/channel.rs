@@ -64,6 +64,10 @@ pub struct FeishuConfig {
     /// 允许的用户列表（为空则允许所有用户）
     #[serde(default)]
     pub allow_from: Vec<String>,
+
+    /// 收到消息时添加的表情回应类型（为空则禁用）
+    #[serde(default = "default_react_emoji")]
+    pub react_emoji: String,
 }
 
 impl FeishuConfig {
@@ -103,4 +107,8 @@ pub struct ChannelsConfig {
 
 fn default_send_progress() -> bool {
     true
+}
+
+fn default_react_emoji() -> String {
+    "THUMBSUP".to_string()
 }
