@@ -71,12 +71,23 @@ impl AgentCmd {
     ) -> Result<()> {
         debug!("单次消息模式");
 
-        // 创建 AgentLoop 实例（不使用子代理功能）
+        // 创建消息总线（子代理完成通知用，单次模式下不消费）
+        let (inbound_tx, _inbound_rx) = tokio::sync::mpsc::channel(100);
+
+        // 创建 SubagentManager
+        let subagent_manager = SubagentManager::new(
+            provider.clone(),
+            config.agents.defaults.workspace.clone(),
+            inbound_tx,
+            config.agents.defaults.temperature as f32,
+            config.agents.defaults.max_tokens as u32,
+        );
+
         let agent = AgentLoop::new(
             provider,
             config.agents.defaults.clone(),
             Some(cron_service.clone()),
-            None,
+            subagent_manager,
             config.tools.clone(),
         )
         .await?;
@@ -144,7 +155,7 @@ impl AgentCmd {
                 provider,
                 config.agents.defaults.clone(),
                 Some(cron_service.clone()),
-                Some(subagent_manager),
+                subagent_manager,
                 config.tools.clone(),
             )
             .await?,

@@ -13,12 +13,12 @@ use crate::InboundMessage;
 ///
 /// This command cancels all background subagent tasks for the current session.
 pub struct StopCmd<P: Provider> {
-    subagent_manager: Option<Arc<SubagentManager<P>>>,
+    subagent_manager: Arc<SubagentManager<P>>,
 }
 
 impl<P: Provider> StopCmd<P> {
     /// Create a new StopCmd instance
-    pub fn new(subagent_manager: Option<Arc<SubagentManager<P>>>) -> Self {
+    pub fn new(subagent_manager: Arc<SubagentManager<P>>) -> Self {
         Self { subagent_manager }
     }
 }
@@ -27,11 +27,7 @@ impl<P: Provider> Command for StopCmd<P> {
     async fn run(self, _msg: InboundMessage, session_key: String) -> Result<String, String> {
         info!("Processing /stop command: session_key={session_key}");
 
-        let cancelled = if let Some(ref manager) = self.subagent_manager {
-            manager.cancel_by_session(&session_key).await
-        } else {
-            0
-        };
+        let cancelled = self.subagent_manager.cancel_by_session(&session_key).await;
 
         if cancelled > 0 {
             info!("Cancelled {cancelled} subagent task(s) for session {session_key}");
