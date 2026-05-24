@@ -105,6 +105,9 @@ impl Feishu {
             }
         };
 
+        // 获取消息 ID（用于表情回应）
+        let message_id = msg_event.message.message_id.clone();
+
         // 获取聊天 ID
         let Some(chat_id) = msg_event.message.chat_id.as_deref() else {
             warn!("消息事件缺少 chat_id");
@@ -183,6 +186,31 @@ impl Feishu {
         if !self.check_permission(sender_id) {
             warn!("未授权的消息，发送者 ID: {}", sender_id);
             return;
+        }
+
+        // 添加表情回应（fire-and-forget）
+        if !self.config.react_emoji.is_empty()
+            && let Some(ref mid) = message_id
+        {
+            let client = self.client.clone();
+            let emoji = self.config.react_emoji.clone();
+            let mid = mid.clone();
+            tokio::spawn(async move {
+                let result = client
+                    .im_v1_reaction()
+                    .create()
+                    .path_param("message_id", &mid)
+                    .body_value(serde_json::json!({
+                        "reaction_type": {
+                            "emoji_type": emoji
+                        }
+                    }))
+                    .send()
+                    .await;
+                if let Err(e) = result {
+                    warn!("添加表情回应失败: {e}");
+                }
+            });
         }
 
         info!("收到飞书消息，发送者: {} ({}), 聊天 ID: {}, 内容: {}", sender_id, sender_type, chat_id, content);

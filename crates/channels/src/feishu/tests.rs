@@ -15,6 +15,7 @@ async fn feishu_channel_creation() {
         app_id: "test_app_id".to_string(),
         app_secret: "test_app_secret".to_string(),
         allow_from: Vec::new(),
+        react_emoji: "THUMBSUP".to_string(),
     };
 
     let (inbound_tx, _inbound_rx) = mpsc::channel::<crate::messages::InboundMessage>(16);
@@ -31,6 +32,7 @@ async fn feishu_channel_validation_empty_app_id() {
         app_id: "".to_string(),
         app_secret: "test_app_secret".to_string(),
         allow_from: Vec::new(),
+        react_emoji: "THUMBSUP".to_string(),
     };
 
     let (inbound_tx, _inbound_rx) = mpsc::channel::<crate::messages::InboundMessage>(16);
@@ -47,6 +49,7 @@ async fn feishu_channel_validation_empty_app_secret() {
         app_id: "test_app_id".to_string(),
         app_secret: "".to_string(),
         allow_from: Vec::new(),
+        react_emoji: "THUMBSUP".to_string(),
     };
 
     let (inbound_tx, _inbound_rx) = mpsc::channel::<crate::messages::InboundMessage>(16);
@@ -63,6 +66,7 @@ async fn permission_check_with_whitelist() {
         app_id: "test_app_id".to_string(),
         app_secret: "test_app_secret".to_string(),
         allow_from: vec!["user1".to_string(), "user2".to_string()],
+        react_emoji: "THUMBSUP".to_string(),
     };
 
     let (inbound_tx, _inbound_rx) = mpsc::channel::<crate::messages::InboundMessage>(16);
@@ -86,6 +90,7 @@ async fn permission_check_empty_whitelist() {
         app_id: "test_app_id".to_string(),
         app_secret: "test_app_secret".to_string(),
         allow_from: Vec::new(),
+        react_emoji: "THUMBSUP".to_string(),
     };
 
     let (inbound_tx, _inbound_rx) = mpsc::channel::<crate::messages::InboundMessage>(16);
@@ -106,6 +111,7 @@ async fn channel_name() {
         app_id: "test_app_id".to_string(),
         app_secret: "test_app_secret".to_string(),
         allow_from: Vec::new(),
+        react_emoji: "THUMBSUP".to_string(),
     };
 
     let (inbound_tx, _inbound_rx) = mpsc::channel::<crate::messages::InboundMessage>(16);
@@ -122,6 +128,7 @@ async fn channel_running_state() {
         app_id: "test_app_id".to_string(),
         app_secret: "test_app_secret".to_string(),
         allow_from: Vec::new(),
+        react_emoji: "THUMBSUP".to_string(),
     };
 
     let (inbound_tx, _inbound_rx) = mpsc::channel::<crate::messages::InboundMessage>(16);
@@ -140,6 +147,7 @@ async fn message_context_save_and_retrieve() {
         app_id: "test_app_id".to_string(),
         app_secret: "test_app_secret".to_string(),
         allow_from: Vec::new(),
+        react_emoji: "THUMBSUP".to_string(),
     };
 
     let (inbound_tx, _inbound_rx) = mpsc::channel::<crate::messages::InboundMessage>(16);
@@ -187,6 +195,7 @@ async fn channel_clone() {
         app_id: "test_app_id".to_string(),
         app_secret: "test_app_secret".to_string(),
         allow_from: Vec::new(),
+        react_emoji: "THUMBSUP".to_string(),
     };
 
     let (inbound_tx, _inbound_rx) = mpsc::channel::<crate::messages::InboundMessage>(16);
@@ -208,6 +217,7 @@ async fn message_context_not_found() {
         app_id: "test_app_id".to_string(),
         app_secret: "test_app_secret".to_string(),
         allow_from: Vec::new(),
+        react_emoji: "THUMBSUP".to_string(),
     };
 
     let (inbound_tx, _inbound_rx) = mpsc::channel::<crate::messages::InboundMessage>(16);
@@ -229,6 +239,7 @@ async fn feishu_config_serialization() {
         app_id: "test_app_id".to_string(),
         app_secret: "test_app_secret".to_string(),
         allow_from: vec!["user1".to_string(), "user2".to_string()],
+        react_emoji: "THUMBSUP".to_string(),
     };
 
     // 序列化
@@ -241,4 +252,26 @@ async fn feishu_config_serialization() {
     assert_eq!(config.app_id, deserialized.app_id);
     assert_eq!(config.app_secret, deserialized.app_secret);
     assert_eq!(config.allow_from, deserialized.allow_from);
+    assert_eq!(config.react_emoji, deserialized.react_emoji);
+}
+
+/// 测试 react_emoji 默认值为 THUMBSUP
+#[test]
+fn react_emoji_default_value() {
+    let config: FeishuConfig = serde_json::from_str(r#"{"appId":"x","appSecret":"y"}"#).unwrap();
+    assert_eq!(config.react_emoji, "THUMBSUP");
+}
+
+/// 测试 react_emoji 自定义值
+#[test]
+fn react_emoji_custom_value() {
+    let config: FeishuConfig = serde_json::from_str(r#"{"appId":"x","appSecret":"y","reactEmoji":"SMILE"}"#).unwrap();
+    assert_eq!(config.react_emoji, "SMILE");
+}
+
+/// 测试 react_emoji 为空字符串时禁用
+#[test]
+fn react_emoji_empty_disables() {
+    let config: FeishuConfig = serde_json::from_str(r#"{"appId":"x","appSecret":"y","reactEmoji":""}"#).unwrap();
+    assert!(config.react_emoji.is_empty());
 }
