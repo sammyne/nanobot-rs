@@ -105,10 +105,9 @@ async fn process_direct_returns_expected_response() {
         let provider = MockProvider::new(case.expected_response);
         let config = mock_config();
         let subagent_manager = mock_subagent_manager(provider.clone());
-        let agent =
-            AgentLoop::new(provider, config, None, Some(subagent_manager), nanobot_config::ToolsConfig::default())
-                .await
-                .expect("AgentLoop creation should succeed");
+        let agent = AgentLoop::new(provider, config, None, subagent_manager, nanobot_config::ToolsConfig::default())
+            .await
+            .expect("AgentLoop creation should succeed");
 
         let session_key = case.session_id.unwrap_or("cli:direct");
         let result = agent
@@ -126,7 +125,7 @@ async fn process_direct_handles_empty_message() {
     let provider = MockProvider::new("OK");
     let config = mock_config();
     let subagent_manager = mock_subagent_manager(provider.clone());
-    let agent = AgentLoop::new(provider, config, None, Some(subagent_manager), nanobot_config::ToolsConfig::default())
+    let agent = AgentLoop::new(provider, config, None, subagent_manager, nanobot_config::ToolsConfig::default())
         .await
         .expect("AgentLoop creation should succeed");
 
@@ -143,7 +142,7 @@ async fn config_returns_correct_reference() {
     let config = mock_config();
     let subagent_manager = mock_subagent_manager(provider.clone());
     let agent =
-        AgentLoop::new(provider, config.clone(), None, Some(subagent_manager), nanobot_config::ToolsConfig::default())
+        AgentLoop::new(provider, config.clone(), None, subagent_manager, nanobot_config::ToolsConfig::default())
             .await
             .expect("AgentLoop creation should succeed");
 
@@ -196,7 +195,7 @@ async fn agent_loop_uses_custom_config_values() {
                 provider1,
                 custom_defaults1,
                 None,
-                Some(subagent_manager1),
+                subagent_manager1,
                 nanobot_config::ToolsConfig::default(),
             )
             .await
@@ -210,7 +209,7 @@ async fn agent_loop_uses_custom_config_values() {
                 provider2,
                 custom_defaults2,
                 None,
-                Some(subagent_manager2),
+                subagent_manager2,
                 nanobot_config::ToolsConfig::default(),
             )
             .await
@@ -266,9 +265,15 @@ async fn process_message_routes_system_message_correctly() {
     for case in test_vector {
         let provider = MockProvider::new(case.expected_response);
         let config = mock_config();
-        let agent = AgentLoop::new(provider, config, None, None, nanobot_config::ToolsConfig::default())
-            .await
-            .expect("AgentLoop creation should succeed");
+        let agent = AgentLoop::new(
+            provider.clone(),
+            config,
+            None,
+            mock_subagent_manager(provider),
+            nanobot_config::ToolsConfig::default(),
+        )
+        .await
+        .expect("AgentLoop creation should succeed");
 
         // 构造系统消息
         let inbound = InboundMessage::new("system", "scheduler", case.chat_id, "Test content");
@@ -288,9 +293,15 @@ async fn process_message_routes_system_message_correctly() {
 async fn process_message_preserves_non_system_routing() {
     let provider = MockProvider::new("Normal message response");
     let config = mock_config();
-    let agent = AgentLoop::new(provider, config, None, None, nanobot_config::ToolsConfig::default())
-        .await
-        .expect("AgentLoop creation should succeed");
+    let agent = AgentLoop::new(
+        provider.clone(),
+        config,
+        None,
+        mock_subagent_manager(provider),
+        nanobot_config::ToolsConfig::default(),
+    )
+    .await
+    .expect("AgentLoop creation should succeed");
 
     // 构造普通消息
     let inbound = InboundMessage::new("cli", "user", "chat123", "Hello");
@@ -359,9 +370,15 @@ async fn consolidation_triggers_when_message_window_reached() {
         };
 
         let provider = MockProvider::new("test response");
-        let agent = AgentLoop::new(provider, config, None, None, nanobot_config::ToolsConfig::default())
-            .await
-            .expect("AgentLoop creation should succeed");
+        let agent = AgentLoop::new(
+            provider.clone(),
+            config,
+            None,
+            mock_subagent_manager(provider),
+            nanobot_config::ToolsConfig::default(),
+        )
+        .await
+        .expect("AgentLoop creation should succeed");
 
         // 手动设置会话状态
         let session_key = "test:consolidation";
@@ -411,9 +428,15 @@ async fn consolidation_rejected_when_already_in_progress() {
     };
 
     let provider = MockProvider::new("test response");
-    let agent = AgentLoop::new(provider, config, None, None, nanobot_config::ToolsConfig::default())
-        .await
-        .expect("AgentLoop creation should succeed");
+    let agent = AgentLoop::new(
+        provider.clone(),
+        config,
+        None,
+        mock_subagent_manager(provider),
+        nanobot_config::ToolsConfig::default(),
+    )
+    .await
+    .expect("AgentLoop creation should succeed");
 
     let session_key = "test:concurrent";
 
@@ -465,9 +488,15 @@ async fn consolidation_state_properly_managed() {
     };
 
     let provider = MockProvider::new("test response");
-    let agent = AgentLoop::new(provider, config, None, None, nanobot_config::ToolsConfig::default())
-        .await
-        .expect("AgentLoop creation should succeed");
+    let agent = AgentLoop::new(
+        provider.clone(),
+        config,
+        None,
+        mock_subagent_manager(provider),
+        nanobot_config::ToolsConfig::default(),
+    )
+    .await
+    .expect("AgentLoop creation should succeed");
 
     let session_key = "test:state_management";
 
@@ -509,9 +538,15 @@ async fn consolidation_state_independent_across_sessions() {
     };
 
     let provider = MockProvider::new("test response");
-    let agent = AgentLoop::new(provider, config, None, None, nanobot_config::ToolsConfig::default())
-        .await
-        .expect("AgentLoop creation should succeed");
+    let agent = AgentLoop::new(
+        provider.clone(),
+        config,
+        None,
+        mock_subagent_manager(provider),
+        nanobot_config::ToolsConfig::default(),
+    )
+    .await
+    .expect("AgentLoop creation should succeed");
 
     let session_key_1 = "test:session_1";
     let session_key_2 = "test:session_2";
@@ -574,9 +609,15 @@ async fn consolidation_state_thread_safe() {
 
     let provider = MockProvider::new("test response");
     let agent = Arc::new(
-        AgentLoop::new(provider, config, None, None, nanobot_config::ToolsConfig::default())
-            .await
-            .expect("AgentLoop creation should succeed"),
+        AgentLoop::new(
+            provider.clone(),
+            config,
+            None,
+            mock_subagent_manager(provider),
+            nanobot_config::ToolsConfig::default(),
+        )
+        .await
+        .expect("AgentLoop creation should succeed"),
     );
 
     // 创建多个并发任务，每个任务尝试操作不同的会话
@@ -642,9 +683,15 @@ async fn mutex_prevents_concurrent_consolidation_same_session() {
 
     let provider = MockProvider::new("test response");
     let agent = Arc::new(
-        AgentLoop::new(provider, config, None, None, nanobot_config::ToolsConfig::default())
-            .await
-            .expect("AgentLoop creation should succeed"),
+        AgentLoop::new(
+            provider.clone(),
+            config,
+            None,
+            mock_subagent_manager(provider),
+            nanobot_config::ToolsConfig::default(),
+        )
+        .await
+        .expect("AgentLoop creation should succeed"),
     );
 
     let session_key = "test:same_session";
@@ -748,9 +795,15 @@ async fn try_handle_cmd_recognizes_and_processes_commands() {
     for case in test_vector {
         let provider = MockProvider::new("test response");
         let config = mock_config();
-        let agent = AgentLoop::new(provider, config, None, None, nanobot_config::ToolsConfig::default())
-            .await
-            .expect("AgentLoop creation should succeed");
+        let agent = AgentLoop::new(
+            provider.clone(),
+            config,
+            None,
+            mock_subagent_manager(provider),
+            nanobot_config::ToolsConfig::default(),
+        )
+        .await
+        .expect("AgentLoop creation should succeed");
 
         // 构造入站消息
         let inbound = InboundMessage::new(case.channel, "user", case.chat_id, case.input);
@@ -778,9 +831,15 @@ async fn try_handle_cmd_recognizes_and_processes_commands() {
 async fn try_handle_cmd_returns_err_for_non_commands() {
     let provider = MockProvider::new("test response");
     let config = mock_config();
-    let agent = AgentLoop::new(provider, config, None, None, nanobot_config::ToolsConfig::default())
-        .await
-        .expect("AgentLoop creation should succeed");
+    let agent = AgentLoop::new(
+        provider.clone(),
+        config,
+        None,
+        mock_subagent_manager(provider),
+        nanobot_config::ToolsConfig::default(),
+    )
+    .await
+    .expect("AgentLoop creation should succeed");
 
     let test_inputs = ["Hello", "This is a normal message", "123", "", "No slash here"];
 
@@ -805,9 +864,15 @@ async fn try_handle_cmd_returns_err_for_non_commands() {
 async fn process_message_integrates_command_handling() {
     let provider = MockProvider::new("test response");
     let config = mock_config();
-    let agent = AgentLoop::new(provider, config, None, None, nanobot_config::ToolsConfig::default())
-        .await
-        .expect("AgentLoop creation should succeed");
+    let agent = AgentLoop::new(
+        provider.clone(),
+        config,
+        None,
+        mock_subagent_manager(provider),
+        nanobot_config::ToolsConfig::default(),
+    )
+    .await
+    .expect("AgentLoop creation should succeed");
 
     // 测试命令消息
     let inbound_cmd = InboundMessage::new("cli", "user", "test123", "/help");
@@ -835,9 +900,15 @@ async fn process_message_integrates_command_handling() {
 async fn command_handling_does_not_create_session_history() {
     let provider = MockProvider::new("test response");
     let config = mock_config();
-    let agent = AgentLoop::new(provider, config, None, None, nanobot_config::ToolsConfig::default())
-        .await
-        .expect("AgentLoop creation should succeed");
+    let agent = AgentLoop::new(
+        provider.clone(),
+        config,
+        None,
+        mock_subagent_manager(provider),
+        nanobot_config::ToolsConfig::default(),
+    )
+    .await
+    .expect("AgentLoop creation should succeed");
 
     let session_key = "test:no_history";
 
@@ -855,9 +926,15 @@ async fn command_handling_does_not_create_session_history() {
 async fn command_handling_does_not_trigger_consolidation() {
     let provider = MockProvider::new("test response");
     let config = mock_config();
-    let agent = AgentLoop::new(provider, config, None, None, nanobot_config::ToolsConfig::default())
-        .await
-        .expect("AgentLoop creation should succeed");
+    let agent = AgentLoop::new(
+        provider.clone(),
+        config,
+        None,
+        mock_subagent_manager(provider),
+        nanobot_config::ToolsConfig::default(),
+    )
+    .await
+    .expect("AgentLoop creation should succeed");
 
     let session_key = "test:no_consolidation";
 
@@ -918,9 +995,15 @@ async fn try_handle_cmd_recognizes_new_command() {
     for case in test_vector {
         let provider = MockProvider::new("test response");
         let config = mock_config();
-        let agent = AgentLoop::new(provider, config, None, None, nanobot_config::ToolsConfig::default())
-            .await
-            .expect("AgentLoop creation should succeed");
+        let agent = AgentLoop::new(
+            provider.clone(),
+            config,
+            None,
+            mock_subagent_manager(provider),
+            nanobot_config::ToolsConfig::default(),
+        )
+        .await
+        .expect("AgentLoop creation should succeed");
 
         // 构造入站消息
         let inbound = InboundMessage::new(case.channel, "user", case.chat_id, case.input);
@@ -948,9 +1031,15 @@ async fn try_handle_cmd_recognizes_new_command() {
 async fn new_command_clears_session_history() {
     let provider = MockProvider::new("test response");
     let config = mock_config();
-    let agent = AgentLoop::new(provider, config, None, None, nanobot_config::ToolsConfig::default())
-        .await
-        .expect("AgentLoop creation should succeed");
+    let agent = AgentLoop::new(
+        provider.clone(),
+        config,
+        None,
+        mock_subagent_manager(provider),
+        nanobot_config::ToolsConfig::default(),
+    )
+    .await
+    .expect("AgentLoop creation should succeed");
 
     let session_key = "test:clear_history";
     let channel = "cli";
@@ -988,9 +1077,15 @@ async fn new_command_handles_concurrent_requests() {
     let provider = MockProvider::new("test response");
     let config = mock_config();
     let agent = Arc::new(
-        AgentLoop::new(provider, config, None, None, nanobot_config::ToolsConfig::default())
-            .await
-            .expect("AgentLoop creation should succeed"),
+        AgentLoop::new(
+            provider.clone(),
+            config,
+            None,
+            mock_subagent_manager(provider),
+            nanobot_config::ToolsConfig::default(),
+        )
+        .await
+        .expect("AgentLoop creation should succeed"),
     );
 
     let session_key = "test:concurrent_new";
@@ -1044,9 +1139,15 @@ async fn new_command_handles_concurrent_requests() {
 async fn new_command_returns_error_when_consolidating() {
     let provider = MockProvider::new("test response");
     let config = mock_config();
-    let agent = AgentLoop::new(provider, config, None, None, nanobot_config::ToolsConfig::default())
-        .await
-        .expect("AgentLoop creation should succeed");
+    let agent = AgentLoop::new(
+        provider.clone(),
+        config,
+        None,
+        mock_subagent_manager(provider),
+        nanobot_config::ToolsConfig::default(),
+    )
+    .await
+    .expect("AgentLoop creation should succeed");
 
     let session_key = "test:new_during_consolidation";
 
@@ -1239,9 +1340,15 @@ impl Provider for ThinkingMockProvider {
 async fn re_act_preserves_thinking_in_messages() {
     let provider = ThinkingMockProvider::new();
     let config = mock_config();
-    let agent = AgentLoop::new(provider, config, None, None, nanobot_config::ToolsConfig::default())
-        .await
-        .expect("AgentLoop creation should succeed");
+    let agent = AgentLoop::new(
+        provider.clone(),
+        config,
+        None,
+        mock_subagent_manager(provider),
+        nanobot_config::ToolsConfig::default(),
+    )
+    .await
+    .expect("AgentLoop creation should succeed");
 
     let messages = vec![Message::system("You are helpful."), Message::user("Hello")];
 

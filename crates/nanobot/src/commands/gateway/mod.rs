@@ -104,7 +104,7 @@ impl GatewayCmd {
                 provider.clone(),
                 config.agents.defaults.clone(),
                 Some(cron_service.clone()),
-                Some(subagent_manager),
+                subagent_manager,
                 config.tools.clone(),
             )
             .await?,

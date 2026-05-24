@@ -59,7 +59,7 @@ pub struct AgentLoop<P: Provider> {
     consolidating: Arc<Mutex<HashSet<String>>>,
 
     /// 子代理管理器（用于 /stop 命令取消子代理）
-    subagent_manager: Option<Arc<SubagentManager<P>>>,
+    subagent_manager: Arc<SubagentManager<P>>,
 }
 
 impl<P: Provider> AgentLoop<P> {
@@ -78,7 +78,7 @@ impl<P: Provider> AgentLoop<P> {
         mut provider: P,
         config: AgentDefaults,
         cron_service: Option<Arc<CronService>>,
-        subagent_manager: Option<Arc<SubagentManager<P>>>,
+        subagent_manager: Arc<SubagentManager<P>>,
         tools_config: nanobot_config::ToolsConfig,
     ) -> Result<Self> {
         info!("初始化 AgentLoop: model={}, max_tool_iterations={}", config.model, config.max_tool_iterations);
@@ -114,12 +114,10 @@ impl<P: Provider> AgentLoop<P> {
             tool_registry.register(cron_tool);
         }
 
-        // 如果提供了 subagent_manager，注册 SpawnTool
-        if let Some(ref manager) = subagent_manager {
-            let spawn_tool = SpawnTool::new(Arc::clone(manager));
-            info!("注册 SpawnTool");
-            tool_registry.register(spawn_tool);
-        }
+        // 注册 SpawnTool
+        let spawn_tool = SpawnTool::new(Arc::clone(&subagent_manager));
+        info!("注册 SpawnTool");
+        tool_registry.register(spawn_tool);
 
         // 从 tool_registry 导出工具列表并绑定到 provider
         let definitions = tool_registry.get_definitions();
@@ -417,11 +415,7 @@ impl<P: Provider> AgentLoop<P> {
     /// 处理 /stop 命令：取消子代理并发送响应
     async fn handle_stop(&self, msg: &InboundMessage, outbound_tx: &mpsc::Sender<OutboundMessage>) {
         let session_key = msg.session_key();
-        let mut cancelled = 0;
-
-        if let Some(ref manager) = self.subagent_manager {
-            cancelled = manager.cancel_by_session(&session_key).await;
-        }
+        let cancelled = self.subagent_manager.cancel_by_session(&session_key).await;
 
         let response = if cancelled > 0 {
             format!("Stopped. Cancelled {cancelled} background task(s).")
