@@ -3,6 +3,8 @@
 //! This crate provides template files for workspace initialization.
 //! Templates are embedded in the binary at compile time using `include_dir`.
 
+use std::collections::HashMap;
+
 use include_dir::{include_dir, Dir};
 
 /// Embedded templates directory
@@ -47,6 +49,27 @@ pub fn memory_template() -> &'static str {
 /// Get the HEARTBEAT.md template content
 pub fn heartbeat_template() -> &'static str {
     get_template("HEARTBEAT.md").expect("HEARTBEAT.md template not found")
+}
+
+/// Get all embedded template files as a map of relative path to content.
+///
+/// Recursively enumerates all files in the bundled templates directory.
+/// Paths use `/` as separator (e.g., `"memory/MEMORY.md"`).
+pub fn all_templates() -> HashMap<&'static str, &'static str> {
+    let mut map = HashMap::new();
+    collect_files(&TEMPLATES_DIR, &mut map);
+    map
+}
+
+fn collect_files<'a>(dir: &Dir<'a>, map: &mut HashMap<&'a str, &'a str>) {
+    for file in dir.files() {
+        if let (Some(path), Some(content)) = (file.path().to_str(), file.contents_utf8()) {
+            map.insert(path, content);
+        }
+    }
+    for subdir in dir.dirs() {
+        collect_files(subdir, map);
+    }
 }
 
 #[cfg(test)]

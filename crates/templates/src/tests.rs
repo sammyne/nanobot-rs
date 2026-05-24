@@ -37,3 +37,18 @@ fn get_nonexistent_template() {
     let result = get_template("NONEXISTENT.md");
     assert!(result.is_none());
 }
+
+#[test]
+fn all_templates_returns_all_embedded_files() {
+    let templates = all_templates();
+
+    let expected_keys = ["AGENTS.md", "SOUL.md", "USER.md", "TOOLS.md", "HEARTBEAT.md", "memory/MEMORY.md"];
+
+    assert_eq!(templates.len(), expected_keys.len());
+
+    for key in &expected_keys {
+        let content = templates.get(key);
+        assert!(content.is_some(), "missing template: {key}");
+        assert!(!content.unwrap().is_empty(), "empty template: {key}");
+    }
+}
