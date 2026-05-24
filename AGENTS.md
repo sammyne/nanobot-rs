@@ -25,22 +25,37 @@ nanobot (CLI 入口)
 ```
 crates/
 ├── nanobot/     # [binary] CLI 入口，提供 onboard/agent/gateway/cron 子命令
+│                # 依赖 agent, channels, config, cron, heartbeat, provider, session, subagent, templates, utils
 ├── agent/       # Agent 核心循环，接收消息、构建上下文、调用 LLM、执行工具并返回响应
+│                # 依赖 config, context, mcp, provider, tools, session, memory, channels, cron, subagent
 ├── provider/    # LLM 提供者抽象层，支持 OpenAI 兼容和 Anthropic Messages API
+│                # 依赖 config, tools, utils
 ├── config/      # 统一的配置加载、验证和管理（~/.nanobot/config.json）
+│                # 依赖 utils
 ├── tools/       # 内置工具：文件系统操作（read/write/edit/list）和 Shell 执行
+│                # 依赖 utils, config
 ├── mcp/         # MCP 客户端，将 MCP 服务器工具桥接为统一 Tool 接口
+│                # 依赖 config, tools
 ├── session/     # 会话持久化，以 JSONL 格式存储对话历史
+│                # 依赖 provider, utils
 ├── memory/      # 两层记忆：长期记忆（MEMORY.md）+ 历史日志（HISTORY.md），LLM 驱动整合
+│                # 依赖 provider, tools
 ├── context/     # LLM 上下文构建器，组装系统提示和消息列表
+│                # 依赖 provider, memory, skills
 ├── channels/    # 消息通道抽象及实现（钉钉、飞书）
+│                # 依赖 config
 ├── skills/      # 技能发现、加载和管理（工作空间目录 + 内置技能）
 ├── subagent/    # 子代理任务管理器，创建和管理后台轻量级代理实例
+│                # 依赖 provider, tools, channels, config
 ├── cron/        # Cron 定时任务调度、存储和执行
+│                # 依赖 tools
 ├── heartbeat/   # 周期性心跳检查，通过两阶段决策避免不必要的代理唤醒
+│                # 依赖 provider, tools, config
 ├── templates/   # 工作空间初始化模板，编译时嵌入（include_dir!）
 └── utils/       # 通用工具函数（字符串处理等）
 ```
+
+每个 crate 目录下有独立的 `AGENTS.md`，包含该 crate 的关键类型和公共 API。
 
 ## 工作空间规范
 
@@ -139,3 +154,4 @@ cargo doc --no-deps
 ## 版本控制
 
 - `.opencode/plans/` 目录下的需求文档和 TODO 文件需要纳入版本控制，提交代码时一并 commit
+- 当某个 crate 的公共 API 发生变更时，同步更新对应的 `crates/*/AGENTS.md`
