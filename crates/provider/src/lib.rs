@@ -9,5 +9,5 @@ mod openai;
 
 pub use anthropic::AnthropicLike;
 pub use any::AnyProvider;
-pub use base::{Message, Options, Provider, ProviderError, ProviderResponse, ToolCall};
+pub use base::{ContentPart, Message, Options, Provider, ProviderError, ProviderResponse, ToolCall, UserContent};
 pub use openai::OpenAILike;

@@ -1,5 +1,7 @@
 //! Provider 基础 trait 和类型定义
 
+use std::borrow::Cow;
+
 use anyhow::Result;
 use nanobot_tools::ToolDefinition;
 use serde::{Deserialize, Serialize};
@@ -88,6 +90,73 @@ impl ToolCall {
     }
 }
 
+/// 用户消息内容
+///
+/// 支持纯文本和多模态（文本 + 图片混合）两种形式。
+/// 使用 `#[serde(untagged)]` 保持向后兼容：旧 JSONL 中的纯字符串自动反序列化为 `Text` 变体。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum UserContent {
+    /// 纯文本内容
+    Text(String),
+    /// 多模态内容（文本 + 图片混合）
+    Parts(Vec<ContentPart>),
+}
+
+impl UserContent {
+    /// 提取纯文本内容
+    ///
+    /// - `Text(s)` 直接返回引用
+    /// - `Parts(parts)` 拼接所有 `Text` 片段
+    pub fn text(&self) -> Cow<'_, str> {
+        match self {
+            Self::Text(s) => Cow::Borrowed(s),
+            Self::Parts(parts) => {
+                let texts: Vec<&str> = parts
+                    .iter()
+                    .filter_map(|p| match p {
+                        ContentPart::Text { text } => Some(text.as_str()),
+                        _ => None,
+                    })
+                    .collect();
+                Cow::Owned(texts.join("\n"))
+            }
+        }
+    }
+}
+
+impl From<String> for UserContent {
+    fn from(s: String) -> Self {
+        Self::Text(s)
+    }
+}
+
+impl From<&str> for UserContent {
+    fn from(s: &str) -> Self {
+        Self::Text(s.to_string())
+    }
+}
+
+/// 内容片段
+///
+/// 用于 `UserContent::Parts` 中的单个内容元素。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ContentPart {
+    /// 文本片段
+    Text {
+        /// 文本内容
+        text: String,
+    },
+    /// 图片片段
+    Image {
+        /// MIME 类型，如 `"image/png"`
+        media_type: String,
+        /// 裸 base64 编码数据（不含 `data:...;base64,` 前缀）
+        data: String,
+    },
+}
+
 /// 聊天消息枚举
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "role", rename_all = "lowercase")]
@@ -99,8 +168,8 @@ pub enum Message {
     },
     /// 用户消息
     User {
-        /// 消息内容
-        content: String,
+        /// 消息内容（纯文本或多模态）
+        content: UserContent,
     },
     /// 助手消息
     Assistant {
@@ -124,7 +193,12 @@ pub enum Message {
 impl Message {
     /// 创建用户消息
     pub fn user(content: impl Into<String>) -> Self {
-        Self::User { content: content.into() }
+        Self::User { content: UserContent::Text(content.into()) }
+    }
+
+    /// 创建带多模态内容的用户消息
+    pub fn user_with_parts(parts: Vec<ContentPart>) -> Self {
+        Self::User { content: UserContent::Parts(parts) }
     }
 
     /// 创建助手消息
@@ -166,13 +240,15 @@ impl Message {
         }
     }
 
-    /// 获取内容
-    pub fn content(&self) -> &str {
+    /// 获取文本内容
+    ///
+    /// 对于 `User` 消息，如果是多模态内容则拼接所有文本片段。
+    pub fn content(&self) -> Cow<'_, str> {
         match self {
-            Self::System { content } => content,
-            Self::User { content } => content,
-            Self::Assistant { content, .. } => content,
-            Self::Tool { content, .. } => content,
+            Self::System { content } => Cow::Borrowed(content),
+            Self::User { content } => content.text(),
+            Self::Assistant { content, .. } => Cow::Borrowed(content),
+            Self::Tool { content, .. } => Cow::Borrowed(content),
         }
     }
 

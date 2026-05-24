@@ -111,7 +111,7 @@ async fn process_direct_returns_expected_response() {
 
         let session_key = case.session_id.unwrap_or("cli:direct");
         let result = agent
-            .process_direct(case.input, session_key, None, None, None)
+            .process_direct(case.input, session_key, None, None, None, None)
             .await
             .unwrap_or_else(|e| panic!("case[{}]: process_direct failed: {}", case.name, e));
 
@@ -130,7 +130,7 @@ async fn process_direct_handles_empty_message() {
         .expect("AgentLoop creation should succeed");
 
     let result =
-        agent.process_direct("", "cli:direct", None, None, None).await.expect("empty message should be handled");
+        agent.process_direct("", "cli:direct", None, None, None, None).await.expect("empty message should be handled");
 
     assert_eq!(result, "OK");
 }

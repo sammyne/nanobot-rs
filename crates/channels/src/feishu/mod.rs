@@ -116,26 +116,65 @@ impl Feishu {
         let sender_id = msg_event.sender.sender_id.as_ref().and_then(|id| id.open_id.as_deref()).unwrap_or_default();
         let sender_type = msg_event.sender.sender_type.as_deref().unwrap_or_default();
 
-        // 检查消息类型
+        // 检查消息类型（支持文本和图片）
         let message_type = msg_event.message.message_type.as_deref().unwrap_or("unknown");
-        if message_type != "text" {
-            warn!("忽略非文本消息类型: {}", message_type);
+        if message_type != "text" && message_type != "image" {
+            warn!("忽略不支持的消息类型: {}", message_type);
             return;
         }
 
         // 获取文本内容
-        let Some(content_str) = msg_event.message.content.as_deref() else {
-            warn!("收到空消息");
-            return;
-        };
+        let content_str = msg_event.message.content.as_deref().unwrap_or("");
 
-        let content = match serde_json::from_str::<serde_json::Value>(content_str) {
-            Ok(json) => json.get("text").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
-            Err(_) => String::new(),
-        };
+        let mut content = String::new();
+        let mut media_paths: Vec<String> = Vec::new();
+
+        match message_type {
+            "text" => {
+                content = match serde_json::from_str::<serde_json::Value>(content_str) {
+                    Ok(json) => json.get("text").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
+                    Err(_) => String::new(),
+                };
+            }
+            "image" => {
+                // 从 content JSON 中提取 image_key
+                let image_key = match serde_json::from_str::<serde_json::Value>(content_str) {
+                    Ok(json) => json.get("image_key").and_then(|v| v.as_str()).map(|s| s.to_string()),
+                    Err(_) => None,
+                };
+
+                if let Some(image_key) = image_key {
+                    // 下载图片
+                    match self.client.im_v1_image().download_image(&image_key, RequestOptions::default()).await {
+                        Ok(downloaded) => {
+                            // 保存到临时文件
+                            let ext = "png"; // 飞书图片默认 PNG
+                            let filename = format!("{}.{ext}", uuid::Uuid::new_v4());
+                            let temp_path = std::env::temp_dir().join(&filename);
+                            match std::fs::write(&temp_path, &downloaded.bytes) {
+                                Ok(()) => {
+                                    info!("飞书图片已下载: {} ({} bytes)", temp_path.display(), downloaded.bytes.len());
+                                    media_paths.push(temp_path.display().to_string());
+                                }
+                                Err(e) => {
+                                    error!("保存飞书图片失败: {e}");
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            error!("下载飞书图片失败: {e}");
+                        }
+                    }
+                } else {
+                    warn!("图片消息缺少 image_key");
+                    return;
+                }
+            }
+            _ => return,
+        }
 
         let content = content.trim();
-        if content.is_empty() {
+        if content.is_empty() && media_paths.is_empty() {
             warn!("收到空消息");
             return;
         }
@@ -152,7 +191,10 @@ impl Feishu {
         self.message_context.write().await.insert(chat_id.clone(), event);
 
         // 构造入站消息
-        let inbound_msg = InboundMessage::new("feishu", sender_id, &chat_id, content);
+        let mut inbound_msg = InboundMessage::new("feishu", sender_id, &chat_id, content);
+        for path in media_paths {
+            inbound_msg = inbound_msg.add_media(path);
+        }
 
         // 发送入站消息
         if let Err(e) = self.inbound_tx.send(inbound_msg).await {

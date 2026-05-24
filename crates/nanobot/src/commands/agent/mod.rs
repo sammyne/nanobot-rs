@@ -23,6 +23,10 @@ pub struct AgentCmd {
     #[arg(short, long)]
     pub message: Option<String>,
 
+    /// 图片文件路径（可多次指定，仅在 -m 模式下生效）
+    #[arg(short = 'i', long = "image")]
+    pub image: Option<Vec<String>>,
+
     /// 会话 ID（格式: channel:chat_id）
     #[arg(short, long, default_value = "cli:direct")]
     pub session: String,
@@ -104,7 +108,12 @@ impl AgentCmd {
             println!("\x1b[2m  ↳ {content}\x1b[0m");
         });
 
-        match agent.process_direct(input, &self.session, None, None, Some(on_progress)).await {
+        // 构建图片路径列表
+        let media_paths: Vec<std::path::PathBuf> =
+            self.image.as_deref().unwrap_or_default().iter().map(std::path::PathBuf::from).collect();
+        let media_ref = if media_paths.is_empty() { None } else { Some(media_paths.as_slice()) };
+
+        match agent.process_direct(input, &self.session, None, None, media_ref, Some(on_progress)).await {
             Ok(response) => {
                 println!("{response}");
                 Ok(())

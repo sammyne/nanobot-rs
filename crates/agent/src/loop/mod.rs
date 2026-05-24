@@ -284,12 +284,14 @@ impl<P: Provider> AgentLoop<P> {
     /// * `session_key` - 会话标识，格式为 "channel:chat_id"，默认为 "cli:direct"
     /// * `channel` - 可选的通道名称，默认为 "cli"
     /// * `chat_id` - 可选的聊天标识，默认为 "direct"
+    /// * `media` - 可选的媒体文件路径列表
     pub async fn process_direct(
         &self,
         content: &str,
         session_key: &str,
         channel: Option<&str>,
         chat_id: Option<&str>,
+        media: Option<&[std::path::PathBuf]>,
         on_progress: Option<std::sync::Arc<dyn crate::ProgressTracker>>,
     ) -> Result<String> {
         info!("直接处理消息: {}", content);
@@ -299,7 +301,12 @@ impl<P: Provider> AgentLoop<P> {
         let chat_id = chat_id.unwrap_or("direct");
 
         // 构造入站消息并复用 process_message
-        let inbound = InboundMessage::new(channel, "user", chat_id, content);
+        let mut inbound = InboundMessage::new(channel, "user", chat_id, content);
+        if let Some(paths) = media {
+            for path in paths {
+                inbound = inbound.add_media(path.display().to_string());
+            }
+        }
         let outbound = self.process_message(inbound, Some(session_key), on_progress).await;
 
         Ok(outbound.content)
@@ -571,7 +578,7 @@ impl<P: Provider> AgentLoop<P> {
 
         let mut session = self.sessions.get_or_create(&session_key);
 
-        let InboundMessage { channel, sender_id: _, chat_id, content, .. } = inbound;
+        let InboundMessage { channel, sender_id: _, chat_id, content, media, .. } = inbound;
 
         // 获取历史消息
         let mut history = Vec::new();
@@ -590,7 +597,10 @@ impl<P: Provider> AgentLoop<P> {
         ));
 
         // 使用 ContextBuilder 构建消息列表
-        let messages = match self.context.build_messages(&history, &content, None, Some(&channel), Some(&chat_id)) {
+        let media_paths: Vec<std::path::PathBuf> = media.iter().map(std::path::PathBuf::from).collect();
+        let media_ref = if media_paths.is_empty() { None } else { Some(media_paths.as_slice()) };
+        let messages = match self.context.build_messages(&history, &content, media_ref, Some(&channel), Some(&chat_id))
+        {
             Ok(v) => v,
             Err(err) => {
                 error!("构建消息失败: {err}");
