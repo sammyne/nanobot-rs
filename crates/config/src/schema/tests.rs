@@ -3,6 +3,43 @@
 use std::path::PathBuf;
 
 use super::*;
+
+// ── ReasoningEffort tests ──
+
+#[test]
+fn reasoning_effort_serde_roundtrip() {
+    assert_eq!(serde_json::from_str::<ReasoningEffort>(r#""low""#).unwrap(), ReasoningEffort::Low);
+    assert_eq!(serde_json::from_str::<ReasoningEffort>(r#""medium""#).unwrap(), ReasoningEffort::Medium);
+    assert_eq!(serde_json::from_str::<ReasoningEffort>(r#""high""#).unwrap(), ReasoningEffort::High);
+
+    assert_eq!(serde_json::to_string(&ReasoningEffort::Low).unwrap(), r#""low""#);
+}
+
+#[test]
+fn reasoning_effort_invalid_value() {
+    assert!(serde_json::from_str::<ReasoningEffort>(r#""invalid""#).is_err());
+}
+
+#[test]
+fn agent_defaults_reasoning_effort_present() {
+    let json = r#"{"reasoningEffort": "high"}"#;
+    let defaults: AgentDefaults = serde_json::from_str(json).unwrap();
+    assert_eq!(defaults.reasoning_effort, Some(ReasoningEffort::High));
+}
+
+#[test]
+fn agent_defaults_reasoning_effort_absent() {
+    let json = r#"{}"#;
+    let defaults: AgentDefaults = serde_json::from_str(json).unwrap();
+    assert_eq!(defaults.reasoning_effort, None);
+}
+
+#[test]
+fn agent_defaults_reasoning_effort_null() {
+    let json = r#"{"reasoningEffort": null}"#;
+    let defaults: AgentDefaults = serde_json::from_str(json).unwrap();
+    assert_eq!(defaults.reasoning_effort, None);
+}
 use crate::HOME;
 
 #[test]

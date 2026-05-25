@@ -287,11 +287,14 @@ pub struct Options {
 
     /// 温度参数（0.0-2.0）
     pub temperature: f32,
+
+    /// 推理力度（low/medium/high），用于启用思维模式
+    pub reasoning_effort: Option<nanobot_config::ReasoningEffort>,
 }
 
 impl Default for Options {
     fn default() -> Self {
-        Self { max_tokens: 4096, temperature: 0.7 }
+        Self { max_tokens: 4096, temperature: 0.7, reasoning_effort: None }
     }
 }
 

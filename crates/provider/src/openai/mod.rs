@@ -144,6 +144,15 @@ impl Provider for OpenAILike {
             .max_tokens(options.max_tokens)
             .temperature(options.temperature);
 
+        if let Some(re) = options.reasoning_effort {
+            let openai_re = match re {
+                nanobot_config::ReasoningEffort::Low => async_openai::types::ReasoningEffort::Low,
+                nanobot_config::ReasoningEffort::Medium => async_openai::types::ReasoningEffort::Medium,
+                nanobot_config::ReasoningEffort::High => async_openai::types::ReasoningEffort::High,
+            };
+            builder.reasoning_effort(openai_re);
+        }
+
         if !chat_tools.is_empty() {
             builder.tools(chat_tools);
         }

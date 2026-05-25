@@ -166,7 +166,11 @@ impl<P: Provider> AgentLoop<P> {
     async fn call_llm(&self, messages: &[Message]) -> Result<Message> {
         debug!("调用 LLM: 消息数量={}", messages.len());
 
-        let options = nanobot_provider::Options::default();
+        let options = nanobot_provider::Options {
+            max_tokens: self.config.max_tokens as u16,
+            temperature: self.config.temperature as f32,
+            reasoning_effort: self.config.reasoning_effort,
+        };
         let response = self.provider.chat(messages, &options).await?;
 
         info!("收到 LLM 响应, 角色={}, 内容长度={} 字符", response.role(), response.content().len());

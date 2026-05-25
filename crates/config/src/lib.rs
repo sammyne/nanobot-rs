@@ -41,5 +41,5 @@ pub fn resolve_config_path() -> Option<PathBuf> {
 // 公开导出
 pub use schema::{
     AgentDefaults, ChannelsConfig, Config, ConfigError, DingTalkConfig, ExecToolConfig, FeishuConfig, GatewayConfig,
-    HeartbeatConfig, McpServerConfig, ProviderConfig, ProvidersConfig, ToolsConfig,
+    HeartbeatConfig, McpServerConfig, ProviderConfig, ProvidersConfig, ReasoningEffort, ToolsConfig,
 };
