@@ -19,6 +19,9 @@ fn extracts_builtin_skills_from_embedded_resources() {
 
     // Verify tavily-search skill exists (from embedded builtin dir)
     assert!(builtin_dir.join("tavily-search/SKILL.md").exists());
+
+    // Verify memory skill exists (from embedded builtin dir)
+    assert!(builtin_dir.join("memory/SKILL.md").exists());
 }
 
 #[test]
