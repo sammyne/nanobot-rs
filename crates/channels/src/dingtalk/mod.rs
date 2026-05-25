@@ -22,6 +22,8 @@ use crate::error::{ChannelError, ChannelResult};
 use crate::messages::{InboundMessage, OutboundMessage};
 use crate::traits::Channel;
 
+mod media;
+
 /// 钉钉通道
 pub struct DingTalk {
     /// 配置
@@ -303,17 +305,54 @@ impl Channel for DingTalk {
             }
         };
 
-        // ChatbotReplier 会自动从 TokenManager 获取 token
         let replier = ChatbotReplier::new(
             self.http_client.clone(),
             Arc::clone(&self.token_manager),
             self.config.client_id.clone(),
         );
 
-        replier
-            .reply_markdown("Nanobot", &msg.content, &incoming_msg)
-            .await
-            .map_err(|e| ChannelError::SendFailed(format!("发送钉钉消息失败: {e}")))?;
+        // 发送文本
+        if !msg.content.trim().is_empty() {
+            replier
+                .reply_markdown("Nanobot", &msg.content, &incoming_msg)
+                .await
+                .map_err(|e| ChannelError::SendFailed(format!("发送钉钉消息失败: {e}")))?;
+        }
+
+        // 发送媒体
+        if !msg.media.is_empty() {
+            let staff_id = match incoming_msg.sender_staff_id.as_deref() {
+                Some(id) if !id.is_empty() => id,
+                _ => {
+                    warn!("sender_staff_id 不可用，无法发送媒体文件");
+                    return Ok(());
+                }
+            };
+
+            let token = self
+                .token_manager
+                .get_access_token()
+                .await
+                .map_err(|e| ChannelError::SendFailed(format!("获取 access token 失败: {e}")))?;
+
+            for media_ref in &msg.media {
+                if let Err(e) = media::send_media_ref(
+                    &replier,
+                    &self.http_client,
+                    &token,
+                    &self.config.client_id,
+                    staff_id,
+                    media_ref,
+                )
+                .await
+                {
+                    error!("钉钉媒体发送失败: {e}");
+                    let filename = media::guess_filename(media_ref, media::guess_upload_type(media_ref));
+                    let fallback = format!("[Attachment send failed: {filename}]");
+                    let _ = replier.reply_markdown("Nanobot", &fallback, &incoming_msg).await;
+                }
+            }
+        }
 
         debug!("钉钉消息发送成功");
         Ok(())
