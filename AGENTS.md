@@ -146,7 +146,7 @@ src/modules/hello/
 
 ```bash
 cargo +nightly fmt
-cargo clippy -- -D warnings -D clippy::uninlined_format_args
+cargo clippy --all-targets -- -D warnings -D clippy::uninlined_format_args
 cargo test
 cargo doc --no-deps
 ```

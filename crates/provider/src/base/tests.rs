@@ -82,8 +82,8 @@ fn tool_call_preview() {
         ToolCallPreviewCase {
             name: "浮点数参数",
             tool_name: "calc",
-            arguments: serde_json::json!({ "pi": 3.14159 }),
-            expected: "calc(pi=3.14159)",
+            arguments: serde_json::json!({ "ratio": 1.23456 }),
+            expected: "calc(ratio=1.23456)",
         },
         ToolCallPreviewCase {
             name: "布尔值 true 参数",
@@ -184,7 +184,7 @@ fn tool_call_preview_dynamic() {
             arguments: serde_json::json!({ "q": "x".repeat(50) }),
             check: |result, _args| {
                 let expected_arg = "x".repeat(40);
-                result == &format!("search(q=\"{expected_arg}…\")")
+                result == format!("search(q=\"{expected_arg}…\")")
             },
         },
         ToolCallPreviewDynamicCase {
@@ -193,7 +193,7 @@ fn tool_call_preview_dynamic() {
             arguments: serde_json::json!({ "text": "x".repeat(40) }),
             check: |result, _args| {
                 let exact_40 = "x".repeat(40);
-                result == &format!("exact(text=\"{exact_40}\")")
+                result == format!("exact(text=\"{exact_40}\")")
             },
         },
         ToolCallPreviewDynamicCase {
@@ -202,7 +202,7 @@ fn tool_call_preview_dynamic() {
             arguments: serde_json::json!({ "text": "x".repeat(39) }),
             check: |result, _args| {
                 let str_39 = "x".repeat(39);
-                result == &format!("chars39(text=\"{str_39}\")")
+                result == format!("chars39(text=\"{str_39}\")")
             },
         },
         ToolCallPreviewDynamicCase {

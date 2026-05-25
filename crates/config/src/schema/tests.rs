@@ -74,23 +74,27 @@ fn validate_zero_max_tokens() {
 
 #[test]
 fn validate_invalid_api_base() {
-    let mut config = Config::default();
-    config.providers = ProvidersConfig::Custom(ProviderConfig {
-        api_key: "test-key".to_string(),
-        api_base: Some("invalid-url".to_string()),
-        extra_headers: None,
-    });
+    let config = Config {
+        providers: ProvidersConfig::Custom(ProviderConfig {
+            api_key: "test-key".to_string(),
+            api_base: Some("invalid-url".to_string()),
+            extra_headers: None,
+        }),
+        ..Default::default()
+    };
     assert!(config.validate().is_err());
 }
 
 #[test]
 fn validate_short_api_key() {
-    let mut config = Config::default();
-    config.providers = ProvidersConfig::Custom(ProviderConfig {
-        api_key: "ab".to_string(),
-        api_base: Some("https://api.example.com".to_string()),
-        extra_headers: None,
-    });
+    let config = Config {
+        providers: ProvidersConfig::Custom(ProviderConfig {
+            api_key: "ab".to_string(),
+            api_base: Some("https://api.example.com".to_string()),
+            extra_headers: None,
+        }),
+        ..Default::default()
+    };
     assert!(config.validate().is_err());
 }
 
@@ -126,12 +130,14 @@ fn masked_api_key() {
 
 #[test]
 fn masked_api_key_short() {
-    let mut config = Config::default();
-    config.providers = ProvidersConfig::Custom(ProviderConfig {
-        api_key: "abc".to_string(),
-        api_base: Some("https://api.example.com".to_string()),
-        extra_headers: None,
-    });
+    let config = Config {
+        providers: ProvidersConfig::Custom(ProviderConfig {
+            api_key: "abc".to_string(),
+            api_base: Some("https://api.example.com".to_string()),
+            extra_headers: None,
+        }),
+        ..Default::default()
+    };
     let masked = config.masked_api_key();
     assert_eq!(masked, "***");
 }
@@ -906,12 +912,14 @@ fn providers_config_provider_config_from_both_variants() {
 
 #[test]
 fn providers_config_anthropic_validate_invalid_api_base() {
-    let mut config = Config::default();
-    config.providers = ProvidersConfig::Anthropic(ProviderConfig {
-        api_key: "sk-ant-test-key".to_string(),
-        api_base: Some("invalid-url".to_string()),
-        extra_headers: None,
-    });
+    let config = Config {
+        providers: ProvidersConfig::Anthropic(ProviderConfig {
+            api_key: "sk-ant-test-key".to_string(),
+            api_base: Some("invalid-url".to_string()),
+            extra_headers: None,
+        }),
+        ..Default::default()
+    };
     assert!(config.validate().is_err());
 }
 
