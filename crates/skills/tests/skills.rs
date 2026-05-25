@@ -142,9 +142,11 @@ metadata: {"nanobot": {"always": true}}
     let loader = SkillsLoader::new(workspace.path().to_path_buf());
     let always_skills = loader.get_always_skills().unwrap();
 
-    assert_eq!(always_skills.len(), 2);
+    // 2 workspace always-skills + 1 builtin always-skill (memory)
+    assert_eq!(always_skills.len(), 3);
     assert!(always_skills.contains(&"always-skill".to_string()));
     assert!(always_skills.contains(&"nanobot-always".to_string()));
+    assert!(always_skills.contains(&"memory".to_string()));
     assert!(!always_skills.contains(&"normal-skill".to_string()));
 }
 
@@ -274,7 +276,8 @@ metadata: {"openclaw": {"always": true, "custom": "value"}}
     let loader = SkillsLoader::new(workspace.path().to_path_buf());
     let always_skills = loader.get_always_skills().unwrap();
 
-    assert_eq!(always_skills.len(), 1);
+    // 1 workspace always-skill (openclaw-skill) + 1 builtin always-skill (memory)
+    assert_eq!(always_skills.len(), 2);
     assert!(always_skills.contains(&"openclaw-skill".to_string()));
 }
 
