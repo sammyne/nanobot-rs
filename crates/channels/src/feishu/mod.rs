@@ -3,6 +3,7 @@
 //! 实现 Feishu 通道，支持 WebSocket 接收消息和 HTTP API 发送消息。
 //! 使用 feishu-sdk v0.1.2 提供支持。
 
+mod interactive;
 mod logger;
 
 use std::collections::HashMap;
@@ -119,9 +120,9 @@ impl Feishu {
         let sender_id = msg_event.sender.sender_id.as_ref().and_then(|id| id.open_id.as_deref()).unwrap_or_default();
         let sender_type = msg_event.sender.sender_type.as_deref().unwrap_or_default();
 
-        // 检查消息类型（支持文本和图片）
+        // 检查消息类型（支持文本、图片和交互式卡片）
         let message_type = msg_event.message.message_type.as_deref().unwrap_or("unknown");
-        if message_type != "text" && message_type != "image" {
+        if message_type != "text" && message_type != "image" && message_type != "interactive" {
             warn!("忽略不支持的消息类型: {}", message_type);
             return;
         }
@@ -140,7 +141,6 @@ impl Feishu {
                 };
             }
             "image" => {
-                // 从 content JSON 中提取 image_key
                 let image_key = match serde_json::from_str::<serde_json::Value>(content_str) {
                     Ok(json) => json.get("image_key").and_then(|v| v.as_str()).map(|s| s.to_string()),
                     Err(_) => None,
@@ -172,6 +172,15 @@ impl Feishu {
                     warn!("图片消息缺少 image_key");
                     return;
                 }
+            }
+            "interactive" => {
+                content = match serde_json::from_str::<serde_json::Value>(content_str) {
+                    Ok(json) => interactive::extract_interactive_content(&json),
+                    Err(e) => {
+                        warn!("解析 interactive 消息 JSON 失败: {e}");
+                        String::new()
+                    }
+                };
             }
             _ => return,
         }
