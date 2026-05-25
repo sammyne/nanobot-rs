@@ -9,6 +9,17 @@ use serde::{Deserialize, Deserializer, Serialize};
 use crate::DEFAULT_WORKSPACE_PATH;
 use crate::utils::expand_tilde;
 
+/// LLM 推理力度
+///
+/// 控制 o-series、DeepSeek-R1 等模型的思维模式。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ReasoningEffort {
+    Low,
+    Medium,
+    High,
+}
+
 /// Agents 配置段
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
@@ -44,6 +55,10 @@ pub struct AgentDefaults {
     /// 记忆窗口大小
     #[serde(default = "default_memory_window")]
     pub memory_window: usize,
+
+    /// 推理力度（low/medium/high），用于启用 o-series 等模型的思维模式
+    #[serde(default)]
+    pub reasoning_effort: Option<ReasoningEffort>,
 }
 
 fn default_workspace() -> PathBuf {
@@ -88,6 +103,7 @@ impl Default for AgentDefaults {
             temperature: default_temperature(),
             max_tool_iterations: default_max_tool_iterations(),
             memory_window: default_memory_window(),
+            reasoning_effort: None,
         }
     }
 }

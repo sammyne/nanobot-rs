@@ -205,7 +205,11 @@ where
             );
 
             // 调用LLM
-            let options = nanobot_provider::Options::default();
+            let options = nanobot_provider::Options {
+                max_tokens: self.max_tokens as u16,
+                temperature: self.temperature,
+                reasoning_effort: None,
+            };
             let response = match self.provider.chat(&messages, &options).await {
                 Ok(r) => r,
                 Err(e) => {

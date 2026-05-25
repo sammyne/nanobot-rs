@@ -130,7 +130,7 @@ mod mcp;
 mod provider;
 mod tools;
 
-pub use agent::{AgentDefaults, AgentsConfig};
+pub use agent::{AgentDefaults, AgentsConfig, ReasoningEffort};
 pub use channel::{ChannelsConfig, DingTalkConfig, FeishuConfig};
 pub use gateway::{GatewayConfig, HeartbeatConfig};
 pub use mcp::McpServerConfig;
