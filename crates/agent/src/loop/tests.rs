@@ -1370,3 +1370,30 @@ async fn re_act_preserves_thinking_in_messages() {
     // 验证最终内容
     assert_eq!(result.content, "final answer", "final content mismatch");
 }
+
+/// 验证 re_act 将空 assistant 内容替换为 "(empty)"
+#[tokio::test]
+async fn re_act_replaces_empty_content_with_placeholder() {
+    let provider = MockProvider::new("");
+    let config = mock_config();
+    let agent = AgentLoop::new(
+        provider.clone(),
+        config,
+        None,
+        mock_subagent_manager(provider),
+        nanobot_config::ToolsConfig::default(),
+    )
+    .await
+    .expect("AgentLoop creation should succeed");
+
+    let messages = vec![Message::system("You are helpful."), Message::user("Hello")];
+
+    let result = agent.re_act(messages, "cli", "test", None).await.expect("re_act should succeed");
+
+    assert_eq!(result.content, "(empty)", "empty content should be replaced with (empty)");
+
+    // 验证 messages 中的 assistant 消息也被替换
+    let assistant_msg =
+        result.messages.iter().find(|m| m.role() == "assistant").expect("should have assistant message");
+    assert_eq!(assistant_msg.content().as_ref(), "(empty)", "assistant message content should be (empty)");
+}

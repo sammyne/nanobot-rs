@@ -254,7 +254,21 @@ impl<P: Provider> AgentLoop<P> {
                 }
             } else {
                 // 没有工具调用，返回最终结果
-                // 将原始 LLM 响应直接添加到历史（保留 thinking 等 provider 特定字段）
+                // 防御性处理：空内容替换为 "(empty)"，避免 session 历史中出现空 assistant 消息
+                let (content, response) = if content.is_empty() {
+                    warn!("LLM returned empty content without tool calls, replacing with (empty)");
+                    let placeholder = "(empty)".to_string();
+                    let fixed = match response {
+                        Message::Assistant { thinking: Some(t), .. } => {
+                            Message::assistant_with_thinking(&placeholder, Vec::new(), t)
+                        }
+                        _ => Message::assistant(&placeholder),
+                    };
+                    (placeholder, fixed)
+                } else {
+                    (content, response)
+                };
+
                 messages.push(response);
 
                 info!("ReAct 循环完成: 迭代次数={}, 最终内容长度={} 字符", iteration, content.len());
