@@ -18,8 +18,8 @@ fi
 echo -e "${GREEN}  ✓ 代码格式检查通过${NC}"
 
 # 2. 运行 Clippy 检查
-echo "  → 运行 Clippy 检查 (cargo clippy -- -D warnings -D clippy::uninlined_format_args)..."
-if ! cargo clippy -- -D warnings -D clippy::uninlined_format_args; then
+echo "  → 运行 Clippy 检查 (cargo clippy --all-targets -- -D warnings -D clippy::uninlined_format_args)..."
+if ! cargo clippy --all-targets -- -D warnings -D clippy::uninlined_format_args; then
     echo -e "${RED}❌ Clippy 检查失败${NC}"
     echo -e "${YELLOW}提示: 请修复上述警告后再提交${NC}"
     exit 1
