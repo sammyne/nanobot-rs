@@ -8,6 +8,7 @@ nanobot-provider.workspace = true
 nanobot-tools.workspace = true
 nanobot-channels.workspace = true
 nanobot-config.workspace = true
+nanobot-skills.workspace = true
 
 tokio.workspace = true
 anyhow.workspace = true

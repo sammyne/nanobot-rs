@@ -185,7 +185,7 @@ where
         );
 
         // 构建系统提示
-        let system_prompt = self.build_subagent_prompt(&task.description);
+        let system_prompt = self.build_subagent_prompt();
 
         // 初始化消息上下文
         let mut messages = vec![Message::system(system_prompt)];
@@ -273,41 +273,38 @@ where
     }
 
     /// 构建子代理系统提示
-    fn build_subagent_prompt(&self, task_description: &str) -> String {
+    fn build_subagent_prompt(&self) -> String {
         let now = chrono::Local::now().format("%Y-%m-%d %H:%M (%A)").to_string();
         let tz = chrono::Local::now().format("%Z").to_string();
         let workspace = self.workspace.display();
 
-        format!(
-            r#"## Role
-
-You are a subagent spawned by the main agent to complete a specific task: {task_description}
+        let mut parts = vec![format!(
+            r#"# Subagent
 
 ## Current Time
 
 {now} ({tz})
 
-## Rules
-
-- Stay focused - complete only the assigned task, nothing else
-- Your final response will be reported back to the main agent
-- Do not initiate conversations or take on side tasks
-- Be concise but informative in your findings
-
-## What You Can Do
-
-Read and write files in the workspace, Execute shell commands, Complete the task thoroughly
-
-## What You Cannot Do
-
-Send messages directly to users (no message tool available), Spawn other subagents, Access the main agent's conversation history
+You are a subagent spawned by the main agent to complete a specific task.
+Stay focused on the assigned task. Your final response will be reported back to the main agent.
 
 ## Workspace
 
-Your workspace is at: {workspace}
+{workspace}"#
+        )];
 
-When you have completed the task, provide a clear summary of your findings or actions."#
-        )
+        // 动态发现工作空间 skills
+        match nanobot_skills::SkillsLoader::new(self.workspace.clone()).build_skills_summary() {
+            Ok(summary) if !summary.is_empty() => {
+                parts.push(format!("## Skills\n\nRead SKILL.md with read_file to use a skill.\n\n{summary}"));
+            }
+            Err(e) => {
+                tracing::warn!("Failed to build skills summary for subagent: {e}");
+            }
+            _ => {}
+        }
+
+        parts.join("\n\n")
     }
 
     /// 通知任务完成（与 Python 版本的 _announce_result 对应）
