@@ -105,9 +105,17 @@ async fn process_direct_returns_expected_response() {
         let provider = MockProvider::new(case.expected_response);
         let config = mock_config();
         let subagent_manager = mock_subagent_manager(provider.clone());
-        let agent = AgentLoop::new(provider, config, None, subagent_manager, nanobot_config::ToolsConfig::default())
-            .await
-            .expect("AgentLoop creation should succeed");
+        let (outbound_tx, _outbound_rx) = tokio::sync::mpsc::channel::<OutboundMessage>(100);
+        let agent = AgentLoop::new(
+            provider,
+            config,
+            None,
+            subagent_manager,
+            nanobot_config::ToolsConfig::default(),
+            outbound_tx,
+        )
+        .await
+        .expect("AgentLoop creation should succeed");
 
         let session_key = case.session_id.unwrap_or("cli:direct");
         let result = agent
@@ -125,9 +133,11 @@ async fn process_direct_handles_empty_message() {
     let provider = MockProvider::new("OK");
     let config = mock_config();
     let subagent_manager = mock_subagent_manager(provider.clone());
-    let agent = AgentLoop::new(provider, config, None, subagent_manager, nanobot_config::ToolsConfig::default())
-        .await
-        .expect("AgentLoop creation should succeed");
+    let (outbound_tx, _outbound_rx) = tokio::sync::mpsc::channel::<OutboundMessage>(100);
+    let agent =
+        AgentLoop::new(provider, config, None, subagent_manager, nanobot_config::ToolsConfig::default(), outbound_tx)
+            .await
+            .expect("AgentLoop creation should succeed");
 
     let result =
         agent.process_direct("", "cli:direct", None, None, None, None).await.expect("empty message should be handled");
@@ -141,10 +151,17 @@ async fn config_returns_correct_reference() {
     let provider = MockProvider::new("test");
     let config = mock_config();
     let subagent_manager = mock_subagent_manager(provider.clone());
-    let agent =
-        AgentLoop::new(provider, config.clone(), None, subagent_manager, nanobot_config::ToolsConfig::default())
-            .await
-            .expect("AgentLoop creation should succeed");
+    let (outbound_tx, _outbound_rx) = tokio::sync::mpsc::channel::<OutboundMessage>(100);
+    let agent = AgentLoop::new(
+        provider,
+        config.clone(),
+        None,
+        subagent_manager,
+        nanobot_config::ToolsConfig::default(),
+        outbound_tx,
+    )
+    .await
+    .expect("AgentLoop creation should succeed");
 
     let returned_config = agent.config();
 
@@ -188,6 +205,9 @@ async fn agent_loop_uses_custom_config_values() {
     let provider2 = MockProvider::new("test");
     let subagent_manager2 = mock_subagent_manager(provider2.clone());
 
+    let (outbound_tx1, _outbound_rx1) = tokio::sync::mpsc::channel::<OutboundMessage>(100);
+    let (outbound_tx2, _outbound_rx2) = tokio::sync::mpsc::channel::<OutboundMessage>(100);
+
     let test_vector = [
         DefaultsCase {
             name: "自定义配置 1",
@@ -197,6 +217,7 @@ async fn agent_loop_uses_custom_config_values() {
                 None,
                 subagent_manager1,
                 nanobot_config::ToolsConfig::default(),
+                outbound_tx1,
             )
             .await
             .expect("AgentLoop creation should succeed"),
@@ -211,6 +232,7 @@ async fn agent_loop_uses_custom_config_values() {
                 None,
                 subagent_manager2,
                 nanobot_config::ToolsConfig::default(),
+                outbound_tx2,
             )
             .await
             .expect("AgentLoop creation should succeed"),
@@ -265,12 +287,14 @@ async fn process_message_routes_system_message_correctly() {
     for case in test_vector {
         let provider = MockProvider::new(case.expected_response);
         let config = mock_config();
+        let (outbound_tx, _outbound_rx) = tokio::sync::mpsc::channel::<OutboundMessage>(100);
         let agent = AgentLoop::new(
             provider.clone(),
             config,
             None,
             mock_subagent_manager(provider),
             nanobot_config::ToolsConfig::default(),
+            outbound_tx,
         )
         .await
         .expect("AgentLoop creation should succeed");
@@ -293,12 +317,14 @@ async fn process_message_routes_system_message_correctly() {
 async fn process_message_preserves_non_system_routing() {
     let provider = MockProvider::new("Normal message response");
     let config = mock_config();
+    let (outbound_tx, _outbound_rx) = tokio::sync::mpsc::channel::<OutboundMessage>(100);
     let agent = AgentLoop::new(
         provider.clone(),
         config,
         None,
         mock_subagent_manager(provider),
         nanobot_config::ToolsConfig::default(),
+        outbound_tx,
     )
     .await
     .expect("AgentLoop creation should succeed");
@@ -370,12 +396,14 @@ async fn consolidation_triggers_when_message_window_reached() {
         };
 
         let provider = MockProvider::new("test response");
+        let (outbound_tx, _outbound_rx) = tokio::sync::mpsc::channel::<OutboundMessage>(100);
         let agent = AgentLoop::new(
             provider.clone(),
             config,
             None,
             mock_subagent_manager(provider),
             nanobot_config::ToolsConfig::default(),
+            outbound_tx,
         )
         .await
         .expect("AgentLoop creation should succeed");
@@ -428,12 +456,14 @@ async fn consolidation_rejected_when_already_in_progress() {
     };
 
     let provider = MockProvider::new("test response");
+    let (outbound_tx, _outbound_rx) = tokio::sync::mpsc::channel::<OutboundMessage>(100);
     let agent = AgentLoop::new(
         provider.clone(),
         config,
         None,
         mock_subagent_manager(provider),
         nanobot_config::ToolsConfig::default(),
+        outbound_tx,
     )
     .await
     .expect("AgentLoop creation should succeed");
@@ -488,12 +518,14 @@ async fn consolidation_state_properly_managed() {
     };
 
     let provider = MockProvider::new("test response");
+    let (outbound_tx, _outbound_rx) = tokio::sync::mpsc::channel::<OutboundMessage>(100);
     let agent = AgentLoop::new(
         provider.clone(),
         config,
         None,
         mock_subagent_manager(provider),
         nanobot_config::ToolsConfig::default(),
+        outbound_tx,
     )
     .await
     .expect("AgentLoop creation should succeed");
@@ -538,12 +570,14 @@ async fn consolidation_state_independent_across_sessions() {
     };
 
     let provider = MockProvider::new("test response");
+    let (outbound_tx, _outbound_rx) = tokio::sync::mpsc::channel::<OutboundMessage>(100);
     let agent = AgentLoop::new(
         provider.clone(),
         config,
         None,
         mock_subagent_manager(provider),
         nanobot_config::ToolsConfig::default(),
+        outbound_tx,
     )
     .await
     .expect("AgentLoop creation should succeed");
@@ -608,6 +642,7 @@ async fn consolidation_state_thread_safe() {
     };
 
     let provider = MockProvider::new("test response");
+    let (outbound_tx, _outbound_rx) = tokio::sync::mpsc::channel::<OutboundMessage>(100);
     let agent = Arc::new(
         AgentLoop::new(
             provider.clone(),
@@ -615,6 +650,7 @@ async fn consolidation_state_thread_safe() {
             None,
             mock_subagent_manager(provider),
             nanobot_config::ToolsConfig::default(),
+            outbound_tx,
         )
         .await
         .expect("AgentLoop creation should succeed"),
@@ -682,6 +718,7 @@ async fn mutex_prevents_concurrent_consolidation_same_session() {
     };
 
     let provider = MockProvider::new("test response");
+    let (outbound_tx, _outbound_rx) = tokio::sync::mpsc::channel::<OutboundMessage>(100);
     let agent = Arc::new(
         AgentLoop::new(
             provider.clone(),
@@ -689,6 +726,7 @@ async fn mutex_prevents_concurrent_consolidation_same_session() {
             None,
             mock_subagent_manager(provider),
             nanobot_config::ToolsConfig::default(),
+            outbound_tx,
         )
         .await
         .expect("AgentLoop creation should succeed"),
@@ -795,12 +833,14 @@ async fn try_handle_cmd_recognizes_and_processes_commands() {
     for case in test_vector {
         let provider = MockProvider::new("test response");
         let config = mock_config();
+        let (outbound_tx, _outbound_rx) = tokio::sync::mpsc::channel::<OutboundMessage>(100);
         let agent = AgentLoop::new(
             provider.clone(),
             config,
             None,
             mock_subagent_manager(provider),
             nanobot_config::ToolsConfig::default(),
+            outbound_tx,
         )
         .await
         .expect("AgentLoop creation should succeed");
@@ -831,12 +871,14 @@ async fn try_handle_cmd_recognizes_and_processes_commands() {
 async fn try_handle_cmd_returns_err_for_non_commands() {
     let provider = MockProvider::new("test response");
     let config = mock_config();
+    let (outbound_tx, _outbound_rx) = tokio::sync::mpsc::channel::<OutboundMessage>(100);
     let agent = AgentLoop::new(
         provider.clone(),
         config,
         None,
         mock_subagent_manager(provider),
         nanobot_config::ToolsConfig::default(),
+        outbound_tx,
     )
     .await
     .expect("AgentLoop creation should succeed");
@@ -864,12 +906,14 @@ async fn try_handle_cmd_returns_err_for_non_commands() {
 async fn process_message_integrates_command_handling() {
     let provider = MockProvider::new("test response");
     let config = mock_config();
+    let (outbound_tx, _outbound_rx) = tokio::sync::mpsc::channel::<OutboundMessage>(100);
     let agent = AgentLoop::new(
         provider.clone(),
         config,
         None,
         mock_subagent_manager(provider),
         nanobot_config::ToolsConfig::default(),
+        outbound_tx,
     )
     .await
     .expect("AgentLoop creation should succeed");
@@ -900,12 +944,14 @@ async fn process_message_integrates_command_handling() {
 async fn command_handling_does_not_create_session_history() {
     let provider = MockProvider::new("test response");
     let config = mock_config();
+    let (outbound_tx, _outbound_rx) = tokio::sync::mpsc::channel::<OutboundMessage>(100);
     let agent = AgentLoop::new(
         provider.clone(),
         config,
         None,
         mock_subagent_manager(provider),
         nanobot_config::ToolsConfig::default(),
+        outbound_tx,
     )
     .await
     .expect("AgentLoop creation should succeed");
@@ -926,12 +972,14 @@ async fn command_handling_does_not_create_session_history() {
 async fn command_handling_does_not_trigger_consolidation() {
     let provider = MockProvider::new("test response");
     let config = mock_config();
+    let (outbound_tx, _outbound_rx) = tokio::sync::mpsc::channel::<OutboundMessage>(100);
     let agent = AgentLoop::new(
         provider.clone(),
         config,
         None,
         mock_subagent_manager(provider),
         nanobot_config::ToolsConfig::default(),
+        outbound_tx,
     )
     .await
     .expect("AgentLoop creation should succeed");
@@ -995,12 +1043,14 @@ async fn try_handle_cmd_recognizes_new_command() {
     for case in test_vector {
         let provider = MockProvider::new("test response");
         let config = mock_config();
+        let (outbound_tx, _outbound_rx) = tokio::sync::mpsc::channel::<OutboundMessage>(100);
         let agent = AgentLoop::new(
             provider.clone(),
             config,
             None,
             mock_subagent_manager(provider),
             nanobot_config::ToolsConfig::default(),
+            outbound_tx,
         )
         .await
         .expect("AgentLoop creation should succeed");
@@ -1031,12 +1081,14 @@ async fn try_handle_cmd_recognizes_new_command() {
 async fn new_command_clears_session_history() {
     let provider = MockProvider::new("test response");
     let config = mock_config();
+    let (outbound_tx, _outbound_rx) = tokio::sync::mpsc::channel::<OutboundMessage>(100);
     let agent = AgentLoop::new(
         provider.clone(),
         config,
         None,
         mock_subagent_manager(provider),
         nanobot_config::ToolsConfig::default(),
+        outbound_tx,
     )
     .await
     .expect("AgentLoop creation should succeed");
@@ -1076,6 +1128,7 @@ async fn new_command_handles_concurrent_requests() {
 
     let provider = MockProvider::new("test response");
     let config = mock_config();
+    let (outbound_tx, _outbound_rx) = tokio::sync::mpsc::channel::<OutboundMessage>(100);
     let agent = Arc::new(
         AgentLoop::new(
             provider.clone(),
@@ -1083,6 +1136,7 @@ async fn new_command_handles_concurrent_requests() {
             None,
             mock_subagent_manager(provider),
             nanobot_config::ToolsConfig::default(),
+            outbound_tx,
         )
         .await
         .expect("AgentLoop creation should succeed"),
@@ -1139,12 +1193,14 @@ async fn new_command_handles_concurrent_requests() {
 async fn new_command_returns_error_when_consolidating() {
     let provider = MockProvider::new("test response");
     let config = mock_config();
+    let (outbound_tx, _outbound_rx) = tokio::sync::mpsc::channel::<OutboundMessage>(100);
     let agent = AgentLoop::new(
         provider.clone(),
         config,
         None,
         mock_subagent_manager(provider),
         nanobot_config::ToolsConfig::default(),
+        outbound_tx,
     )
     .await
     .expect("AgentLoop creation should succeed");
@@ -1340,12 +1396,14 @@ impl Provider for ThinkingMockProvider {
 async fn re_act_preserves_thinking_in_messages() {
     let provider = ThinkingMockProvider::new();
     let config = mock_config();
+    let (outbound_tx, _outbound_rx) = tokio::sync::mpsc::channel::<OutboundMessage>(100);
     let agent = AgentLoop::new(
         provider.clone(),
         config,
         None,
         mock_subagent_manager(provider),
         nanobot_config::ToolsConfig::default(),
+        outbound_tx,
     )
     .await
     .expect("AgentLoop creation should succeed");
@@ -1376,12 +1434,14 @@ async fn re_act_preserves_thinking_in_messages() {
 async fn re_act_replaces_empty_content_with_placeholder() {
     let provider = MockProvider::new("");
     let config = mock_config();
+    let (outbound_tx, _outbound_rx) = tokio::sync::mpsc::channel::<OutboundMessage>(100);
     let agent = AgentLoop::new(
         provider.clone(),
         config,
         None,
         mock_subagent_manager(provider),
         nanobot_config::ToolsConfig::default(),
+        outbound_tx,
     )
     .await
     .expect("AgentLoop creation should succeed");

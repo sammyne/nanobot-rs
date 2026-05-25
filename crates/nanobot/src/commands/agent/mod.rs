@@ -96,12 +96,15 @@ impl AgentCmd {
             config.agents.defaults.max_tokens as u32,
         );
 
+        let (outbound_tx, mut outbound_rx) = tokio::sync::mpsc::channel::<OutboundMessage>(100);
+
         let agent = AgentLoop::new(
             provider,
             config.agents.defaults.clone(),
             Some(cron_service.clone()),
             subagent_manager,
             config.tools.clone(),
+            outbound_tx,
         )
         .await?;
 
@@ -125,6 +128,9 @@ impl AgentCmd {
         match agent.process_direct(input, &self.session, None, None, media_ref, Some(on_progress)).await {
             Ok(response) => {
                 println!("{response}");
+                while let Ok(msg) = outbound_rx.try_recv() {
+                    println!("{}", msg.content);
+                }
                 Ok(())
             }
             Err(e) => {
@@ -175,6 +181,7 @@ impl AgentCmd {
                 Some(cron_service.clone()),
                 subagent_manager,
                 config.tools.clone(),
+                outbound_tx.clone(),
             )
             .await?,
         );
@@ -187,7 +194,7 @@ impl AgentCmd {
 
         // 启动 AgentLoop 后台任务（传递通道给 run）
         let agent_task = tokio::spawn(async move {
-            if let Err(e) = agent_loop.run(inbound_rx, outbound_tx).await {
+            if let Err(e) = agent_loop.run(inbound_rx).await {
                 error!("AgentLoop 运行失败: {}", e);
             }
         });

@@ -115,6 +115,7 @@ impl GatewayCmd {
                 Some(cron_service.clone()),
                 subagent_manager,
                 config.tools.clone(),
+                outbound_tx.clone(),
             )
             .await?,
         );
@@ -412,7 +413,7 @@ impl GatewayCmd {
 
         // 启动 AgentLoop 后台任务（传递通道给 run）
         let agent_task = tokio::spawn(async move {
-            if let Err(e) = agent_loop_clone.run(ctx.inbound_rx, ctx.outbound_tx).await {
+            if let Err(e) = agent_loop_clone.run(ctx.inbound_rx).await {
                 error!("AgentLoop 运行失败: {}", e);
             }
         });

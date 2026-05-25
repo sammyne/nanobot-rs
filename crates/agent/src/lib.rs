@@ -23,10 +23,10 @@
 //! # async fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! let provider = MockProvider::new();
 //! let config = AgentDefaults::default();
-//! // let agent = AgentLoop::new(provider, config, None, subagent_manager, Default::default()).await?;
+//! // let agent = AgentLoop::new(provider, config, None, subagent_manager, Default::default(), outbound_tx).await?;
 //!
 //! // run 方法内部会自动创建默认进度回调（ChannelProgressTracker）
-//! // agent.run(inbound_rx, outbound_tx).await?;
+//! // agent.run(inbound_rx).await?;
 //! # Ok(())
 //! # }
 //! ```
@@ -50,7 +50,7 @@
 //!     })
 //! };
 //!
-//! // let agent = AgentLoop::new(provider, config, None, subagent_manager, Default::default()).await?;
+//! // let agent = AgentLoop::new(provider, config, None, subagent_manager, Default::default(), outbound_tx).await?;
 //! // let result = agent.process_direct(
 //! //     "帮我分析这个文件",
 //! //     "cli:direct",
@@ -65,6 +65,7 @@
 mod cmd;
 mod r#loop;
 mod progress;
+pub(crate) mod tools;
 mod utils;
 
 pub use r#loop::AgentLoop;

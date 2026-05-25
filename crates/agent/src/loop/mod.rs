@@ -60,6 +60,9 @@ pub struct AgentLoop<P: Provider> {
 
     /// 子代理管理器（用于 /stop 命令取消子代理）
     subagent_manager: Arc<SubagentManager<P>>,
+
+    /// 出站消息发送端（用于 run() 和 MessageTool）
+    outbound_tx: mpsc::Sender<OutboundMessage>,
 }
 
 impl<P: Provider> AgentLoop<P> {
@@ -74,12 +77,14 @@ impl<P: Provider> AgentLoop<P> {
     /// * `cron_service` - 可选的 Cron 服务实例
     /// * `subagent_manager` - 可选的子代理管理器
     /// * `tools_config` - 工具配置（包含 MCP 服务器配置、ExecTool 配置等）
+    /// * `outbound_tx` - 出站消息发送端（用于 run() 发送响应和 MessageTool 主动发送）
     pub async fn new(
         mut provider: P,
         config: AgentDefaults,
         cron_service: Option<Arc<CronService>>,
         subagent_manager: Arc<SubagentManager<P>>,
         tools_config: nanobot_config::ToolsConfig,
+        outbound_tx: mpsc::Sender<OutboundMessage>,
     ) -> Result<Self> {
         info!("初始化 AgentLoop: model={}, max_tool_iterations={}", config.model, config.max_tool_iterations);
 
@@ -119,6 +124,15 @@ impl<P: Provider> AgentLoop<P> {
         info!("注册 SpawnTool");
         tool_registry.register(spawn_tool);
 
+        // 注册 MessageTool
+        let message_tool = crate::tools::message::MessageTool::new(
+            outbound_tx.clone(),
+            config.workspace.clone(),
+            tools_config.restrict_to_workspace,
+        );
+        info!("注册 MessageTool");
+        tool_registry.register(message_tool);
+
         // 从 tool_registry 导出工具列表并绑定到 provider
         let definitions = tool_registry.get_definitions();
         let tool_names = tool_registry.tool_names();
@@ -144,6 +158,7 @@ impl<P: Provider> AgentLoop<P> {
             context,
             consolidating: Arc::new(Mutex::new(HashSet::new())),
             subagent_manager,
+            outbound_tx,
         })
     }
 
@@ -337,12 +352,7 @@ impl<P: Provider> AgentLoop<P> {
     ///
     /// # Arguments
     /// * `inbound_rx` - 入站消息接收端（CLI -> AgentLoop）
-    /// * `outbound_tx` - 出站消息发送端（AgentLoop -> CLI）
-    pub async fn run(
-        self: Arc<Self>,
-        mut inbound_rx: mpsc::Receiver<InboundMessage>,
-        outbound_tx: mpsc::Sender<OutboundMessage>,
-    ) -> Result<()> {
+    pub async fn run(self: Arc<Self>, mut inbound_rx: mpsc::Receiver<InboundMessage>) -> Result<()> {
         info!("AgentLoop 后台循环已启动");
 
         // 缓冲在处理期间到达的非 /stop 消息
@@ -366,7 +376,7 @@ impl<P: Provider> AgentLoop<P> {
 
             // /stop 在空闲时（无任务运行）直接处理
             if is_stop_cmd(&msg.content) {
-                self.handle_stop(&msg, &outbound_tx).await;
+                self.handle_stop(&msg).await;
                 continue;
             }
 
@@ -375,7 +385,7 @@ impl<P: Provider> AgentLoop<P> {
             let channel = msg.channel.clone();
             let chat_id = msg.chat_id.clone();
             let on_progress = std::sync::Arc::new(crate::ChannelProgressTracker::new(
-                outbound_tx.clone(),
+                self.outbound_tx.clone(),
                 channel.clone(),
                 chat_id.clone(),
             ));
@@ -390,7 +400,7 @@ impl<P: Provider> AgentLoop<P> {
                         // 处理完成
                         match result {
                             Ok(outbound) => {
-                                if let Err(e) = outbound_tx.send(outbound).await {
+                                if let Err(e) = self.outbound_tx.send(outbound).await {
                                     error!("发送出站消息失败: {e}");
                                 }
                             }
@@ -408,7 +418,7 @@ impl<P: Provider> AgentLoop<P> {
                             Some(new_msg) if is_stop_cmd(&new_msg.content) => {
                                 // /stop 到达：abort 主任务并取消子代理
                                 handle.abort();
-                                self.handle_stop(&new_msg, &outbound_tx).await;
+                                self.handle_stop(&new_msg).await;
                                 let _ = handle.await; // 等待 abort 完成
                                 break;
                             }
@@ -434,7 +444,7 @@ impl<P: Provider> AgentLoop<P> {
     }
 
     /// 处理 /stop 命令：取消子代理并发送响应
-    async fn handle_stop(&self, msg: &InboundMessage, outbound_tx: &mpsc::Sender<OutboundMessage>) {
+    async fn handle_stop(&self, msg: &InboundMessage) {
         let session_key = msg.session_key();
         let cancelled = self.subagent_manager.cancel_by_session(&session_key).await;
 
@@ -446,7 +456,7 @@ impl<P: Provider> AgentLoop<P> {
 
         info!("处理 /stop 命令: session_key={session_key}, cancelled={cancelled}");
 
-        if let Err(e) = outbound_tx.send(OutboundMessage::new(&msg.channel, &msg.chat_id, &response)).await {
+        if let Err(e) = self.outbound_tx.send(OutboundMessage::new(&msg.channel, &msg.chat_id, &response)).await {
             error!("发送 /stop 响应失败: {e}");
         }
     }
