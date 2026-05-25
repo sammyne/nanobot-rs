@@ -1554,8 +1554,10 @@ dependencies = [
  "nanobot-subagent",
  "nanobot-tools",
  "regex",
+ "schemars",
  "serde",
  "serde_json",
+ "tempfile",
  "tokio",
  "tracing",
 ]
