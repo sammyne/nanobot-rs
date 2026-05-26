@@ -92,22 +92,18 @@ impl DingTalk {
     /// 检查权限
     fn check_permission(&self, sender_id: &str) -> bool {
         if self.config.allow_from.is_empty() {
+            warn!(
+                "Channel dingtalk has no allow_from configured — blocking all access. \
+                 Add allowed sender IDs or \"*\" to enable access."
+            );
+            return false;
+        }
+
+        if self.config.allow_from.iter().any(|s| s == "*") {
             return true;
         }
 
-        if self.config.allow_from.contains(&sender_id.to_string()) {
-            return true;
-        }
-
-        if sender_id.contains('|') {
-            for part in sender_id.split('|') {
-                if self.config.allow_from.contains(&part.to_string()) {
-                    return true;
-                }
-            }
-        }
-
-        false
+        self.config.allow_from.contains(&sender_id.to_string())
     }
 
     /// 处理消息
