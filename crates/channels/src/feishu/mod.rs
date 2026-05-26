@@ -5,6 +5,7 @@
 
 mod interactive;
 mod logger;
+mod post;
 
 use std::collections::HashMap;
 use std::pin::Pin;
@@ -120,9 +121,10 @@ impl Feishu {
         let sender_id = msg_event.sender.sender_id.as_ref().and_then(|id| id.open_id.as_deref()).unwrap_or_default();
         let sender_type = msg_event.sender.sender_type.as_deref().unwrap_or_default();
 
-        // 检查消息类型（支持文本、图片和交互式卡片）
+        // 检查消息类型（支持文本、图片、交互式卡片和富文本）
         let message_type = msg_event.message.message_type.as_deref().unwrap_or("unknown");
-        if message_type != "text" && message_type != "image" && message_type != "interactive" {
+        if message_type != "text" && message_type != "image" && message_type != "interactive" && message_type != "post"
+        {
             warn!("忽略不支持的消息类型: {}", message_type);
             return;
         }
@@ -181,6 +183,18 @@ impl Feishu {
                         String::new()
                     }
                 };
+            }
+            "post" => {
+                match serde_json::from_str::<serde_json::Value>(content_str) {
+                    Ok(json) => {
+                        let (text, _image_keys) = post::extract_post_content(&json);
+                        content = text;
+                        // TODO: image_keys 的下载作为后续扩展
+                    }
+                    Err(e) => {
+                        warn!("解析 post 消息 JSON 失败: {e}");
+                    }
+                }
             }
             _ => return,
         }
