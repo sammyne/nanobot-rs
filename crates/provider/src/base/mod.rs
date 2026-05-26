@@ -18,6 +18,19 @@ pub enum ProviderError {
 
     #[error("配置错误: {0}")]
     Config(String),
+
+    #[error("请求限流: {0}")]
+    RateLimit(String),
+
+    #[error("服务端错误: {0}")]
+    ServerError(String),
+}
+
+impl ProviderError {
+    /// 判断错误是否为瞬态错误（可重试）
+    pub fn is_transient(&self) -> bool {
+        matches!(self, Self::Timeout | Self::RateLimit(_) | Self::ServerError(_))
+    }
 }
 
 /// 工具调用请求

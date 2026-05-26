@@ -16,6 +16,11 @@ LLM 提供者抽象层，支持 OpenAI 兼容和 Anthropic Messages API。
    │async-openai│  │原生 HTTP       │
    └───────┬───┘  └───┬────────────┘
            │          │
+           │   ┌──────┴─────────────┐
+           │   │AutoRetryProvider   │
+           │   │指数退避重试装饰器    │
+           │   └──────┬─────────────┘
+           │          │
    ┌───────┴──────────┴───────────┐
    │      AnyProvider enum        │
    │  from_config() 按配置选择     │
@@ -31,8 +36,9 @@ LLM 提供者抽象层，支持 OpenAI 兼容和 Anthropic Messages API。
 - **`ContentPart`** (enum) -- `Text { text }` | `Image { media_type, data }`
 - **`Options`** -- `max_tokens`, `temperature`
 - **`ProviderResponse`** -- `content`, `tool_calls`
-- **`ProviderError`** (enum) -- `Api`, `Timeout`, `Config`
-- **`AnyProvider`** (enum) -- `OpenAI(OpenAILike)` | `Anthropic(AnthropicLike)`；`from_config(config) -> Result<Self>`
+- **`ProviderError`** (enum) -- `Api`, `Timeout`, `Config`, `RateLimit`, `ServerError`；`is_transient()` 判断是否为瞬态可重试错误
+- **`AutoRetryProvider<P: Provider>`** -- 装饰器，为内部 Provider 添加指数退避重试（仅瞬态错误，最多 3 次，间隔 1s/2s/4s）
+- **`AnyProvider`** (enum) -- `OpenAI(OpenAILike)` | `Anthropic(AutoRetryProvider<AnthropicLike>)`；`from_config(config) -> Result<Self>`
 - **`OpenAILike`** -- 基于 `async-openai` 的 OpenAI 兼容 API 实现
 - **`AnthropicLike`** -- 基于原生 HTTP 的 Anthropic Messages API 实现
 

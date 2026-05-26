@@ -240,3 +240,18 @@ fn tool_call_preview_dynamic() {
         assert!((case.check)(&result, &case.arguments), "case[{}]: check failed, result={}", case.name, result);
     }
 }
+
+#[test]
+fn is_transient() {
+    let cases = [
+        (ProviderError::Timeout, true),
+        (ProviderError::RateLimit("rate limited".to_string()), true),
+        (ProviderError::ServerError("HTTP 500".to_string()), true),
+        (ProviderError::Api("bad request".to_string()), false),
+        (ProviderError::Config("missing key".to_string()), false),
+    ];
+
+    for (error, expected) in cases {
+        assert_eq!(error.is_transient(), expected, "error={error}");
+    }
+}

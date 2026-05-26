@@ -277,7 +277,15 @@ impl Provider for AnthropicLike {
             let body = response.text().await.unwrap_or_default();
             let error_msg =
                 serde_json::from_str::<AnthropicErrorResponse>(&body).map(|e| e.error.message).unwrap_or(body);
-            return Err(ProviderError::Api(format!("HTTP {status}: {error_msg}")).into());
+
+            let err = if status.as_u16() == 429 {
+                ProviderError::RateLimit(error_msg)
+            } else if status.is_server_error() {
+                ProviderError::ServerError(format!("HTTP {status}: {error_msg}"))
+            } else {
+                ProviderError::Api(format!("HTTP {status}: {error_msg}"))
+            };
+            return Err(err.into());
         }
 
         // 读取响应体
