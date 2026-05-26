@@ -166,3 +166,39 @@ async fn cron_tool_invalid_tz() {
     let result = tool.execute(&ctx, params).await;
     assert!(result.is_err());
 }
+
+#[tokio::test]
+async fn add_blocked_in_scheduled_context() {
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("cron.json");
+    let service = Arc::new(CronService::new(path).await.unwrap());
+    service.start().await;
+    let tool = CronTool::new(Arc::clone(&service));
+    let ctx = ToolContext::scheduled("feishu", "chat_123");
+
+    let params = serde_json::json!({
+        "action": "add",
+        "message": "Remind me in 10 seconds",
+        "schedule": { "kind": "every", "every_seconds": 10 }
+    });
+
+    let result = tool.execute(&ctx, params).await;
+    assert!(result.is_err());
+    let err = result.unwrap_err().to_string();
+    assert!(err.contains("cannot schedule new jobs"), "unexpected error: {err}");
+}
+
+#[tokio::test]
+async fn list_allowed_in_scheduled_context() {
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("cron.json");
+    let service = Arc::new(CronService::new(path).await.unwrap());
+    service.start().await;
+    let tool = CronTool::new(Arc::clone(&service));
+    let ctx = ToolContext::scheduled("feishu", "chat_123");
+
+    let params = serde_json::json!({ "action": "list" });
+
+    let result = tool.execute(&ctx, params).await;
+    assert!(result.is_ok());
+}

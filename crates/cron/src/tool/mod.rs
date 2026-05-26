@@ -221,6 +221,9 @@ impl Tool for CronTool {
             serde_json::from_value(params).map_err(|e| ToolError::validation("params", e.to_string()))?;
 
         match args {
+            CronArgs::Add { .. } if ctx.scheduled => {
+                Err(ToolError::execution("cannot schedule new jobs from within a cron job execution"))
+            }
             CronArgs::Add { message, schedule } => self.handle_add(message, schedule, &ctx.channel, &ctx.chat_id).await,
             CronArgs::List => self.handle_list().await,
             CronArgs::Remove { job_id } => self.handle_remove(job_id).await,

@@ -72,12 +72,19 @@ pub struct ToolContext {
     pub channel: String,
     /// 聊天标识
     pub chat_id: String,
+    /// 是否在调度任务执行上下文中（用于阻断 cron tool 的 add 操作，防止递归）
+    pub scheduled: bool,
 }
 
 impl ToolContext {
     /// 创建新的工具上下文
     pub fn new(channel: impl Into<String>, chat_id: impl Into<String>) -> Self {
-        Self { channel: channel.into(), chat_id: chat_id.into() }
+        Self { channel: channel.into(), chat_id: chat_id.into(), scheduled: false }
+    }
+
+    /// 创建调度任务执行上下文（scheduled = true）
+    pub fn scheduled(channel: impl Into<String>, chat_id: impl Into<String>) -> Self {
+        Self { channel: channel.into(), chat_id: chat_id.into(), scheduled: true }
     }
 }
 
