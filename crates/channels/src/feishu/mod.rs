@@ -49,6 +49,9 @@ pub struct Feishu {
 
     /// 消息上下文（chat_id -> 原始 Event）
     message_context: Arc<RwLock<HashMap<String, Event>>>,
+
+    /// 解析后的 allow_from 列表（昵称已转为 open_id）
+    resolved_allow_from: Vec<String>,
 }
 
 impl Feishu {
@@ -66,6 +69,9 @@ impl Feishu {
         let client = Client::new(feishu_config.clone())
             .map_err(|e| ChannelError::StartFailed(format!("创建飞书客户端失败: {e}")))?;
 
+        // 解析 allow_from 中的昵称为 open_id
+        let resolved_allow_from = Self::resolve_allow_from(&client, &config.allow_from).await;
+
         Ok(Self {
             config,
             feishu_config,
@@ -75,12 +81,121 @@ impl Feishu {
             name: "feishu".to_string(),
             inbound_tx,
             message_context: Arc::new(RwLock::new(HashMap::new())),
+            resolved_allow_from,
         })
+    }
+
+    /// 将 allow_from 中的非 ID 条目通过搜索 API 解析为 open_id。
+    ///
+    /// - `"*"` 和 `ou_` 前缀条目原样保留
+    /// - 其他条目视为姓名，调用 `POST /open-apis/search/v1/user` 解析
+    /// - 解析失败时 warn 日志 + 保留原始条目
+    async fn resolve_allow_from(client: &Client, allow_from: &[String]) -> Vec<String> {
+        let mut resolved = Vec::with_capacity(allow_from.len());
+
+        for entry in allow_from {
+            if entry == "*" || entry.starts_with("ou_") {
+                resolved.push(entry.clone());
+                continue;
+            }
+
+            // 视为姓名，调用搜索 API
+            match Self::search_user_open_id(client, entry).await {
+                Some(open_id) => {
+                    info!("allow_from: resolved '{}' -> '{}'", entry, open_id);
+                    resolved.push(open_id);
+                }
+                None => {
+                    warn!("allow_from: failed to resolve '{}', keeping as-is", entry);
+                    resolved.push(entry.clone());
+                }
+            }
+        }
+
+        resolved
+    }
+
+    /// 通过飞书通讯录 API 按姓名查找用户的 open_id。
+    ///
+    /// 使用 `GET /open-apis/contact/v3/users/find_by_department` 列出根部门用户，
+    /// 按姓名匹配。需要 `contact:contact.base:readonly` scope 和通讯录权限范围覆盖目标用户。
+    async fn search_user_open_id(client: &Client, name: &str) -> Option<String> {
+        let mut page_token = String::new();
+
+        loop {
+            let mut query = vec![
+                ("department_id".to_string(), "0".to_string()),
+                ("user_id_type".to_string(), "open_id".to_string()),
+                ("page_size".to_string(), "50".to_string()),
+                ("fetch_child".to_string(), "true".to_string()),
+            ];
+            if !page_token.is_empty() {
+                query.push(("page_token".to_string(), page_token.clone()));
+            }
+
+            let resp = match client
+                .request(
+                    reqwest::Method::GET,
+                    "/open-apis/contact/v3/users/find_by_department",
+                    query,
+                    None,
+                    RequestOptions::default(),
+                )
+                .await
+            {
+                Ok(r) => r,
+                Err(e) => {
+                    warn!("contact API search for '{name}' failed: {e}");
+                    return None;
+                }
+            };
+
+            let json: serde_json::Value = match resp.json_value() {
+                Ok(v) => v,
+                Err(e) => {
+                    warn!("parse contact response for '{name}' failed: {e}");
+                    return None;
+                }
+            };
+
+            // 检查 API 错误码
+            if let Some(code) = json.get("code").and_then(|c| c.as_i64())
+                && code != 0
+            {
+                let msg = json.get("msg").and_then(|m| m.as_str()).unwrap_or("unknown");
+                warn!("contact API error for '{name}': code={code}, msg={msg}");
+                return None;
+            }
+
+            // 在用户列表中按姓名匹配
+            let data = json.get("data").unwrap_or(&serde_json::Value::Null);
+            if let Some(items) = data.get("items").and_then(|i| i.as_array()) {
+                for user in items {
+                    let user_name = user.get("name").and_then(|n| n.as_str()).unwrap_or("");
+                    if user_name == name {
+                        return user.get("open_id").and_then(|id| id.as_str()).map(|s| s.to_string());
+                    }
+                }
+            }
+
+            // 检查是否有下一页
+            let has_more = data.get("has_more").and_then(|h| h.as_bool()).unwrap_or(false);
+            if !has_more {
+                break;
+            }
+            page_token = data.get("page_token").and_then(|t| t.as_str()).unwrap_or("").to_string();
+            if page_token.is_empty() {
+                break;
+            }
+        }
+
+        warn!("user '{name}' not found in contact directory");
+        None
     }
 
     /// 检查权限
     fn check_permission(&self, sender_id: &str) -> bool {
-        if self.config.allow_from.is_empty() {
+        if self.resolved_allow_from.is_empty() {
             warn!(
                 "Channel feishu has no allow_from configured — blocking all access. \
                  Add allowed sender IDs or \"*\" to enable access."
@@ -88,11 +203,11 @@ impl Feishu {
             return false;
         }
 
-        if self.config.allow_from.iter().any(|s| s == "*") {
+        if self.resolved_allow_from.iter().any(|s| s == "*") {
             return true;
         }
 
-        self.config.allow_from.contains(&sender_id.to_string())
+        self.resolved_allow_from.iter().any(|s| s == sender_id)
     }
 
     /// 处理消息事件
@@ -300,6 +415,7 @@ impl Clone for Feishu {
             name: self.name.clone(),
             inbound_tx: self.inbound_tx.clone(),
             message_context: Arc::clone(&self.message_context),
+            resolved_allow_from: self.resolved_allow_from.clone(),
         }
     }
 }

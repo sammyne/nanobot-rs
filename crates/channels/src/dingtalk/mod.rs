@@ -90,7 +90,7 @@ impl DingTalk {
     }
 
     /// 检查权限
-    fn check_permission(&self, sender_id: &str) -> bool {
+    fn check_permission(&self, sender_id: &str, sender_nickname: &str) -> bool {
         if self.config.allow_from.is_empty() {
             warn!(
                 "Channel dingtalk has no allow_from configured — blocking all access. \
@@ -103,7 +103,7 @@ impl DingTalk {
             return true;
         }
 
-        self.config.allow_from.contains(&sender_id.to_string())
+        self.config.allow_from.iter().any(|entry| entry == sender_id || entry == sender_nickname)
     }
 
     /// 处理消息
@@ -121,17 +121,17 @@ impl DingTalk {
 
         // 获取发送者信息
         let sender_id = msg.sender_staff_id.clone().unwrap_or_else(|| msg.sender_id.clone().unwrap_or_default());
-        let sender_nick = msg.sender_nick.clone().unwrap_or_default();
+        let sender_nickname = msg.sender_nick.clone().unwrap_or_default();
 
         // 权限检查
-        if !self.check_permission(&sender_id) {
-            warn!("未授权的消息，发送者 ID: {}", sender_id);
+        if !self.check_permission(&sender_id, &sender_nickname) {
+            warn!("未授权的消息，发送者 ID: {}, 昵称: {}", sender_id, sender_nickname);
             return;
         }
 
         info!(
             "收到钉钉消息，发送者: {} ({})，内容: {}，图片数: {}",
-            sender_nick,
+            sender_nickname,
             sender_id,
             content,
             image_codes.len()
