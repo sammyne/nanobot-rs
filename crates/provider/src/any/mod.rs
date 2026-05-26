@@ -7,16 +7,17 @@ use nanobot_config::{Config as NanobotConfig, ProvidersConfig};
 use nanobot_tools::ToolDefinition;
 
 use crate::anthropic::AnthropicLike;
+use crate::auto_retry::AutoRetryProvider;
 use crate::openai::OpenAILike;
 use crate::{Message, Options, Provider};
 
 /// 统一 Provider 枚举，包装所有支持的 Provider 实现
 #[derive(Clone)]
 pub enum AnyProvider {
-    /// OpenAI 兼容端点
+    /// OpenAI 兼容端点（async-openai 内部已有重试）
     OpenAI(OpenAILike),
-    /// Anthropic Messages API
-    Anthropic(AnthropicLike),
+    /// Anthropic Messages API（通过 AutoRetryProvider 添加重试能力）
+    Anthropic(AutoRetryProvider<AnthropicLike>),
 }
 
 impl AnyProvider {
@@ -24,7 +25,7 @@ impl AnyProvider {
     ///
     /// 通过 `config.providers` 枚举变体决定使用哪个 Provider：
     /// - `ProvidersConfig::Custom` → `OpenAILike`
-    /// - `ProvidersConfig::Anthropic` → `AnthropicLike`
+    /// - `ProvidersConfig::Anthropic` → `AutoRetryProvider<AnthropicLike>`
     pub fn from_config(config: &NanobotConfig) -> Result<Self> {
         let model = &config.agents.defaults.model;
         match &config.providers {
@@ -34,7 +35,7 @@ impl AnyProvider {
             }
             ProvidersConfig::Anthropic(pc) => {
                 let provider = AnthropicLike::new(pc, model)?;
-                Ok(Self::Anthropic(provider))
+                Ok(Self::Anthropic(AutoRetryProvider::new(provider)))
             }
         }
     }
