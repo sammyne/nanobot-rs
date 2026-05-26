@@ -622,6 +622,7 @@ impl<P: Provider> AgentLoop<P> {
             self.provider.clone(),
             session,
             self.config.memory_window,
+            self.config.max_input_tokens,
             Arc::clone(&self.consolidating),
         ));
 
@@ -712,76 +713,113 @@ fn format_tool_hint(tool_calls: &[nanobot_provider::ToolCall]) -> String {
     tool_calls.iter().map(|tc| tc.preview()).collect::<Vec<_>>().join(", ")
 }
 
-/// 执行记忆整合的异步函数
-///
-/// 此函数设计为可被 `tokio::spawn` 调用的独立异步任务。
-/// 执行完成后会自动清理整合状态。
-///
-/// # Arguments
-/// * `context` - 上下文构建器（包含 MemoryStore）
-/// * `provider` - LLM 提供者
-/// * `messages` - 会话消息列表
-/// * `last_consolidated` - 上次整合位置
-/// * `memory_window` - 记忆窗口大小
-/// * `session_key` - 会话标识（用于状态清理）
-/// * `consolidating` - 整合状态集合
-///
-/// # Returns
-/// 如果整合成功且产生了新的 last_consolidated，返回 Some(new_last)；否则返回 None
-/// 运行记忆整合任务
+/// 运行记忆整合任务（token-based 多轮整合）
 ///
 /// 接收 Session 所有权，执行整合后返回 Session。
 /// 无论成功与否，都会返回 Session 所有权。
 ///
-/// # Returns
-/// - `Ok((session, Some(new_last)))`: 整合成功，last_consolidated 已更新
-/// - `Ok(session)`: 整合成功，session.last_consolidated 已更新
-/// - `Err((session, error))`: 整合失败，返回错误信息
+/// 整合策略（对齐 Python 上游 `maybe_consolidate_by_tokens`）：
+/// 1. 估算未整合消息的 token 总量
+/// 2. 如果超过 `max_input_tokens`，触发整合
+/// 3. 目标：压缩到 `max_input_tokens / 2`
+/// 4. 最多 5 轮，每轮在 user 消息边界切割一批消息
+/// 5. 连续 3 次 LLM 失败后降级为原文转储
 async fn try_consolidate<P: Provider>(
     memory: Arc<nanobot_memory::MemoryStore>,
     provider: P,
     mut session: nanobot_session::Session,
     memory_window: usize,
+    max_input_tokens: usize,
     consolidating: Arc<Mutex<HashSet<String>>>,
 ) -> Result<nanobot_session::Session, (nanobot_session::Session, anyhow::Error)> {
     let session_key = session.key.clone();
-    let last_consolidated = session.last_consolidated;
 
-    // 条件1: 消息数量是否达到阈值
-    let window_reached = session.messages.len() - last_consolidated >= memory_window;
-    if !window_reached {
-        debug!("消息数量未达到整合阈值: session_key={}", session_key);
+    // 条件1: 检查是否达到整合阈值
+    let unconsolidated_tokens: usize =
+        session.messages[session.last_consolidated..].iter().map(|m| m.token_len()).sum();
+
+    let should_consolidate = if max_input_tokens > 0 {
+        unconsolidated_tokens >= max_input_tokens
+    } else {
+        session.messages.len() - session.last_consolidated >= memory_window
+    };
+
+    if !should_consolidate {
+        debug!("未达到整合阈值: session_key={session_key}");
         return Ok(session);
     }
 
     // 条件2: 会话没有进行中的整合任务
     if !consolidating.lock().await.insert(session_key.to_string()) {
-        debug!("会话已有整合任务在进行中: session_key={}", session_key);
+        debug!("会话已有整合任务在进行中: session_key={session_key}");
         return Ok(session);
     }
 
-    info!("启动异步记忆整合任务: session_key={}", session_key);
+    info!("启动 token-based 记忆整合: session_key={session_key}");
 
-    let messages = session.messages.clone();
+    let target = max_input_tokens / 2;
+    let mut consecutive_failures = 0usize;
 
-    let result = memory.try_consolidate(&messages, last_consolidated, provider, false, memory_window).await;
-
-    // 清除整合状态（确保在任务完成时清理）
-    consolidating.lock().await.remove(&session_key);
-
-    // 转换结果：成功时更新 session.last_consolidated
-    match result {
-        Ok(new_last) => {
-            if new_last != last_consolidated {
-                session.last_consolidated = new_last;
-            }
-            Ok(session)
+    for round in 0..nanobot_memory::MAX_CONSOLIDATION_ROUNDS {
+        // 重新估算未整合消息 token
+        let estimated: usize = session.messages[session.last_consolidated..].iter().map(|m| m.token_len()).sum();
+        if estimated <= target {
+            debug!("整合完成: estimated={estimated} <= target={target}");
+            break;
         }
-        Err(e) => {
-            error!("Memory consolidation error: {}", e);
-            Err((session, anyhow::anyhow!("Memory consolidation error: {e}")))
+
+        // 找切割点
+        let tokens_to_remove = estimated.saturating_sub(target).max(1);
+        let boundary = nanobot_memory::MemoryStore::pick_consolidation_boundary(
+            &session.messages,
+            session.last_consolidated,
+            tokens_to_remove,
+        );
+
+        let Some((end_idx, _removed)) = boundary else {
+            debug!("无法找到合适的切割点 (round {round})");
+            break;
+        };
+
+        let chunk: Vec<_> = session.messages[session.last_consolidated..end_idx].to_vec();
+        if chunk.is_empty() {
+            break;
+        }
+
+        info!(
+            "整合 round {round}: estimated={estimated}, target={target}, chunk={} msgs, boundary={end_idx}",
+            chunk.len()
+        );
+
+        // 调用 LLM 做摘要
+        let result = memory
+            .try_consolidate(&session.messages, session.last_consolidated, provider.clone(), false, memory_window)
+            .await;
+
+        match result {
+            Ok(new_last) => {
+                session.last_consolidated = new_last;
+                consecutive_failures = 0;
+            }
+            Err(e) => {
+                warn!("整合 round {round} 失败: {e}");
+                consecutive_failures += 1;
+                if consecutive_failures >= nanobot_memory::MAX_FAILURES_BEFORE_RAW_ARCHIVE {
+                    warn!("连续 {consecutive_failures} 次失败，降级为原文转储");
+                    if let Err(e) = memory.raw_archive(&chunk) {
+                        error!("原文转储失败: {e}");
+                    }
+                    session.last_consolidated = end_idx;
+                    consecutive_failures = 0;
+                }
+            }
         }
     }
+
+    // 清除整合状态
+    consolidating.lock().await.remove(&session_key);
+
+    Ok(session)
 }
 
 #[cfg(test)]

@@ -66,6 +66,7 @@ fn mock_config() -> AgentDefaults {
         temperature: 0.5,
         max_tool_iterations: 10,
         memory_window: 50,
+        max_input_tokens: 128_000,
         reasoning_effort: None,
     }
 }
@@ -190,6 +191,7 @@ async fn agent_loop_uses_custom_config_values() {
         temperature: 0.7,
         max_tool_iterations: 20,
         memory_window: 100,
+        max_input_tokens: 128_000,
         reasoning_effort: None,
     };
 
@@ -200,6 +202,7 @@ async fn agent_loop_uses_custom_config_values() {
         temperature: 0.3,
         max_tool_iterations: 5,
         memory_window: 25,
+        max_input_tokens: 128_000,
         reasoning_effort: None,
     };
 
@@ -396,6 +399,7 @@ async fn consolidation_triggers_when_message_window_reached() {
             temperature: 0.5,
             max_tool_iterations: 10,
             memory_window: case.memory_window,
+            max_input_tokens: 128_000,
             reasoning_effort: None,
         };
 
@@ -457,6 +461,7 @@ async fn consolidation_rejected_when_already_in_progress() {
         temperature: 0.5,
         max_tool_iterations: 10,
         memory_window: 5, // 设置较小的窗口便于测试
+        max_input_tokens: 128_000,
         reasoning_effort: None,
     };
 
@@ -520,6 +525,7 @@ async fn consolidation_state_properly_managed() {
         temperature: 0.5,
         max_tool_iterations: 10,
         memory_window: 5,
+        max_input_tokens: 128_000,
         reasoning_effort: None,
     };
 
@@ -573,6 +579,7 @@ async fn consolidation_state_independent_across_sessions() {
         temperature: 0.5,
         max_tool_iterations: 10,
         memory_window: 5,
+        max_input_tokens: 128_000,
         reasoning_effort: None,
     };
 
@@ -646,6 +653,7 @@ async fn consolidation_state_thread_safe() {
         temperature: 0.5,
         max_tool_iterations: 10,
         memory_window: 5,
+        max_input_tokens: 128_000,
         reasoning_effort: None,
     };
 
@@ -723,6 +731,7 @@ async fn mutex_prevents_concurrent_consolidation_same_session() {
         temperature: 0.5,
         max_tool_iterations: 10,
         memory_window: 5,
+        max_input_tokens: 128_000,
         reasoning_effort: None,
     };
 
