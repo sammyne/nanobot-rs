@@ -13,6 +13,12 @@ use tracing::{debug, info};
 
 use crate::core::{Tool, ToolContext, ToolError, ToolResult, bool_param, require_param};
 
+/// 读取文件的最大字符数限制（128K 字符）
+const MAX_CHARS: usize = 128_000;
+
+/// 读取文件的最大字节数限制（512KB，覆盖 UTF-8 最坏情况 1 char = 4 bytes）
+const MAX_BYTES: usize = MAX_CHARS * 4;
+
 /// 解析并验证路径
 ///
 /// 将路径解析为绝对路径，并检查是否在允许目录内
@@ -96,8 +102,29 @@ impl Tool for ReadFileTool {
             return Err(ToolError::path(format!("路径不是文件: {path_str}")));
         }
 
+        // 检查文件大小，防止读取过大文件导致 OOM
+        let file_size = metadata.len();
+        if file_size > MAX_BYTES as u64 {
+            return Err(ToolError::execution(format!(
+                "文件过大 ({file_size} bytes)，超过 {MAX_BYTES} bytes 限制。请使用 exec 工具的 head/tail/grep 命令处理大文件。"
+            )));
+        }
+
         // 读取内容
         let content = fs::read_to_string(&path).await.map_err(ToolError::io)?;
+
+        // 检查字符数，必要时截断
+        if content.len() > MAX_CHARS {
+            let char_count = content.chars().count();
+            if char_count > MAX_CHARS {
+                let truncated: String = content.chars().take(MAX_CHARS).collect();
+                let result = format!(
+                    "{truncated}\n\n[文件已截断：显示前 {MAX_CHARS} 字符，共 {char_count} 字符 ({file_size} bytes)。使用 exec 工具的 head/tail/grep 查看完整内容。]"
+                );
+                info!("文件已截断: {} ({} chars, {} bytes)", path_str, char_count, file_size);
+                return Ok(result);
+            }
+        }
 
         info!("成功读取文件: {} ({} bytes)", path_str, content.len());
         Ok(content)
@@ -368,3 +395,6 @@ impl Tool for ListDirTool {
         Ok(results.join("\n"))
     }
 }
+
+#[cfg(test)]
+mod tests;
