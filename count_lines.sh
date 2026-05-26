@@ -18,7 +18,7 @@ echo "代码行数统计（排除测试函数）"
 echo "=========================================="
 
 # 排除的 crates
-EXCLUDED_CRATES="channels|nanobot|provider"
+EXCLUDED_CRATES="channels|nanobot|provider|skills"
 
 # 统计非测试代码行数的函数
 count_non_test_lines() {

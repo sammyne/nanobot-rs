@@ -12,7 +12,10 @@
   - `get_memory_context() -> Result<String>` -- 格式化记忆内容供系统提示使用
   - `try_consolidate(messages, last_consolidated, provider, archive_all, memory_window)` -- 检查阈值并执行 LLM 驱动的记忆整合
   - `should_consolidate(message_count, last_consolidated, memory_window, archive_all) -> Option<usize>` -- 纯检查，不执行
-- **`MemoryError`** (enum) -- `Io`, `LlmApi`, `ToolParse`, `NoToolCall`
+  - `pick_consolidation_boundary(messages, last_consolidated, tokens_to_remove) -> Option<(usize, usize)>` -- 在 user 消息边界选择整合切割点
+  - `raw_archive(messages)` -- 降级策略：原文转储到 HISTORY.md
+- **`MemoryError`** (enum) -- `Io`, `LlmApi`, `ToolParse`, `NoToolCall`, `ConsecutiveFailure`
+- **常量** -- `MAX_CONSOLIDATION_ROUNDS = 5`, `MAX_FAILURES_BEFORE_RAW_ARCHIVE = 3`
 
 ## 内部依赖
 

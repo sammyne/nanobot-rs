@@ -11,4 +11,4 @@ mod error;
 mod store;
 
 pub use error::MemoryError;
-pub use store::MemoryStore;
+pub use store::{MAX_CONSOLIDATION_ROUNDS, MAX_FAILURES_BEFORE_RAW_ARCHIVE, MemoryStore};
