@@ -464,19 +464,13 @@ impl GatewayCmd {
         // 显示服务状态（在启动所有通道后）
         self.print_service_status(&channel_manager, &config.gateway.heartbeat, health_check_port).await;
 
-        println!("  ✓ 服务已启动，按 Ctrl+C 停止");
+        println!("  ✓ 服务已启动，按 Ctrl+C 或发送 SIGTERM 停止");
         println!();
 
-        // 等待 Ctrl+C 信号
-        match tokio::signal::ctrl_c().await {
-            Ok(()) => {
-                info!("收到中断信号，开始优雅关闭...");
-                println!("\n  🛑 正在关闭服务...");
-            }
-            Err(e) => {
-                error!("信号监听失败: {}", e);
-            }
-        }
+        // 等待关闭信号（SIGINT 或 SIGTERM）
+        shutdown_signal().await;
+        info!("收到关闭信号，开始优雅关闭...");
+        println!("\n  🛑 正在关闭服务...");
 
         // 优雅关闭
         self.shutdown(agent_task, channel_manager, ctx.cron_service, heartbeat_token).await?;
@@ -546,6 +540,29 @@ impl GatewayCmd {
         // 默认返回 cli 渠道
         info!("使用默认心跳目标: cli:direct");
         ("cli".to_string(), "direct".to_string())
+    }
+}
+
+/// 等待关闭信号（SIGINT 或 SIGTERM）
+///
+/// 在 Unix 平台同时监听 SIGINT（Ctrl+C）和 SIGTERM（systemd stop），
+/// 任一信号触发即返回。非 Unix 平台仅监听 SIGINT。
+async fn shutdown_signal() {
+    let ctrl_c = tokio::signal::ctrl_c();
+
+    #[cfg(unix)]
+    {
+        let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+            .expect("注册 SIGTERM handler 失败");
+        tokio::select! {
+            _ = ctrl_c => {}
+            _ = sigterm.recv() => {}
+        }
+    }
+
+    #[cfg(not(unix))]
+    {
+        let _ = ctrl_c.await;
     }
 }
 
