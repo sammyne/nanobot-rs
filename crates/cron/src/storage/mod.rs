@@ -1,6 +1,7 @@
 //! Cron storage module for persisting jobs.
 
 use std::path::PathBuf;
+use std::time::SystemTime;
 
 use tokio::sync::RwLock;
 use tracing::{info, warn};
@@ -11,31 +12,43 @@ use crate::types::{CronJob, CronStore};
 pub struct CronStorage {
     store_path: PathBuf,
     store: RwLock<CronStore>,
+    /// 文件最后修改时间，用于检测外部修改（对齐 HKUDS/nanobot#1375）
+    last_mtime: RwLock<SystemTime>,
 }
 
 impl CronStorage {
     /// Create a new storage instance and load data from disk.
-    /// If the file doesn't exist or fails to load, an empty store is created.
+    ///
+    /// - 文件不存在：正常，创建空 store
+    /// - 解析失败：warn + 空 store（降级运行）
+    /// - 其他 IO 错误（权限等）：返回 Err
     pub async fn load(store_path: PathBuf) -> Result<Self, anyhow::Error> {
+        let mut last_mtime = SystemTime::UNIX_EPOCH;
+
         let store = match tokio::fs::read_to_string(&store_path).await {
-            Ok(content) => match serde_json::from_str::<CronStore>(&content) {
-                Ok(store) => store,
-                Err(e) => {
-                    warn!("Failed to parse cron store file: {}, creating empty store", e);
-                    CronStore::default()
+            Ok(content) => {
+                // 记录文件 mtime
+                if let Ok(meta) = tokio::fs::metadata(&store_path).await
+                    && let Ok(mtime) = meta.modified()
+                {
+                    last_mtime = mtime;
                 }
-            },
+                match serde_json::from_str::<CronStore>(&content) {
+                    Ok(store) => store,
+                    Err(e) => {
+                        warn!("Failed to parse cron store file: {e}, creating empty store");
+                        CronStore::default()
+                    }
+                }
+            }
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                 info!("Cron store file does not exist, creating empty store");
                 CronStore::default()
             }
-            Err(e) => {
-                warn!("Failed to read cron store file: {}, creating empty store", e);
-                CronStore::default()
-            }
+            Err(e) => return Err(e.into()),
         };
 
-        Ok(CronStorage { store_path, store: RwLock::new(store) })
+        Ok(CronStorage { store_path, store: RwLock::new(store), last_mtime: RwLock::new(last_mtime) })
     }
 
     /// Save jobs to disk.
@@ -48,8 +61,54 @@ impl CronStorage {
         let content = serde_json::to_string_pretty(&*store)?;
         tokio::fs::write(&self.store_path, content).await?;
 
+        // 更新 mtime
+        if let Ok(meta) = tokio::fs::metadata(&self.store_path).await
+            && let Ok(mtime) = meta.modified()
+        {
+            *self.last_mtime.write().await = mtime;
+        }
+
         info!("Saved {} cron jobs to disk", store.jobs.len());
         Ok(())
+    }
+
+    /// 检测 jobs.json 是否被外部修改，如果是则重新加载。
+    ///
+    /// 通过比较文件 mtime 与上次记录的 mtime 判断。
+    /// 任何错误仅记录 warn 日志，不影响现有内存数据。
+    pub async fn reload_if_changed(&self) {
+        let current_mtime = match tokio::fs::metadata(&self.store_path).await {
+            Ok(meta) => match meta.modified() {
+                Ok(mtime) => mtime,
+                Err(_) => return,
+            },
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return,
+            Err(_) => return,
+        };
+
+        if current_mtime == *self.last_mtime.read().await {
+            return;
+        }
+
+        info!("Cron: jobs.json modified externally, reloading");
+
+        let content = match tokio::fs::read_to_string(&self.store_path).await {
+            Ok(c) => c,
+            Err(e) => {
+                warn!("Cron: failed to read jobs.json for reload: {e}");
+                return;
+            }
+        };
+
+        match serde_json::from_str::<CronStore>(&content) {
+            Ok(new_store) => {
+                *self.store.write().await = new_store;
+                *self.last_mtime.write().await = current_mtime;
+            }
+            Err(e) => {
+                warn!("Cron: failed to parse jobs.json for reload: {e}");
+            }
+        }
     }
 
     /// Add a job to the store.

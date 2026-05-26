@@ -144,6 +144,8 @@ impl CronService {
                 }
 
                 // Execute due jobs
+                // 先检测外部修改（对齐 HKUDS/nanobot#1399）
+                storage.reload_if_changed().await;
                 let start_now = chrono::Utc::now().timestamp_millis();
                 let jobs = storage.list_jobs(true).await;
 
