@@ -8,6 +8,7 @@
 
 - `strings::truncate(s, max_chars) -> Option<&str>` -- 在字符边界安全截断字符串
 - `strings::redact(s) -> String` -- 遮蔽敏感字符串（如 API key）用于日志输出
+- `strings::estimate_tokens(text) -> usize` -- 基于字节长度估算 token 数（1 token ≈ 4 字节）
 
 ## 内部依赖
 

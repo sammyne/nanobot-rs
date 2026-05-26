@@ -255,3 +255,40 @@ fn is_transient() {
         assert_eq!(error.is_transient(), expected, "error={error}");
     }
 }
+
+#[test]
+fn token_len_system_message() {
+    let msg = Message::system("You are a helpful assistant.");
+    // 4 (overhead) + 28/4 = 4 + 7 = 11
+    assert_eq!(msg.token_len(), 11);
+}
+
+#[test]
+fn token_len_user_message() {
+    let msg = Message::user("Hello");
+    // 4 (overhead) + 5/4 = 4 + 1 = 5
+    assert_eq!(msg.token_len(), 5);
+}
+
+#[test]
+fn token_len_assistant_with_tools() {
+    let tool_calls = vec![ToolCall::new("id1", "web_search", serde_json::json!({"query": "rust"}))];
+    let msg = Message::assistant_with_tools("Searching...", tool_calls);
+    // 4 (overhead) + 12/4 (content) + 10/4 (name "web_search") + 16/4 (args '{"query":"rust"}')
+    // = 4 + 3 + 2 + 4 = 13
+    assert_eq!(msg.token_len(), 13);
+}
+
+#[test]
+fn token_len_tool_message() {
+    let msg = Message::tool("call_123", "Tool result content here");
+    // 4 (overhead) + 24/4 = 4 + 6 = 10
+    assert_eq!(msg.token_len(), 10);
+}
+
+#[test]
+fn token_len_empty_message() {
+    let msg = Message::system("");
+    // 4 (overhead) + 0 = 4
+    assert_eq!(msg.token_len(), 4);
+}

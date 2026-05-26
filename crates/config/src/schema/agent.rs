@@ -56,6 +56,10 @@ pub struct AgentDefaults {
     #[serde(default = "default_memory_window")]
     pub memory_window: usize,
 
+    /// LLM 输入的最大 token 预算
+    #[serde(default = "default_max_input_tokens")]
+    pub max_input_tokens: usize,
+
     /// 推理力度（low/medium/high），用于启用 o-series 等模型的思维模式
     #[serde(default)]
     pub reasoning_effort: Option<ReasoningEffort>,
@@ -85,6 +89,10 @@ fn default_memory_window() -> usize {
     100
 }
 
+fn default_max_input_tokens() -> usize {
+    128_000
+}
+
 /// 反序列化路径，将 ~ 替换为用户主目录
 fn deserialize_path_with_tilde<'de, D>(deserializer: D) -> Result<PathBuf, D::Error>
 where
@@ -103,6 +111,7 @@ impl Default for AgentDefaults {
             temperature: default_temperature(),
             max_tool_iterations: default_max_tool_iterations(),
             memory_window: default_memory_window(),
+            max_input_tokens: default_max_input_tokens(),
             reasoning_effort: None,
         }
     }
