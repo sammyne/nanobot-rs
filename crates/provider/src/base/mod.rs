@@ -290,6 +290,29 @@ impl Message {
             _ => None,
         }
     }
+
+    /// 估算消息的 token 数量
+    ///
+    /// 包含角色开销（约 4 token）+ 内容 token + 工具调用 token + 思考过程 token。
+    /// 基于字节长度的粗略估算，后续可替换为精确 tokenizer。
+    pub fn token_len(&self) -> usize {
+        use nanobot_utils::strings::estimate_tokens;
+
+        const ROLE_OVERHEAD: usize = 4;
+
+        let content_tokens = estimate_tokens(&self.content());
+        let extra_tokens = match self {
+            Self::Assistant { tool_calls, thinking, .. } => {
+                let tc: usize =
+                    tool_calls.iter().map(|tc| estimate_tokens(&tc.name) + estimate_tokens(&tc.arguments)).sum();
+                let th = thinking.as_ref().map(|t| estimate_tokens(&t.to_string())).unwrap_or(0);
+                tc + th
+            }
+            _ => 0,
+        };
+
+        ROLE_OVERHEAD + content_tokens + extra_tokens
+    }
 }
 
 /// LLM 调用选项

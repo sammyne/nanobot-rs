@@ -11,7 +11,7 @@
   - `validate()` -- 校验所有字段
 - **`ProvidersConfig`** (enum) -- `Custom(ProviderConfig)` | `Anthropic(ProviderConfig)`
 - **`ProviderConfig`** -- `api_key`, `api_base`, `extra_headers`
-- **`AgentDefaults`** -- `workspace`, `model`, `max_tokens`, `temperature`, `max_tool_iterations`, `memory_window`
+- **`AgentDefaults`** -- `workspace`, `model`, `max_tokens`, `temperature`, `max_tool_iterations`, `memory_window`, `max_input_tokens`
 - **`ChannelsConfig`** -- `dingtalk: Option<DingTalkConfig>`, `feishu: Option<FeishuConfig>`, `send_tool_hints`, `send_progress`
 - **`GatewayConfig`** -- `host`, `port`, `heartbeat: Option<HeartbeatConfig>`
 - **`HeartbeatConfig`** -- `enabled`, `interval_s`

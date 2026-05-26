@@ -30,7 +30,7 @@
 //!
 //! // Get history for LLM
 //! let mut history = Vec::new();
-//! session.get_history(100, &mut history);
+//! session.get_history(100, 0, &mut history);
 //! ```
 
 mod manager;

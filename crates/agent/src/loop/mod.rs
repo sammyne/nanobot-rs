@@ -207,9 +207,25 @@ impl<P: Provider> AgentLoop<P> {
 
         info!("启动 ReAct 循环: max_iterations={}, 可用工具={:?}", max_iterations, self.tool_registry.tool_names());
 
+        let max_input_tokens = self.config.max_input_tokens;
+        let mut turn_start = messages.len();
+
         while iteration < max_iterations {
             iteration += 1;
             debug!("ReAct 迭代 #{}", iteration);
+
+            // Token 预算检查：超出时从历史部分（index 1..turn_start）丢弃旧消息
+            if max_input_tokens > 0 {
+                while turn_start > 1 {
+                    let total_tokens: usize = messages.iter().map(|m| m.token_len()).sum();
+                    if total_tokens <= max_input_tokens {
+                        break;
+                    }
+                    debug!("Token 预算超出（{total_tokens} > {max_input_tokens}），丢弃历史消息");
+                    messages.remove(1);
+                    turn_start -= 1;
+                }
+            }
 
             // 调用 LLM
             let response = self.call_llm(&messages).await?;
@@ -488,7 +504,7 @@ impl<P: Provider> AgentLoop<P> {
 
         // 获取历史消息
         let mut history = Vec::new();
-        session.get_history(self.config.memory_window, &mut history);
+        session.get_history(self.config.memory_window, self.config.max_input_tokens, &mut history);
 
         // 使用 ContextBuilder 构建消息列表
         let messages =
@@ -611,7 +627,7 @@ impl<P: Provider> AgentLoop<P> {
 
         // 获取历史消息
         let mut history = Vec::new();
-        session.get_history(self.config.memory_window, &mut history);
+        session.get_history(self.config.memory_window, self.config.max_input_tokens, &mut history);
 
         // 保存旧的 last_consolidated 用于判断是否发生变化
         let old_last_consolidated = session.last_consolidated;
@@ -622,6 +638,7 @@ impl<P: Provider> AgentLoop<P> {
             self.provider.clone(),
             session,
             self.config.memory_window,
+            self.config.max_input_tokens,
             Arc::clone(&self.consolidating),
         ));
 
@@ -742,15 +759,23 @@ async fn try_consolidate<P: Provider>(
     provider: P,
     mut session: nanobot_session::Session,
     memory_window: usize,
+    max_input_tokens: usize,
     consolidating: Arc<Mutex<HashSet<String>>>,
 ) -> Result<nanobot_session::Session, (nanobot_session::Session, anyhow::Error)> {
     let session_key = session.key.clone();
     let last_consolidated = session.last_consolidated;
 
-    // 条件1: 消息数量是否达到阈值
-    let window_reached = session.messages.len() - last_consolidated >= memory_window;
-    if !window_reached {
-        debug!("消息数量未达到整合阈值: session_key={}", session_key);
+    // 条件1: 检查是否达到整合阈值
+    let should_consolidate = if max_input_tokens > 0 {
+        // Token-based: 未整合消息的 token 总量超过预算的一半
+        let unconsolidated_tokens: usize = session.messages[last_consolidated..].iter().map(|m| m.token_len()).sum();
+        unconsolidated_tokens >= max_input_tokens / 2
+    } else {
+        // 回退到消息计数
+        session.messages.len() - last_consolidated >= memory_window
+    };
+    if !should_consolidate {
+        debug!("未达到整合阈值: session_key={session_key}");
         return Ok(session);
     }
 
