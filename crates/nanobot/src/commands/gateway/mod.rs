@@ -373,9 +373,15 @@ impl GatewayCmd {
                 let chat_id = payload.to.as_deref().unwrap_or("direct");
                 let session_key = format!("cron:{}", job.id);
 
-                match agent
-                    .process_direct(&payload.message, &session_key, Some(channel), Some(chat_id), None, None)
-                    .await
+                // 添加系统前缀，让 LLM 区分定时触发和用户查询（对齐 HKUDS/nanobot#1371）
+                let reminder_note = format!(
+                    "[Scheduled Task] Timer finished.\n\n\
+                     Scheduled task '{}' has been triggered.\n\
+                     Scheduled instruction: {}",
+                    job.name, payload.message
+                );
+
+                match agent.process_direct(&reminder_note, &session_key, Some(channel), Some(chat_id), None, None).await
                 {
                     Ok(response) => {
                         info!("Cron job '{}' executed successfully", job.id);
