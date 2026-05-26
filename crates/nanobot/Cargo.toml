@@ -13,7 +13,6 @@ nanobot-cron.workspace = true
 nanobot-heartbeat.workspace = true
 nanobot-session.workspace = true
 nanobot-subagent.workspace = true
-nanobot-utils.workspace = true
 clap.workspace = true
 tokio = { workspace = true, features = ["signal"] }
 tokio-util = "0.7"
