@@ -81,12 +81,18 @@ impl Feishu {
     /// 检查权限
     fn check_permission(&self, sender_id: &str) -> bool {
         if self.config.allow_from.is_empty() {
+            warn!(
+                "Channel feishu has no allow_from configured — blocking all access. \
+                 Add allowed sender IDs or \"*\" to enable access."
+            );
+            return false;
+        }
+
+        if self.config.allow_from.iter().any(|s| s == "*") {
             return true;
         }
 
         self.config.allow_from.contains(&sender_id.to_string())
-            || sender_id.contains('|')
-                && sender_id.split('|').any(|part| self.config.allow_from.contains(&part.to_string()))
     }
 
     /// 处理消息事件

@@ -77,14 +77,13 @@ async fn permission_check_with_whitelist() {
     assert!(channel.check_permission("user2"));
     assert!(!channel.check_permission("user3"));
 
-    // 测试带分隔符的发送者 ID
-    assert!(channel.check_permission("user1|extra"));
-    assert!(!channel.check_permission("user3|extra"));
+    // | 分割不再匹配（精确匹配，对齐 HKUDS/nanobot#1677）
+    assert!(!channel.check_permission("user1|extra"));
 }
 
-/// 测试权限检查功能 - 空白名单允许所有
+/// 测试权限检查功能 - 空白名单拒绝所有（deny-by-default，对齐 HKUDS/nanobot#1403）
 #[tokio::test]
-async fn permission_check_empty_whitelist() {
+async fn permission_check_empty_whitelist_denies() {
     let config = FeishuConfig {
         enabled: false,
         app_id: "test_app_id".to_string(),
@@ -97,9 +96,26 @@ async fn permission_check_empty_whitelist() {
 
     let channel = Feishu::new(config, inbound_tx).await.unwrap();
 
-    // 空白名单应允许所有用户
+    assert!(!channel.check_permission("user1"));
+    assert!(!channel.check_permission("any_user"));
+}
+
+/// 测试通配符允许所有人
+#[tokio::test]
+async fn permission_check_wildcard_allows_all() {
+    let config = FeishuConfig {
+        enabled: false,
+        app_id: "test_app_id".to_string(),
+        app_secret: "test_app_secret".to_string(),
+        allow_from: vec!["*".to_string()],
+        react_emoji: "THUMBSUP".to_string(),
+    };
+
+    let (inbound_tx, _inbound_rx) = mpsc::channel::<crate::messages::InboundMessage>(16);
+
+    let channel = Feishu::new(config, inbound_tx).await.unwrap();
+
     assert!(channel.check_permission("user1"));
-    assert!(channel.check_permission("user2"));
     assert!(channel.check_permission("any_user"));
 }
 
