@@ -58,17 +58,15 @@ impl Session {
     /// This method implements:
     /// 1. Returns only messages after `last_consolidated` index
     /// 2. Limits output to `max_messages` most recent messages
-    /// 3. If `max_tokens > 0`, further limits by token budget (from newest to oldest)
-    /// 4. Drops leading non-user messages to avoid orphaned tool_result blocks
+    /// 3. Drops leading non-user messages to avoid orphaned tool_result blocks
     ///
     /// # Arguments
     /// * `max_messages` - Maximum number of messages to append
-    /// * `max_tokens` - Maximum total token budget (0 = no token limit)
     /// * `buf` - Buffer to append messages to
     ///
     /// # Returns
     /// The number of messages appended
-    pub fn get_history(&self, max_messages: usize, max_tokens: usize, buf: &mut Vec<Message>) -> usize {
+    pub fn get_history(&self, max_messages: usize, buf: &mut Vec<Message>) -> usize {
         let total = self.messages.len();
         let start_unconsolidated = self.last_consolidated;
 
@@ -80,24 +78,6 @@ impl Session {
         // Calculate start index considering max_messages limit
         let available = total - start_unconsolidated;
         let start = if available > max_messages { total - max_messages } else { start_unconsolidated };
-
-        // If token budget is set, scan from newest to oldest to find the start index
-        let start = if max_tokens > 0 {
-            let mut token_sum = 0usize;
-            let mut token_start = total;
-            for i in (start..total).rev() {
-                let msg_tokens = self.messages[i].token_len();
-                if token_sum + msg_tokens > max_tokens {
-                    break;
-                }
-                token_sum += msg_tokens;
-                token_start = i;
-            }
-            // Take the more restrictive of message-count and token-budget starts
-            start.max(token_start)
-        } else {
-            start
-        };
 
         // Find first user message to avoid orphaned tool_result blocks
         let first_user_idx = self.messages[start..].iter().position(|m| matches!(m, Message::User { .. }));

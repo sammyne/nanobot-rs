@@ -33,7 +33,7 @@ fn session_get_history_max_messages() {
 
     // Get history with max_messages = 5
     let mut history = Vec::new();
-    session.get_history(5, 0, &mut history);
+    session.get_history(5, &mut history);
     assert_eq!(history.len(), 5);
 
     // Should get the last 5 messages
@@ -57,7 +57,7 @@ fn session_get_history_user_alignment() {
     session.add_message(msg4);
 
     let mut history = Vec::new();
-    session.get_history(10, 0, &mut history);
+    session.get_history(10, &mut history);
 
     // Should drop leading non-user messages
     assert_eq!(history.len(), 2);
@@ -94,7 +94,7 @@ fn session_get_history_with_consolidation() {
 
     // Get history should only return messages after index 5
     let mut history = Vec::new();
-    session.get_history(10, 0, &mut history);
+    session.get_history(10, &mut history);
     assert_eq!(history.len(), 5);
     assert_eq!(history[0].content(), "Message 5");
 }
@@ -135,35 +135,4 @@ fn save_turn_strips_runtime_context_with_channel_info() {
 
     assert_eq!(session.messages.len(), 1);
     assert_eq!(session.messages[0].content(), "查看群消息");
-}
-
-#[test]
-fn session_get_history_token_budget() {
-    let mut session = Session::new("test:token");
-
-    // Add user messages with known sizes
-    // Each message: "msgN" (4 bytes) + "x"*40 (40 bytes) = 44 bytes → 11 content tokens + 4 overhead = 15 tokens
-    for i in 0..5 {
-        session.add_message(Message::user(format!("msg{i}{}", "x".repeat(40))));
-    }
-
-    // With max_tokens=0, all 5 messages returned (no token limit)
-    let mut buf = Vec::new();
-    let count = session.get_history(100, 0, &mut buf);
-    assert_eq!(count, 5);
-
-    // Budget of 30 should fit exactly 2 messages (2 * 15 = 30)
-    let mut buf = Vec::new();
-    let count = session.get_history(100, 30, &mut buf);
-    assert_eq!(count, 2);
-
-    // Budget of 15 should fit exactly 1 message
-    let mut buf = Vec::new();
-    let count = session.get_history(100, 15, &mut buf);
-    assert_eq!(count, 1);
-
-    // Budget of 14 should fit 0 messages (each message = 15 tokens)
-    let mut buf = Vec::new();
-    let count = session.get_history(100, 14, &mut buf);
-    assert_eq!(count, 0);
 }

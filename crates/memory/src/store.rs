@@ -13,6 +13,12 @@ use crate::MemoryError;
 /// Save memory tool name
 const SAVE_MEMORY_TOOL: &str = "save_memory";
 
+/// 最大整合轮次
+pub const MAX_CONSOLIDATION_ROUNDS: usize = 5;
+
+/// 连续失败多少次后降级为原文转储
+pub const MAX_FAILURES_BEFORE_RAW_ARCHIVE: usize = 3;
+
 /// Create the save_memory tool definition for LLM function calling.
 fn create_save_memory_tool() -> ToolDefinition {
     ToolDefinition {
@@ -88,6 +94,63 @@ impl MemoryStore {
     pub fn get_memory_context(&self) -> Result<String, MemoryError> {
         let long_term = self.read_long_term()?;
         if long_term.is_empty() { Ok(String::new()) } else { Ok(format!("## Long-term Memory\n{long_term}")) }
+    }
+
+    /// 在 user 消息边界处选择整合切割点
+    ///
+    /// 从 `last_consolidated` 向前扫描，累加 token，在 user 消息边界处记录切割点。
+    /// 当累计移除的 token 达到 `tokens_to_remove` 时返回。
+    ///
+    /// # Returns
+    /// * `Some((end_idx, removed_tokens))` - 切割点索引和实际移除的 token 数
+    /// * `None` - 无法找到合适的切割点
+    pub fn pick_consolidation_boundary(
+        messages: &[Message],
+        last_consolidated: usize,
+        tokens_to_remove: usize,
+    ) -> Option<(usize, usize)> {
+        if last_consolidated >= messages.len() || tokens_to_remove == 0 {
+            return None;
+        }
+
+        let mut removed_tokens = 0usize;
+        let mut last_boundary: Option<(usize, usize)> = None;
+
+        for (idx, msg) in messages.iter().enumerate().skip(last_consolidated) {
+            if idx > last_consolidated && msg.role() == "user" {
+                last_boundary = Some((idx, removed_tokens));
+                if removed_tokens >= tokens_to_remove {
+                    return last_boundary;
+                }
+            }
+            removed_tokens += msg.token_len();
+        }
+
+        last_boundary
+    }
+
+    /// 将消息原文转储到 HISTORY.md（降级策略）
+    ///
+    /// 当 LLM 整合连续失败时，直接将消息原文写入历史日志，避免消息丢失。
+    pub fn raw_archive(&self, messages: &[Message]) -> Result<(), MemoryError> {
+        let lines: Vec<String> = messages
+            .iter()
+            .filter_map(|m| {
+                let content = m.content();
+                if content.is_empty() {
+                    return None;
+                }
+                Some(format!(
+                    "[{}] {}: {}",
+                    chrono::Utc::now().format("%Y-%m-%d %H:%M"),
+                    m.role().to_uppercase(),
+                    content
+                ))
+            })
+            .collect();
+
+        let entry = format!("[RAW] {} messages\n{}", messages.len(), lines.join("\n"));
+        self.append_history(&entry)
     }
 
     /// Check if memory consolidation should be triggered.

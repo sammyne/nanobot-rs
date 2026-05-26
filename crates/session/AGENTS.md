@@ -37,7 +37,7 @@
 
 - **`Session`** -- `key`, `messages: Vec<Message>`, `created_at`, `updated_at`, `metadata`, `last_consolidated`
   - `add_message(msg)` -- 追加消息
-  - `get_history(max_messages, max_tokens, buf) -> usize` -- 将未整合的消息追加到 buf
+  - `get_history(max_messages, buf) -> usize` -- 将未整合的消息追加到 buf
   - `save_turn(messages, skip)` -- 追加一轮对话的消息（截断工具结果）
   - `clear()` -- 清空消息
 - **`SessionManager`** -- 管理 sessions 目录和内存 `RwLock<HashMap>` 缓存

@@ -292,4 +292,3 @@ fn token_len_empty_message() {
     // 4 (overhead) + 0 = 4
     assert_eq!(msg.token_len(), 4);
 }
-}
