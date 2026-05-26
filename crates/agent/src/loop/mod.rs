@@ -198,10 +198,12 @@ impl<P: Provider> AgentLoop<P> {
         channel: &str,
         chat_id: &str,
         on_progress: Option<std::sync::Arc<dyn crate::ProgressTracker>>,
+        scheduled: bool,
     ) -> Result<ReActResult> {
         let max_iterations = self.config.max_tool_iterations;
         let mut iteration = 0;
         let mut tools_used: Vec<String> = Vec::new();
+        let ctx = if scheduled { ToolContext::scheduled(channel, chat_id) } else { ToolContext::new(channel, chat_id) };
 
         info!("启动 ReAct 循环: max_iterations={}, 可用工具={:?}", max_iterations, self.tool_registry.tool_names());
 
@@ -256,7 +258,6 @@ impl<P: Provider> AgentLoop<P> {
                     };
 
                     // 执行工具
-                    let ctx = ToolContext::new(channel, chat_id);
                     let tool_result = self.tool_registry.execute(&ctx, &tool_call.name, args).await;
 
                     // 转换结果为字符串
@@ -498,7 +499,7 @@ impl<P: Provider> AgentLoop<P> {
                 let skip = messages.len() - 1;
 
                 // 执行 ReAct 循环
-                match self.re_act(messages, target_channel, target_chat_id, None).await {
+                match self.re_act(messages, target_channel, target_chat_id, None, false).await {
                     Ok(result) => {
                         // 保存本回合消息
                         session.save_turn(&result.messages, skip);
@@ -639,8 +640,10 @@ impl<P: Provider> AgentLoop<P> {
 
         let skip = messages.len() - 1; // 跳过系统消息 + 历史消息（不包括新消息）
 
+        let scheduled = session_key.starts_with("cron:");
+
         // 执行 ReAct 循环（支持工具调用）
-        let result = match self.re_act(messages, &channel, &chat_id, on_progress).await {
+        let result = match self.re_act(messages, &channel, &chat_id, on_progress, scheduled).await {
             Ok(v) => v,
             Err(e) => {
                 error!("处理消息失败: {}", e);
