@@ -29,6 +29,8 @@ struct AnthropicRequest<'a> {
     temperature: Option<f32>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     tools: Vec<AnthropicTool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tool_choice: Option<serde_json::Value>,
 }
 
 /// Anthropic 消息
@@ -238,6 +240,12 @@ impl Provider for AnthropicLike {
 
         let (system, anthropic_messages) = convert_messages(messages);
 
+        let tool_choice = options.tool_choice.as_ref().map(|tc| match tc {
+            crate::ToolChoice::Auto => serde_json::json!({"type": "auto"}),
+            crate::ToolChoice::Required => serde_json::json!({"type": "any"}),
+            crate::ToolChoice::Named(name) => serde_json::json!({"type": "tool", "name": name}),
+        });
+
         let request_body = AnthropicRequest {
             model: &self.model,
             max_tokens: options.max_tokens,
@@ -245,6 +253,7 @@ impl Provider for AnthropicLike {
             system,
             temperature: Some(options.temperature),
             tools,
+            tool_choice,
         };
 
         // 构建 HTTP 请求

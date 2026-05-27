@@ -157,6 +157,21 @@ impl Provider for OpenAILike {
             builder.tools(chat_tools);
         }
 
+        if let Some(ref tc) = options.tool_choice {
+            use async_openai::types::{ChatCompletionNamedToolChoice, ChatCompletionToolChoiceOption, FunctionName};
+            let choice = match tc {
+                crate::ToolChoice::Auto => ChatCompletionToolChoiceOption::Auto,
+                crate::ToolChoice::Required => ChatCompletionToolChoiceOption::Required,
+                crate::ToolChoice::Named(name) => {
+                    ChatCompletionToolChoiceOption::Named(ChatCompletionNamedToolChoice {
+                        r#type: async_openai::types::ChatCompletionToolType::Function,
+                        function: FunctionName { name: name.clone() },
+                    })
+                }
+            };
+            builder.tool_choice(choice);
+        }
+
         let request = builder.build()?;
 
         // 发送请求（带超时）
