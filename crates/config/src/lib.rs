@@ -40,6 +40,7 @@ pub fn resolve_config_path() -> Option<PathBuf> {
 
 // 公开导出
 pub use schema::{
-    AgentDefaults, ChannelsConfig, Config, ConfigError, DingTalkConfig, ExecToolConfig, FeishuConfig, GatewayConfig,
-    HeartbeatConfig, McpServerConfig, ProviderConfig, ProvidersConfig, ReasoningEffort, ToolsConfig,
+    AgentDefaults, ChannelsConfig, Config, ConfigError, DingTalkConfig, EmailConfig, ExecToolConfig, FeishuConfig,
+    GatewayConfig, HeartbeatConfig, ImapConfig, McpServerConfig, ProviderConfig, ProvidersConfig, ReasoningEffort,
+    SmtpConfig, ToolsConfig,
 };
