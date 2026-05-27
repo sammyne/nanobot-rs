@@ -364,6 +364,9 @@ impl Feishu {
 
         // 构造入站消息
         let mut inbound_msg = InboundMessage::new("feishu", sender_id, &chat_id, content);
+        if let Some(ref mid) = message_id {
+            inbound_msg = inbound_msg.add_metadata("message_id", serde_json::Value::String(mid.clone()));
+        }
         for path in media_paths {
             inbound_msg = inbound_msg.add_media(path);
         }
@@ -527,20 +530,46 @@ impl Channel for Feishu {
             ]
         });
 
+        let content_str = serde_json::to_string(&content_json).unwrap_or_default();
+
+        // 判断是否使用 reply API（引用回复）
+        let reply_message_id = if self.config.reply_to_message && !msg.is_progress() {
+            msg.metadata.get("message_id").and_then(|v| v.as_str()).map(|s| s.to_string())
+        } else {
+            None
+        };
+
+        if let Some(ref mid) = reply_message_id {
+            use feishu_sdk::api::{ReplyMessageBody, ReplyMessageQuery};
+
+            let query = ReplyMessageQuery { msg_type: Some("interactive".to_string()), ..Default::default() };
+            let body = ReplyMessageBody { content: content_str.clone(), uuid: None };
+
+            match self.client.im_v1_message().reply_typed(mid, &query, &body, RequestOptions::default()).await {
+                Ok(response) if response.code == 0 => {
+                    debug!("飞书引用回复发送成功");
+                    return Ok(());
+                }
+                Ok(response) => {
+                    warn!("飞书引用回复失败: code={}, msg={}，回退到普通发送", response.code, response.msg);
+                }
+                Err(e) => {
+                    warn!("飞书引用回复失败: {e}，回退到普通发送");
+                }
+            }
+        }
+
+        // 普通发送（或 reply 回退）
         use feishu_sdk::api::{SendMessageBody, SendMessageQuery};
 
-        // 构建消息体
         let body = SendMessageBody {
             receive_id: chat_id,
             msg_type: "interactive".to_string(),
-            content: serde_json::to_string(&content_json).unwrap_or_default(),
+            content: content_str,
             uuid: None,
         };
-
-        // 构建查询参数
         let query = SendMessageQuery { receive_id_type: Some("chat_id".to_string()) };
 
-        // 发送消息
         let response = self
             .client
             .im_v1_message()
