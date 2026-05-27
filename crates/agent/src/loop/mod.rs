@@ -707,9 +707,9 @@ fn is_stop_cmd(content: &str) -> bool {
 /// 移除某些模型在内容中嵌入的 `<think>…</think>` 标签块。
 /// 参考 Python 版本的 `_strip_think` 方法。
 fn strip_think(text: &str) -> String {
-    /// 用于匹配 think 标签的正则表达式
+    /// 用于匹配 think 标签的正则表达式（含孤立闭合标签）
     static THINK_REGEX: LazyLock<regex::Regex> =
-        LazyLock::new(|| regex::Regex::new(r"<think>[\s\S]*?</think>").expect("Invalid regex pattern"));
+        LazyLock::new(|| regex::Regex::new(r"<think>[\s\S]*?</think>|</think>").expect("Invalid regex pattern"));
 
     THINK_REGEX.replace_all(text, "").trim().to_string()
 }

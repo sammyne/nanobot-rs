@@ -1282,6 +1282,11 @@ fn strip_think_removes_tags() {
         StripThinkCase {
             name: "标签前后有空白", input: "内容 <think>思考</think> 尾部", expected: "内容  尾部"
         },
+        StripThinkCase { name: "孤立闭合标签", input: "内容</think>尾部", expected: "内容尾部" },
+        StripThinkCase { name: "仅孤立闭合标签", input: "</think>", expected: "" },
+        StripThinkCase {
+            name: "孤立闭合标签带空白", input: "前文 </think> 后文", expected: "前文  后文"
+        },
     ];
 
     for case in test_vector {

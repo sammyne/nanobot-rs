@@ -515,7 +515,13 @@ impl Channel for Feishu {
         let chat_id = msg_event.message.chat_id.unwrap_or_default();
 
         // 使用 Markdown 格式化消息
-        let markdown_content = format!("**Nanobot Reply**\n\n{}", msg.content);
+        let markdown_content = if msg.is_tool_hint() {
+            // 工具提示：每个工具调用独占一行，包裹在代码块中
+            let tools: Vec<&str> = msg.content.split(", ").collect();
+            format!("```\n{}\n```", tools.join("\n"))
+        } else {
+            format!("**Nanobot Reply**\n\n{}", msg.content)
+        };
 
         // 构建消息内容 JSON
         let content_json = serde_json::json!({
