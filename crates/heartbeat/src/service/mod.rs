@@ -242,11 +242,16 @@ where
             return Ok(None);
         }
 
+        // Format current time for LLM context
+        let now = chrono::Local::now();
+        let time_str =
+            format!("Current Time: {} ({}) ({})", now.format("%Y-%m-%d %H:%M"), now.format("%A"), now.offset(),);
+
         // Prepare initial messages for LLM
         let mut messages = vec![
             Message::system("You are a heartbeat agent. Call the heartbeat tool to report your decision."),
             Message::user(format!(
-                "Review the following HEARTBEAT.md and decide whether there are active tasks.\n\n{content}"
+                "{time_str}\n\nReview the following HEARTBEAT.md and decide whether there are active tasks.\n\n{content}"
             )),
         ];
 
