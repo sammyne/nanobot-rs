@@ -18,7 +18,7 @@ use nanobot_agent::{AgentLoop, InboundMessage, OutboundMessage};
 use nanobot_channels::ChannelManager;
 use nanobot_config::{CONFIG_PATH, Config, HeartbeatConfig, resolve_config_path};
 use nanobot_cron::{CronJob, CronService};
-use nanobot_heartbeat::{HeartbeatService, OnExecuteCallback, OnNotifyCallback};
+use nanobot_heartbeat::{HeartbeatService, OnEvaluateCallback, OnExecuteCallback, OnNotifyCallback};
 use nanobot_provider::{AnyProvider, Provider};
 use nanobot_session::SessionInfo;
 use nanobot_subagent::SubagentManager;
@@ -121,7 +121,7 @@ impl GatewayCmd {
         );
 
         // 设置 cron 回调，复用同一个 AgentLoop
-        self.setup_cron_callback(&cron_service, agent_loop.clone(), outbound_tx.clone()).await;
+        self.setup_cron_callback(&cron_service, agent_loop.clone(), provider.clone(), outbound_tx.clone()).await;
 
         // 使用 Config 中的 channels 配置创建 ChannelManager
         let channel_manager = ChannelManager::new(config.channels.clone(), outbound_rx, inbound_tx)
@@ -348,9 +348,26 @@ impl GatewayCmd {
             }
         });
 
+        // 创建 on_evaluate 回调（后运行评估，决定是否通知）
+        let on_evaluate: OnEvaluateCallback = Arc::new({
+            let provider = provider.clone();
+            move |response: &str, task_context: &str| {
+                let provider = provider.clone();
+                let response = response.to_string();
+                let task_context = task_context.to_string();
+                Box::pin(async move { crate::evaluator::evaluate_response(&provider, &response, &task_context).await })
+            }
+        });
+
         // 创建 HeartbeatService（带回调）
-        let heartbeat_service =
-            HeartbeatService::new(workspace_path, provider, config, Some(on_execute), Some(on_notify));
+        let heartbeat_service = HeartbeatService::new(
+            workspace_path,
+            provider,
+            config,
+            Some(on_execute),
+            Some(on_evaluate),
+            Some(on_notify),
+        );
 
         Ok(heartbeat_service)
     }
@@ -360,10 +377,12 @@ impl GatewayCmd {
         &self,
         cron_service: &CronService,
         agent_loop: Arc<AgentLoop<AnyProvider>>,
+        provider: AnyProvider,
         outbound_tx: mpsc::Sender<OutboundMessage>,
     ) {
         let callback: nanobot_cron::JobCallback = Arc::new(move |job: CronJob| {
             let agent = agent_loop.clone();
+            let provider = provider.clone();
             let outbound_tx = outbound_tx.clone();
 
             Box::pin(async move {
@@ -387,9 +406,16 @@ impl GatewayCmd {
                         info!("Cron job '{}' executed successfully", job.id);
 
                         if payload.deliver && payload.to.is_some() {
-                            let msg = OutboundMessage::new(channel, chat_id, &response);
-                            if let Err(e) = outbound_tx.send(msg).await {
-                                error!("Failed to deliver cron job response: {}", e);
+                            let should_notify =
+                                crate::evaluator::evaluate_response(&provider, &response, &payload.message).await;
+
+                            if should_notify {
+                                let msg = OutboundMessage::new(channel, chat_id, &response);
+                                if let Err(e) = outbound_tx.send(msg).await {
+                                    error!("Failed to deliver cron job response: {e}");
+                                }
+                            } else {
+                                info!("Cron notification suppressed by post-run evaluation");
                             }
                         }
 

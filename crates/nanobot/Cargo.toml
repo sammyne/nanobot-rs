@@ -13,6 +13,10 @@ nanobot-cron.workspace = true
 nanobot-heartbeat.workspace = true
 nanobot-session.workspace = true
 nanobot-subagent.workspace = true
+nanobot-tools.workspace = true
+schemars.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 clap.workspace = true
 tokio = { workspace = true, features = ["signal"] }
 tokio-util = "0.7"
@@ -23,4 +27,6 @@ dialoguer.workspace = true
 chrono.workspace = true
 
 [dev-dependencies]
+async-trait.workspace = true
 tempfile.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

@@ -3,6 +3,7 @@
 //! 提供 nanobot 命令行工具的核心功能。
 
 pub mod commands;
+pub mod evaluator;
 pub mod logging;
 pub mod utils;
 
