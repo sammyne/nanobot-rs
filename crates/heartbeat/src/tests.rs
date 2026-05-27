@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use nanobot_config::HeartbeatConfig;
 
@@ -112,7 +113,7 @@ mod lifecycle_management {
         let provider = MockProvider::new();
         let workspace = PathBuf::from("/tmp/test_workspace");
 
-        let service = HeartbeatService::new(workspace, provider, config, None, None);
+        let service = HeartbeatService::new(workspace, provider, config, None, None, None);
 
         // Start the service in a background task
         let task = tokio::spawn(async move {
@@ -135,7 +136,7 @@ mod lifecycle_management {
         let provider = MockProvider::new();
         let workspace = PathBuf::from("/tmp/test_workspace");
 
-        let service = HeartbeatService::new(workspace, provider, config, None, None);
+        let service = HeartbeatService::new(workspace, provider, config, None, None, None);
 
         let result = service.start().await;
         assert!(matches!(result, Err(HeartbeatError::Disabled)));
@@ -185,7 +186,8 @@ mod two_phase_decision {
         let provider = MockProvider::new();
         let workspace = PathBuf::from("/tmp/nonexistent_workspace");
 
-        let service: HeartbeatService<MockProvider> = HeartbeatService::new(workspace, provider, config, None, None);
+        let service: HeartbeatService<MockProvider> =
+            HeartbeatService::new(workspace, provider, config, None, None, None);
 
         let result = service.tick().await;
         assert!(matches!(result, Ok(None)));
@@ -203,7 +205,8 @@ mod two_phase_decision {
         let content: &[u8] = b"";
         tokio::fs::write(&heartbeat_path, content).await.unwrap();
 
-        let service: HeartbeatService<MockProvider> = HeartbeatService::new(workspace, provider, config, None, None);
+        let service: HeartbeatService<MockProvider> =
+            HeartbeatService::new(workspace, provider, config, None, None, None);
 
         let result = service.tick().await;
         assert!(matches!(result, Ok(None)));
@@ -221,7 +224,8 @@ mod two_phase_decision {
         let content: &[u8] = b"# Tasks\n\n### Test Task\n- Description: Test\n- Priority: High\n- Status: Pending";
         tokio::fs::write(&heartbeat_path, content).await.unwrap();
 
-        let service: HeartbeatService<MockProvider> = HeartbeatService::new(workspace, provider, config, None, None);
+        let service: HeartbeatService<MockProvider> =
+            HeartbeatService::new(workspace, provider, config, None, None, None);
 
         // Note: This test requires the MockProvider to actually return a tool call
         // Since our current mock returns empty assistant response, the test will skip
@@ -241,7 +245,8 @@ mod exception_scenarios {
         let temp_dir = tempfile::tempdir().unwrap();
         let workspace = temp_dir.path().to_path_buf();
 
-        let service: HeartbeatService<MockProvider> = HeartbeatService::new(workspace, provider, config, None, None);
+        let service: HeartbeatService<MockProvider> =
+            HeartbeatService::new(workspace, provider, config, None, None, None);
 
         let result = service.tick().await;
         // The result should be Ok(None) when file not found (not an error)
@@ -326,7 +331,7 @@ mod parse_retry {
         tokio::fs::write(&heartbeat_path, b"# Tasks\n\n- Task 1").await.unwrap();
 
         let service: HeartbeatService<RetryMockProvider> =
-            HeartbeatService::new(workspace, provider, config, None, None);
+            HeartbeatService::new(workspace, provider, config, None, None, None);
 
         let result = service.tick().await;
         // Should succeed and return None (Skip action)
@@ -346,7 +351,7 @@ mod parse_retry {
         tokio::fs::write(&heartbeat_path, b"# Tasks\n\n- Task 1").await.unwrap();
 
         let service: HeartbeatService<RetryMockProvider> =
-            HeartbeatService::new(workspace, provider, config, None, None);
+            HeartbeatService::new(workspace, provider, config, None, None, None);
 
         let result = service.tick().await;
         // Should degrade to skip after max retries
@@ -366,10 +371,110 @@ mod parse_retry {
         tokio::fs::write(&heartbeat_path, b"# Tasks\n\n- Task 1").await.unwrap();
 
         let service: HeartbeatService<RetryMockProvider> =
-            HeartbeatService::new(workspace, provider, config, None, None);
+            HeartbeatService::new(workspace, provider, config, None, None, None);
 
         let result = service.tick().await;
         // Should degrade to skip (1 initial + 1 retry = 2 total attempts)
         assert!(matches!(result, Ok(None)));
+    }
+}
+
+mod post_run_evaluation {
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    use nanobot_provider::{Message, ToolCall};
+
+    use super::*;
+
+    /// MockProvider that returns a "run" action with a non-empty result.
+    #[derive(Clone)]
+    struct RunMockProvider;
+
+    #[async_trait::async_trait]
+    impl nanobot_provider::Provider for RunMockProvider {
+        fn bind_tools(&mut self, _tools: Vec<nanobot_tools::ToolDefinition>) {}
+
+        async fn chat(
+            &self,
+            _messages: &[Message],
+            _options: &nanobot_provider::Options,
+        ) -> Result<Message, anyhow::Error> {
+            Ok(Message::assistant_with_tools(
+                String::new(),
+                vec![ToolCall::new(
+                    "call_1",
+                    "heartbeat",
+                    serde_json::json!({"action": "run", "tasks": "check status"}),
+                )],
+            ))
+        }
+    }
+
+    #[tokio::test]
+    async fn tick_notifies_when_evaluator_says_yes() {
+        let config = HeartbeatConfig::default();
+        let provider = RunMockProvider;
+        let temp_dir = tempfile::tempdir().unwrap();
+        let workspace = temp_dir.path().to_path_buf();
+
+        tokio::fs::write(workspace.join("HEARTBEAT.md"), b"# Tasks\n- Check status").await.unwrap();
+
+        let notified = Arc::new(AtomicBool::new(false));
+
+        let on_execute: crate::OnExecuteCallback =
+            Arc::new(|_| Box::pin(async { Ok("Found 3 critical errors".to_string()) }));
+
+        let on_evaluate: crate::OnEvaluateCallback = Arc::new(|_, _| {
+            Box::pin(async { true }) // evaluator says: notify
+        });
+
+        let on_notify: crate::OnNotifyCallback = Arc::new({
+            let notified = notified.clone();
+            move |_| {
+                notified.store(true, Ordering::SeqCst);
+                Box::pin(async { Ok(()) })
+            }
+        });
+
+        let service =
+            HeartbeatService::new(workspace, provider, config, Some(on_execute), Some(on_evaluate), Some(on_notify));
+
+        let result = service.tick().await;
+        assert!(result.is_ok());
+        assert!(notified.load(Ordering::SeqCst), "on_notify should have been called");
+    }
+
+    #[tokio::test]
+    async fn tick_suppresses_when_evaluator_says_no() {
+        let config = HeartbeatConfig::default();
+        let provider = RunMockProvider;
+        let temp_dir = tempfile::tempdir().unwrap();
+        let workspace = temp_dir.path().to_path_buf();
+
+        tokio::fs::write(workspace.join("HEARTBEAT.md"), b"# Tasks\n- Check status").await.unwrap();
+
+        let notified = Arc::new(AtomicBool::new(false));
+
+        let on_execute: crate::OnExecuteCallback =
+            Arc::new(|_| Box::pin(async { Ok("All systems normal".to_string()) }));
+
+        let on_evaluate: crate::OnEvaluateCallback = Arc::new(|_, _| {
+            Box::pin(async { false }) // evaluator says: suppress
+        });
+
+        let on_notify: crate::OnNotifyCallback = Arc::new({
+            let notified = notified.clone();
+            move |_| {
+                notified.store(true, Ordering::SeqCst);
+                Box::pin(async { Ok(()) })
+            }
+        });
+
+        let service =
+            HeartbeatService::new(workspace, provider, config, Some(on_execute), Some(on_evaluate), Some(on_notify));
+
+        let result = service.tick().await;
+        assert!(result.is_ok());
+        assert!(!notified.load(Ordering::SeqCst), "on_notify should NOT have been called");
     }
 }

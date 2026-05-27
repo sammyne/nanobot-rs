@@ -14,3 +14,10 @@ pub type OnExecuteCallback =
 /// This callback is invoked after task execution completes with a non-empty result.
 pub type OnNotifyCallback =
     Arc<dyn Fn(&str) -> Pin<Box<dyn Future<Output = Result<(), anyhow::Error>> + Send>> + Send + Sync>;
+
+/// Callback function type for evaluating whether to notify
+///
+/// This callback is invoked after task execution to decide whether the result
+/// warrants notifying the user. Returns `true` to notify, `false` to suppress.
+/// Parameters: (response, task_context).
+pub type OnEvaluateCallback = Arc<dyn Fn(&str, &str) -> Pin<Box<dyn Future<Output = bool> + Send>> + Send + Sync>;

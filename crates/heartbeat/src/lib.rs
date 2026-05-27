@@ -7,7 +7,7 @@ mod error;
 mod service;
 
 // Re-export 主要类型
-pub use callback::{OnExecuteCallback, OnNotifyCallback};
+pub use callback::{OnEvaluateCallback, OnExecuteCallback, OnNotifyCallback};
 pub use error::HeartbeatError;
 pub use service::HeartbeatService;
 

@@ -9,7 +9,7 @@ use schemars::JsonSchema;
 use tokio::sync::RwLock;
 use tracing::{error, info, warn};
 
-use crate::{HeartbeatError, OnExecuteCallback, OnNotifyCallback};
+use crate::{HeartbeatError, OnEvaluateCallback, OnExecuteCallback, OnNotifyCallback};
 
 /// Action enum for heartbeat decision
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, JsonSchema)]
@@ -66,6 +66,8 @@ where
     config: HeartbeatConfig,
     /// Execute callback
     on_execute: Arc<RwLock<Option<OnExecuteCallback>>>,
+    /// Evaluate callback (decides whether to notify)
+    on_evaluate: Arc<RwLock<Option<OnEvaluateCallback>>>,
     /// Notify callback
     on_notify: Arc<RwLock<Option<OnNotifyCallback>>>,
 }
@@ -82,6 +84,7 @@ where
     /// * `provider` - LLM provider for decision making
     /// * `config` - Heartbeat configuration
     /// * `on_execute` - Optional callback for executing tasks
+    /// * `on_evaluate` - Optional callback for evaluating whether to notify
     /// * `on_notify` - Optional callback for notifying task results
     ///
     /// # Returns
@@ -92,6 +95,7 @@ where
         mut provider: P,
         config: HeartbeatConfig,
         on_execute: Option<OnExecuteCallback>,
+        on_evaluate: Option<OnEvaluateCallback>,
         on_notify: Option<OnNotifyCallback>,
     ) -> Self {
         // Bind heartbeat tool to provider once during initialization
@@ -102,6 +106,7 @@ where
             provider,
             config,
             on_execute: Arc::new(RwLock::new(on_execute)),
+            on_evaluate: Arc::new(RwLock::new(on_evaluate)),
             on_notify: Arc::new(RwLock::new(on_notify)),
         }
     }
@@ -178,10 +183,24 @@ where
                     return Ok(None);
                 }
 
-                // Notify callback if configured
-                let on_notify = self.on_notify.read().await;
-                if let Some(notify_callback) = on_notify.as_ref() {
-                    notify_callback(&result).await.map_err(HeartbeatError::Notify)?;
+                // Phase 3: Evaluate - decide whether to notify
+                let should_notify = {
+                    let on_evaluate = self.on_evaluate.read().await;
+                    if let Some(evaluate_callback) = on_evaluate.as_ref() {
+                        evaluate_callback(&result, &tasks).await
+                    } else {
+                        true // no evaluator configured, always notify
+                    }
+                };
+
+                // Phase 4: Notify callback if evaluation says yes
+                if should_notify {
+                    let on_notify = self.on_notify.read().await;
+                    if let Some(notify_callback) = on_notify.as_ref() {
+                        notify_callback(&result).await.map_err(HeartbeatError::Notify)?;
+                    }
+                } else {
+                    info!("Heartbeat notification suppressed by post-run evaluation");
                 }
 
                 Ok(Some(result))
