@@ -21,7 +21,7 @@ use nanobot_tools::{Tool, ToolContext, ToolRegistry};
 use tokio::sync::{Mutex, mpsc};
 use tracing::{debug, error, info, warn};
 
-use crate::cmd::{Command, HelpCmd, NewCmd, StopCmd};
+use crate::cmd::{Command, HelpCmd, NewCmd, RestartCmd, StopCmd};
 use crate::utils::parse_system_message_target;
 use crate::{InboundMessage, OutboundMessage};
 
@@ -570,6 +570,7 @@ impl<P: Provider> AgentLoop<P> {
                 let stop_cmd = StopCmd::new(self.subagent_manager.clone());
                 stop_cmd.run(msg, session_key.to_string()).await
             }
+            "restart" => RestartCmd.run(msg, session_key.to_string()).await,
             // 不支持的命令返回提示信息
             _ => Err(format!("❌ Unsupported command: /{cmd}\nTry /help for available commands")),
         };
