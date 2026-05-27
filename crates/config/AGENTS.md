@@ -15,7 +15,7 @@
 - **`ChannelsConfig`** -- `dingtalk: Option<DingTalkConfig>`, `feishu: Option<FeishuConfig>`, `send_tool_hints`, `send_progress`
 - **`GatewayConfig`** -- `host`, `port`, `heartbeat: Option<HeartbeatConfig>`
 - **`HeartbeatConfig`** -- `enabled`, `interval_s`
-- **`McpServerConfig`** (enum) -- `Stdio { command, args, env }` | `Http { url, headers, tool_timeout }`
+- **`McpServerConfig`** (enum) -- `Stdio { command, args, env, enabled_tools }` | `Http { url, headers, tool_timeout, enabled_tools }`；`enabled_tools()` 返回启用的工具名列表（空 = 全部启用）
 - **`ToolsConfig`** -- `mcp_servers`, `restrict_to_workspace`, `exec: Option<ExecToolConfig>`
 - **`ConfigError`** (enum) -- 配置错误
 - `resolve_config_path() -> Option<PathBuf>` -- 按优先级查找配置文件

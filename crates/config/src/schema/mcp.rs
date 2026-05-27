@@ -22,6 +22,9 @@ pub enum McpServerConfig {
         /// 环境变量
         #[serde(default)]
         env: HashMap<String, String>,
+        /// 仅启用的工具名称列表（空 = 全部启用）
+        #[serde(default)]
+        enabled_tools: Vec<String>,
     },
     /// HTTP/SSE 方式：连接远程 MCP 服务器
     Http {
@@ -33,6 +36,9 @@ pub enum McpServerConfig {
         /// 工具调用超时时间（秒）
         #[serde(default = "default_tool_timeout")]
         tool_timeout: u64,
+        /// 仅启用的工具名称列表（空 = 全部启用）
+        #[serde(default)]
+        enabled_tools: Vec<String>,
     },
 }
 
@@ -44,12 +50,17 @@ fn default_tool_timeout() -> u64 {
 impl McpServerConfig {
     /// 创建 Stdio 类型的配置
     pub fn stdio(command: impl Into<String>) -> Self {
-        Self::Stdio { command: command.into(), args: Vec::new(), env: HashMap::new() }
+        Self::Stdio { command: command.into(), args: Vec::new(), env: HashMap::new(), enabled_tools: Vec::new() }
     }
 
     /// 创建 HTTP 类型的配置
     pub fn http(url: impl Into<String>) -> Self {
-        Self::Http { url: url.into(), headers: HashMap::new(), tool_timeout: default_tool_timeout() }
+        Self::Http {
+            url: url.into(),
+            headers: HashMap::new(),
+            tool_timeout: default_tool_timeout(),
+            enabled_tools: Vec::new(),
+        }
     }
 
     /// 设置命令行参数（仅对 Stdio 类型有效）
@@ -91,6 +102,15 @@ impl McpServerConfig {
         match self {
             Self::Http { tool_timeout, .. } => std::time::Duration::from_secs(*tool_timeout),
             Self::Stdio { .. } => std::time::Duration::from_secs(default_tool_timeout()),
+        }
+    }
+
+    /// 获取启用的工具名称列表
+    ///
+    /// 空列表表示全部启用
+    pub fn enabled_tools(&self) -> &[String] {
+        match self {
+            Self::Stdio { enabled_tools, .. } | Self::Http { enabled_tools, .. } => enabled_tools,
         }
     }
 }
