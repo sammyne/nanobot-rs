@@ -105,7 +105,7 @@ impl Session {
     }
 
     /// Maximum characters for tool result before truncation.
-    const TOOL_RESULT_MAX_CHARS: usize = 500;
+    const TOOL_RESULT_MAX_CHARS: usize = 16_000;
 
     /// Save messages from a conversation turn (incremental append).
     ///
