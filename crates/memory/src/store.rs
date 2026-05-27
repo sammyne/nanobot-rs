@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use anyhow::Result;
 use nanobot_provider::{Message, Provider};
 use nanobot_tools::ToolDefinition;
+use serde::Deserialize;
 use serde_json::json;
 use tracing::{info, warn};
 
@@ -18,6 +19,15 @@ pub const MAX_CONSOLIDATION_ROUNDS: usize = 5;
 
 /// 连续失败多少次后降级为原文转储
 pub const MAX_FAILURES_BEFORE_RAW_ARCHIVE: usize = 3;
+
+/// save_memory 工具调用的参数结构
+#[derive(Debug, Deserialize)]
+struct SaveMemoryArgs {
+    /// 历史摘要条目
+    history_entry: String,
+    /// 更新后的长期记忆内容
+    memory_update: String,
+}
 
 /// Create the save_memory tool definition for LLM function calling.
 fn create_save_memory_tool() -> ToolDefinition {
@@ -303,31 +313,19 @@ impl MemoryStore {
         let save_memory_call =
             tool_calls.iter().find(|tc| tc.name == SAVE_MEMORY_TOOL).ok_or(MemoryError::NoToolCall)?;
 
-        // Parse arguments
-        let args = save_memory_call
-            .parse_arguments::<serde_json::Value>()
-            .map_err(|e| MemoryError::ToolParse(e.to_string()))?;
+        // Parse and validate arguments
+        let args: SaveMemoryArgs =
+            save_memory_call.parse_arguments().map_err(|e| MemoryError::ToolParse(e.to_string()))?;
 
-        // Extract history_entry
-        if let Some(entry) = args.get("history_entry") {
-            let entry_str = if entry.is_string() {
-                entry.as_str().unwrap_or_default().to_string()
-            } else {
-                serde_json::to_string(entry).unwrap_or_default()
-            };
-            self.append_history(&entry_str)?;
+        let entry = args.history_entry.trim().to_string();
+        if entry.is_empty() {
+            return Err(MemoryError::ToolParse("history_entry is empty after trimming".to_string()));
         }
 
-        // Extract memory_update
-        if let Some(update) = args.get("memory_update") {
-            let update_str = if update.is_string() {
-                update.as_str().unwrap_or_default().to_string()
-            } else {
-                serde_json::to_string(update).unwrap_or_default()
-            };
-            if update_str != current_memory {
-                self.write_long_term(&update_str)?;
-            }
+        // Write both files only after validation passes
+        self.append_history(&entry)?;
+        if args.memory_update != current_memory {
+            self.write_long_term(&args.memory_update)?;
         }
 
         info!("Memory consolidation completed: new last_consolidated={}", new_last_consolidated);
