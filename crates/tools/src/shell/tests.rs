@@ -60,3 +60,18 @@ fn security_guard_with_restrict_to_workspace() {
     // 路径遍历应被拒绝
     assert!(tool.security_guard("cat ../etc/passwd", &cwd).is_err());
 }
+
+#[test]
+fn security_guard_blocks_tilde_paths() {
+    let options = ExecToolOptions {
+        restrict_to_workspace: true,
+        workspace: Some(PathBuf::from("/tmp/workspace")),
+        ..Default::default()
+    };
+    let tool = ExecTool::new(options);
+    let cwd = PathBuf::from("/tmp/workspace");
+
+    // ~ 路径应被拦截（展开后不在 /tmp/workspace 内）
+    assert!(tool.security_guard("cat ~/.nanobot/config.json", &cwd).is_err());
+    assert!(tool.security_guard("cat ~/../../etc/passwd", &cwd).is_err());
+}

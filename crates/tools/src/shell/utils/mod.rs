@@ -32,10 +32,18 @@ fn extract_posix_absolute_paths(cmd: &str) -> Vec<String> {
     re.captures_iter(cmd).filter_map(|cap| cap.get(1).map(|m| m.as_str().to_string())).collect()
 }
 
+/// 从命令中提取 `~` 开头的路径
+fn extract_tilde_paths(cmd: &str) -> Vec<String> {
+    // 匹配 ~/path 或独立的 ~，但不匹配单词中间的 ~ (如 file~backup)
+    let re = Regex::new(r#"(?:^|[\s|>])(~(?:/[^\s"'>]*)?)"#).unwrap();
+    re.captures_iter(cmd).filter_map(|cap| cap.get(1).map(|m| m.as_str().to_string())).collect()
+}
+
 /// 从命令中提取所有绝对路径
 pub fn extract_absolute_paths(cmd: &str) -> Vec<String> {
     let mut paths = extract_windows_absolute_paths(cmd);
     paths.extend(extract_posix_absolute_paths(cmd));
+    paths.extend(extract_tilde_paths(cmd));
     paths
 }
 
