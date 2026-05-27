@@ -799,7 +799,7 @@ fn mcp_http_config() {
 
     let transport = McpServerConfig::http("http://localhost:3000/mcp").with_headers(headers.clone()).with_timeout(45);
 
-    if let McpServerConfig::Http { url, headers: h, tool_timeout } = &transport {
+    if let McpServerConfig::Http { url, headers: h, tool_timeout, .. } = &transport {
         assert_eq!(url, "http://localhost:3000/mcp");
         assert_eq!(h, &headers);
         assert_eq!(*tool_timeout, 45);

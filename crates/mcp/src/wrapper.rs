@@ -151,8 +151,8 @@ pub async fn connect(configs: HashMap<String, McpServerConfig>) -> Result<Vec<Mc
 
         // 根据配置类型连接服务器
         let service = match &config {
-            McpServerConfig::Stdio { command, args, env } => connect_stdio(&name, command, args, env).await?,
-            McpServerConfig::Http { url, headers, tool_timeout: _ } => connect_http(&name, url, headers).await?,
+            McpServerConfig::Stdio { command, args, env, .. } => connect_stdio(&name, command, args, env).await?,
+            McpServerConfig::Http { url, headers, .. } => connect_http(&name, url, headers).await?,
         };
 
         let service = Arc::new(service);
@@ -161,16 +161,28 @@ pub async fn connect(configs: HashMap<String, McpServerConfig>) -> Result<Vec<Mc
         // 列出工具
         let tools = peer.list_tools(Default::default()).await.map_err(|e| McpError::ToolListFailed(e.to_string()))?;
 
-        let tool_count = tools.tools.len();
+        let total_count = tools.tools.len();
         let tool_timeout = config.timeout_duration().as_secs();
+        let enabled = config.enabled_tools();
 
-        // 为每个工具创建包装器
+        // 为每个工具创建包装器（按 enabled_tools 过滤）
         for tool in tools.tools {
+            if !enabled.is_empty() && !enabled.iter().any(|t| t == tool.name.as_ref()) {
+                debug!("Skipping tool '{}' from server '{}' (not in enabledTools)", tool.name, name);
+                continue;
+            }
             let wrapper = McpToolWrapper::new(service.clone(), name.clone(), tool, tool_timeout)?;
             all_tools.push(wrapper);
         }
 
-        info!("Connected to MCP server '{}' and registered {} tools", name, tool_count);
+        let registered_count = all_tools.len();
+        if enabled.is_empty() {
+            info!("Connected to MCP server '{name}' and registered {total_count} tools");
+        } else {
+            info!(
+                "Connected to MCP server '{name}' and registered {registered_count}/{total_count} tools (filtered by enabledTools)"
+            );
+        }
     }
 
     info!("Successfully connected to all MCP servers, total tools: {}", all_tools.len());
