@@ -209,6 +209,7 @@ where
                 max_tokens: self.max_tokens as u16,
                 temperature: self.temperature,
                 reasoning_effort: None,
+                tool_choice: None,
             };
             let response = match self.provider.chat(&messages, &options).await {
                 Ok(r) => r,

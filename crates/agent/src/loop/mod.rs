@@ -152,6 +152,7 @@ impl<P: Provider> AgentLoop<P> {
             max_tokens: config.max_tokens as u16,
             temperature: config.temperature as f32,
             reasoning_effort: config.reasoning_effort,
+            tool_choice: None,
         };
         let context = ContextBuilder::new(config.workspace.clone(), consolidation_options)
             .expect("Failed to initialize ContextBuilder");
@@ -176,6 +177,7 @@ impl<P: Provider> AgentLoop<P> {
             max_tokens: self.config.max_tokens as u16,
             temperature: self.config.temperature as f32,
             reasoning_effort: self.config.reasoning_effort,
+            tool_choice: None,
         };
         let response = self.provider.chat(messages, &options).await?;
 

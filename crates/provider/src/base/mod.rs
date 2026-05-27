@@ -315,8 +315,19 @@ impl Message {
     }
 }
 
+/// 工具调用选择策略
+#[derive(Debug, Clone)]
+pub enum ToolChoice {
+    /// 模型自行决定是否调用工具
+    Auto,
+    /// 强制模型调用至少一个工具
+    Required,
+    /// 强制模型调用指定名称的工具
+    Named(String),
+}
+
 /// LLM 调用选项
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct Options {
     /// 最大生成 token 数
     pub max_tokens: u16,
@@ -326,11 +337,14 @@ pub struct Options {
 
     /// 推理力度（low/medium/high），用于启用思维模式
     pub reasoning_effort: Option<nanobot_config::ReasoningEffort>,
+
+    /// 工具调用选择策略（None = 不传，API 默认 auto）
+    pub tool_choice: Option<ToolChoice>,
 }
 
 impl Default for Options {
     fn default() -> Self {
-        Self { max_tokens: 4096, temperature: 0.7, reasoning_effort: None }
+        Self { max_tokens: 4096, temperature: 0.7, reasoning_effort: None, tool_choice: None }
     }
 }
 

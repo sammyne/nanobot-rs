@@ -11,5 +11,7 @@ mod openai;
 pub use anthropic::AnthropicLike;
 pub use any::AnyProvider;
 pub use auto_retry::AutoRetryProvider;
-pub use base::{ContentPart, Message, Options, Provider, ProviderError, ProviderResponse, ToolCall, UserContent};
+pub use base::{
+    ContentPart, Message, Options, Provider, ProviderError, ProviderResponse, ToolCall, ToolChoice, UserContent,
+};
 pub use openai::OpenAILike;
