@@ -41,6 +41,12 @@ pub enum ToolError {
     Io(String),
 }
 
+impl From<serde_json::Error> for ToolError {
+    fn from(e: serde_json::Error) -> Self {
+        Self::Validation { field: "params".to_string(), message: e.to_string() }
+    }
+}
+
 impl ToolError {
     /// 创建参数验证错误
     pub fn validation(field: impl Into<String>, message: impl Into<String>) -> Self {
@@ -129,28 +135,4 @@ pub trait Tool: Send + Sync {
             parameters: self.parameters().to_value(),
         }
     }
-}
-
-/// Helper: 验证必需参数
-pub fn require_param(params: &serde_json::Value, name: &str) -> Result<String, ToolError> {
-    params
-        .get(name)
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string())
-        .ok_or_else(|| ToolError::validation(name, format!("缺少必需参数: {name}")))
-}
-
-/// Helper: 获取可选参数
-pub fn optional_param(params: &serde_json::Value, name: &str) -> Option<String> {
-    params.get(name).and_then(|v| v.as_str()).map(|s| s.to_string())
-}
-
-/// Helper: 获取布尔参数（默认 false）
-pub fn bool_param(params: &serde_json::Value, name: &str) -> bool {
-    params.get(name).and_then(|v| v.as_bool()).unwrap_or(false)
-}
-
-/// Helper: 获取数值参数
-pub fn u64_param(params: &serde_json::Value, name: &str, default: u64) -> u64 {
-    params.get(name).and_then(|v| v.as_u64()).unwrap_or(default)
 }

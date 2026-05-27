@@ -18,7 +18,7 @@ use tokio::time::timeout;
 use tracing::{debug, info};
 use utils::{add_envs, detect_path_traversal, extract_absolute_paths, truncate_output};
 
-use crate::core::{Tool, ToolContext, ToolError, ToolResult, optional_param, require_param, u64_param};
+use crate::core::{Tool, ToolContext, ToolError, ToolResult};
 
 /// Exec 执行结果
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
@@ -77,20 +77,14 @@ pub struct ExecTool {
 
 /// Exec 参数结构
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase")]
 pub struct ExecArgs {
     /// 要执行的 shell 命令
     pub command: String,
     /// 工作目录（可选，默认为 workspace）
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cwd: Option<String>,
-    /// 超时时间（毫秒，可选，默认60秒）
-    #[serde(default = "default_timeout_ms")]
-    pub timeout_ms: u64,
-}
-
-fn default_timeout_ms() -> u64 {
-    60000
+    /// 超时时间（毫秒，可选，默认使用配置的 timeout）
+    pub timeout_ms: Option<u64>,
 }
 
 /// Lazy-initialized global schema for ExecArgs
@@ -207,22 +201,24 @@ impl Tool for ExecTool {
     }
 
     async fn execute(&self, _ctx: &ToolContext, params: serde_json::Value) -> ToolResult {
-        let command = require_param(&params, "command")?;
-        let cwd = optional_param(&params, "cwd");
-        let timeout_ms = u64_param(&params, "timeout_ms", self.options.timeout * 1000);
+        let args: ExecArgs = serde_json::from_value(params)?;
+        let timeout_ms = args.timeout_ms.unwrap_or(self.options.timeout * 1000);
 
-        debug!("执行 Shell 命令: {}", command);
+        debug!("执行 Shell 命令: {}", args.command);
 
         // 解析工作目录
-        let working_dir =
-            cwd.map(PathBuf::from).or_else(|| self.options.workspace.clone()).unwrap_or_else(|| PathBuf::from("."));
+        let working_dir = args
+            .cwd
+            .map(PathBuf::from)
+            .or_else(|| self.options.workspace.clone())
+            .unwrap_or_else(|| PathBuf::from("."));
 
         // 安全守卫检查
-        self.security_guard(&command, &working_dir)?;
+        self.security_guard(&args.command, &working_dir)?;
 
         // 构建命令
         let mut cmd = Command::new("sh");
-        cmd.arg("-c").arg(&command).current_dir(&working_dir).stdout(Stdio::piped()).stderr(Stdio::piped());
+        cmd.arg("-c").arg(&args.command).current_dir(&working_dir).stdout(Stdio::piped()).stderr(Stdio::piped());
 
         // 应用 PATH 环境变量扩展
         add_envs(&mut cmd, &self.options.path_append);
@@ -243,7 +239,7 @@ impl Tool for ExecTool {
         let stdout = truncate_output(stdout, MAX_OUTPUT);
         let stderr = truncate_output(stderr, MAX_OUTPUT);
 
-        info!("Shell 命令完成: {} (exit_code={})", command, output.status.code().unwrap_or(-1));
+        info!("Shell 命令完成: {} (exit_code={})", args.command, output.status.code().unwrap_or(-1));
 
         let result = ExecResult { exit_code: output.status.code().unwrap_or(-1), stdout, stderr };
 

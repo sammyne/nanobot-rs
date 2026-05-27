@@ -31,7 +31,9 @@ async fn read_file_success() {
     let result: ToolResult = tool.execute(&ctx, json!({"path": "test.txt"})).await;
 
     assert!(result.is_ok());
-    assert_eq!(result.unwrap(), test_content);
+    let content = result.unwrap();
+    assert!(content.contains("1: Hello, World!"), "should contain line-numbered content: {content}");
+    assert!(content.contains("2: This is a test file."), "should contain line 2: {content}");
 }
 
 /// 读取不存在的文件

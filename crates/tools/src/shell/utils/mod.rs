@@ -5,12 +5,24 @@
 use nanobot_utils::strings::truncate;
 use regex::Regex;
 
-/// 截断输出
+/// 截断输出（head+tail 模式）
+///
+/// 保留前 `max_len/2` 和后 `max_len/2` 字符，中间用省略提示连接。
+/// 确保错误信息（通常在尾部）不被丢失。
 pub fn truncate_output(s: String, max_len: usize) -> String {
-    match truncate(&s, max_len) {
-        Some(truncated) => format!("{}...(truncated, {} bytes total)", truncated, s.len()),
-        None => s,
+    if s.len() <= max_len {
+        return s;
     }
+
+    let half = max_len / 2;
+    let head = truncate(&s, half).unwrap_or(&s);
+
+    // 从尾部取 half 个字符
+    let tail_start = s.char_indices().rev().nth(half.saturating_sub(1)).map(|(i, _)| i).unwrap_or(0);
+    let tail = &s[tail_start..];
+
+    let omitted = s.chars().count() - half * 2;
+    format!("{head}\n...(truncated {omitted} chars)...\n{tail}")
 }
 
 /// 检测路径遍历尝试
