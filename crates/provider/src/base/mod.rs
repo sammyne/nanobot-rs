@@ -31,6 +31,53 @@ impl ProviderError {
     pub fn is_transient(&self) -> bool {
         matches!(self, Self::Timeout | Self::RateLimit(_) | Self::ServerError(_))
     }
+
+    /// 判断错误是否为图片不支持错误
+    ///
+    /// 基于错误消息中的关键词检测，用于触发移除图片后重试。
+    pub fn is_image_unsupported(&self) -> bool {
+        const MARKERS: &[&str] = &[
+            "image_url is only supported",
+            "does not support image",
+            "images are not supported",
+            "image input is not supported",
+            "image_url is not supported",
+            "unsupported image input",
+        ];
+
+        let Self::Api(msg) = self else { return false };
+        let lower = msg.to_lowercase();
+        MARKERS.iter().any(|m| lower.contains(m))
+    }
+}
+
+/// 将消息中的图片内容替换为 `[image omitted]` 占位符
+///
+/// 遍历所有消息，将 `ContentPart::Image` 替换为文本占位符。
+/// 如果消息中没有图片，返回 `None`。
+pub fn strip_images(messages: &[Message]) -> Option<Vec<Message>> {
+    let mut found = false;
+    let result: Vec<Message> = messages
+        .iter()
+        .map(|msg| match msg {
+            Message::User { content: UserContent::Parts(parts) } => {
+                let new_parts: Vec<ContentPart> = parts
+                    .iter()
+                    .map(|p| match p {
+                        ContentPart::Image { .. } => {
+                            found = true;
+                            ContentPart::Text { text: "[image omitted]".to_string() }
+                        }
+                        other => other.clone(),
+                    })
+                    .collect();
+                Message::User { content: UserContent::Parts(new_parts) }
+            }
+            other => other.clone(),
+        })
+        .collect();
+
+    if found { Some(result) } else { None }
 }
 
 /// 工具调用请求
