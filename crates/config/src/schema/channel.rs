@@ -68,6 +68,10 @@ pub struct FeishuConfig {
     /// 收到消息时添加的表情回应类型（为空则禁用）
     #[serde(default = "default_react_emoji")]
     pub react_emoji: String,
+
+    /// 是否以引用回复方式发送消息（引用气泡）
+    #[serde(default)]
+    pub reply_to_message: bool,
 }
 
 impl FeishuConfig {

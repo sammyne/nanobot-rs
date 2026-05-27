@@ -16,6 +16,7 @@ async fn feishu_channel_creation() {
         app_secret: "test_app_secret".to_string(),
         allow_from: Vec::new(),
         react_emoji: "THUMBSUP".to_string(),
+        reply_to_message: false,
     };
 
     let (inbound_tx, _inbound_rx) = mpsc::channel::<crate::messages::InboundMessage>(16);
@@ -33,6 +34,7 @@ async fn feishu_channel_validation_empty_app_id() {
         app_secret: "test_app_secret".to_string(),
         allow_from: Vec::new(),
         react_emoji: "THUMBSUP".to_string(),
+        reply_to_message: false,
     };
 
     let (inbound_tx, _inbound_rx) = mpsc::channel::<crate::messages::InboundMessage>(16);
@@ -50,6 +52,7 @@ async fn feishu_channel_validation_empty_app_secret() {
         app_secret: "".to_string(),
         allow_from: Vec::new(),
         react_emoji: "THUMBSUP".to_string(),
+        reply_to_message: false,
     };
 
     let (inbound_tx, _inbound_rx) = mpsc::channel::<crate::messages::InboundMessage>(16);
@@ -67,6 +70,7 @@ async fn permission_check_with_whitelist() {
         app_secret: "test_app_secret".to_string(),
         allow_from: vec!["user1".to_string(), "user2".to_string()],
         react_emoji: "THUMBSUP".to_string(),
+        reply_to_message: false,
     };
 
     let (inbound_tx, _inbound_rx) = mpsc::channel::<crate::messages::InboundMessage>(16);
@@ -90,6 +94,7 @@ async fn permission_check_empty_whitelist_denies() {
         app_secret: "test_app_secret".to_string(),
         allow_from: Vec::new(),
         react_emoji: "THUMBSUP".to_string(),
+        reply_to_message: false,
     };
 
     let (inbound_tx, _inbound_rx) = mpsc::channel::<crate::messages::InboundMessage>(16);
@@ -109,6 +114,7 @@ async fn permission_check_wildcard_allows_all() {
         app_secret: "test_app_secret".to_string(),
         allow_from: vec!["*".to_string()],
         react_emoji: "THUMBSUP".to_string(),
+        reply_to_message: false,
     };
 
     let (inbound_tx, _inbound_rx) = mpsc::channel::<crate::messages::InboundMessage>(16);
@@ -128,6 +134,7 @@ async fn channel_name() {
         app_secret: "test_app_secret".to_string(),
         allow_from: Vec::new(),
         react_emoji: "THUMBSUP".to_string(),
+        reply_to_message: false,
     };
 
     let (inbound_tx, _inbound_rx) = mpsc::channel::<crate::messages::InboundMessage>(16);
@@ -145,6 +152,7 @@ async fn channel_running_state() {
         app_secret: "test_app_secret".to_string(),
         allow_from: Vec::new(),
         react_emoji: "THUMBSUP".to_string(),
+        reply_to_message: false,
     };
 
     let (inbound_tx, _inbound_rx) = mpsc::channel::<crate::messages::InboundMessage>(16);
@@ -164,6 +172,7 @@ async fn message_context_save_and_retrieve() {
         app_secret: "test_app_secret".to_string(),
         allow_from: Vec::new(),
         react_emoji: "THUMBSUP".to_string(),
+        reply_to_message: false,
     };
 
     let (inbound_tx, _inbound_rx) = mpsc::channel::<crate::messages::InboundMessage>(16);
@@ -212,6 +221,7 @@ async fn channel_clone() {
         app_secret: "test_app_secret".to_string(),
         allow_from: Vec::new(),
         react_emoji: "THUMBSUP".to_string(),
+        reply_to_message: false,
     };
 
     let (inbound_tx, _inbound_rx) = mpsc::channel::<crate::messages::InboundMessage>(16);
@@ -234,6 +244,7 @@ async fn message_context_not_found() {
         app_secret: "test_app_secret".to_string(),
         allow_from: Vec::new(),
         react_emoji: "THUMBSUP".to_string(),
+        reply_to_message: false,
     };
 
     let (inbound_tx, _inbound_rx) = mpsc::channel::<crate::messages::InboundMessage>(16);
@@ -256,6 +267,7 @@ async fn feishu_config_serialization() {
         app_secret: "test_app_secret".to_string(),
         allow_from: vec!["user1".to_string(), "user2".to_string()],
         react_emoji: "THUMBSUP".to_string(),
+        reply_to_message: false,
     };
 
     // 序列化
