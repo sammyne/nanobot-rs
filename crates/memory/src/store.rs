@@ -47,20 +47,22 @@ pub struct MemoryStore {
     memory_file: PathBuf,
     /// Path to HISTORY.md file
     history_file: PathBuf,
+    /// LLM options for consolidation calls
+    options: nanobot_provider::Options,
 }
 
 impl MemoryStore {
     /// Create a new MemoryStore instance.
     ///
     /// Creates the memory/ directory under the workspace if it doesn't exist.
-    pub fn new(workspace: PathBuf) -> Result<Self, MemoryError> {
+    pub fn new(workspace: PathBuf, options: nanobot_provider::Options) -> Result<Self, MemoryError> {
         let memory_dir = workspace.join("memory");
         std::fs::create_dir_all(&memory_dir)?;
 
         let memory_file = memory_dir.join("MEMORY.md");
         let history_file = memory_dir.join("HISTORY.md");
 
-        Ok(Self { memory_file, history_file })
+        Ok(Self { memory_file, history_file, options })
     }
 
     /// Read long-term memory content from MEMORY.md.
@@ -280,12 +282,11 @@ impl MemoryStore {
         provider.bind_tools(vec![create_save_memory_tool()]);
 
         // Send LLM request
-        let options = nanobot_provider::Options::default();
         let response = provider
             .chat(&[
                 Message::system("You are a memory consolidation agent. Call the save_memory tool with your consolidation of the conversation."),
                 Message::user(&prompt),
-            ], &options)
+            ], &self.options)
             .await
             .map_err(|e| MemoryError::LlmApi(e.to_string()))?;
 

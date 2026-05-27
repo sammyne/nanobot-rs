@@ -5,7 +5,7 @@
 ## 关键类型
 
 - **`MemoryStore`** -- 管理 `memory_file`（MEMORY.md）和 `history_file`（HISTORY.md）
-  - `new(workspace)` -- 创建 memory/ 目录
+  - `new(workspace, options)` -- 创建 memory/ 目录，存储 LLM 调用选项
   - `read_long_term() -> Result<String>` -- 读取 MEMORY.md
   - `write_long_term(content)` -- 写入 MEMORY.md
   - `append_history(entry)` -- 追加到 HISTORY.md

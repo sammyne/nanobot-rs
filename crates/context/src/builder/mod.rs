@@ -35,9 +35,9 @@ pub struct ContextBuilder {
 }
 
 impl ContextBuilder {
-    pub fn new(workspace: PathBuf) -> Result<Self, ContextError> {
+    pub fn new(workspace: PathBuf, options: nanobot_provider::Options) -> Result<Self, ContextError> {
         let workspace_canonical = workspace.canonicalize()?;
-        let memory = Arc::new(MemoryStore::new(workspace_canonical.clone())?);
+        let memory = Arc::new(MemoryStore::new(workspace_canonical.clone(), options)?);
         let skills = SkillsLoader::new(workspace_canonical.clone());
 
         info!("ContextBuilder initialized for workspace: {}", workspace_canonical.display());

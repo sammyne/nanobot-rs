@@ -21,20 +21,20 @@ fn create_test_workspace(files: &[(&str, &str)]) -> TempDir {
 #[test]
 fn context_builder_initializes_with_valid_workspace() {
     let workspace = create_test_workspace(&[]);
-    let result = ContextBuilder::new(workspace.path().to_path_buf());
+    let result = ContextBuilder::new(workspace.path().to_path_buf(), nanobot_provider::Options::default());
     assert!(result.is_ok(), "Should create ContextBuilder with valid workspace");
 }
 
 #[test]
 fn context_builder_rejects_nonexistent_workspace() {
-    let result = ContextBuilder::new(PathBuf::from("/nonexistent/path"));
+    let result = ContextBuilder::new(PathBuf::from("/nonexistent/path"), nanobot_provider::Options::default());
     assert!(result.is_err(), "Should reject non-existent workspace");
 }
 
 #[test]
 fn core_identity_contains_required_info() {
     let workspace = create_test_workspace(&[]);
-    let builder = ContextBuilder::new(workspace.path().to_path_buf()).unwrap();
+    let builder = ContextBuilder::new(workspace.path().to_path_buf(), nanobot_provider::Options::default()).unwrap();
     let identity = builder.build_core_identity();
 
     assert!(identity.contains("# nanobot"), "Should include nanobot header");
@@ -48,7 +48,7 @@ fn core_identity_contains_required_info() {
 #[test]
 fn system_prompt_contains_core_identity() {
     let workspace = create_test_workspace(&[]);
-    let builder = ContextBuilder::new(workspace.path().to_path_buf()).unwrap();
+    let builder = ContextBuilder::new(workspace.path().to_path_buf(), nanobot_provider::Options::default()).unwrap();
     let prompt = builder.build_system_prompt().unwrap();
 
     assert!(prompt.contains("# nanobot"), "Should include core identity");
@@ -64,7 +64,7 @@ fn system_prompt_uses_separator_with_memory() {
     fs::create_dir_all(&memory_dir).expect("Failed to create memory dir");
     fs::write(memory_dir.join("MEMORY.md"), "# Test Memory\nSome memory content").expect("Failed to write memory");
 
-    let builder = ContextBuilder::new(workspace.path().to_path_buf()).unwrap();
+    let builder = ContextBuilder::new(workspace.path().to_path_buf(), nanobot_provider::Options::default()).unwrap();
     let prompt = builder.build_system_prompt().unwrap();
 
     assert!(prompt.contains("# nanobot"), "Should include core identity");
@@ -75,7 +75,7 @@ fn system_prompt_uses_separator_with_memory() {
 #[test]
 fn runtime_context_injects_time() {
     let workspace = create_test_workspace(&[]);
-    let builder = ContextBuilder::new(workspace.path().to_path_buf()).unwrap();
+    let builder = ContextBuilder::new(workspace.path().to_path_buf(), nanobot_provider::Options::default()).unwrap();
 
     let messages = builder.build_messages(&[], "Hello, assistant!", None, None, None).unwrap();
     let user_content = &messages[1].content();
@@ -89,7 +89,7 @@ fn runtime_context_injects_time() {
 #[test]
 fn runtime_context_injects_channel_info() {
     let workspace = create_test_workspace(&[]);
-    let builder = ContextBuilder::new(workspace.path().to_path_buf()).unwrap();
+    let builder = ContextBuilder::new(workspace.path().to_path_buf(), nanobot_provider::Options::default()).unwrap();
 
     let messages = builder.build_messages(&[], "Hello", None, Some("telegram"), Some("chat-123")).unwrap();
     let user_content = &messages[1].content();
@@ -101,7 +101,7 @@ fn runtime_context_injects_channel_info() {
 #[test]
 fn image_encoding_returns_none_for_missing_file() {
     let workspace = create_test_workspace(&[]);
-    let builder = ContextBuilder::new(workspace.path().to_path_buf()).unwrap();
+    let builder = ContextBuilder::new(workspace.path().to_path_buf(), nanobot_provider::Options::default()).unwrap();
 
     let path = PathBuf::from("/nonexistent/image.png");
     let messages = builder.build_messages(&[], "Hello", Some(&[path]), None, None).unwrap();
@@ -115,7 +115,7 @@ fn image_encoding_returns_none_for_missing_file() {
 #[test]
 fn image_encoding_returns_none_for_non_image() {
     let workspace = create_test_workspace(&[("test.txt", "Not an image")]);
-    let builder = ContextBuilder::new(workspace.path().to_path_buf()).unwrap();
+    let builder = ContextBuilder::new(workspace.path().to_path_buf(), nanobot_provider::Options::default()).unwrap();
 
     let path = workspace.path().join("test.txt");
     let messages = builder.build_messages(&[], "Hello", Some(&[path]), None, None).unwrap();
@@ -129,7 +129,7 @@ fn image_encoding_returns_none_for_non_image() {
 #[test]
 fn message_building_creates_system_and_user() {
     let workspace = create_test_workspace(&[]);
-    let builder = ContextBuilder::new(workspace.path().to_path_buf()).unwrap();
+    let builder = ContextBuilder::new(workspace.path().to_path_buf(), nanobot_provider::Options::default()).unwrap();
 
     let messages = builder.build_messages(&[], "Hello", None, None, None).unwrap();
 
@@ -143,7 +143,7 @@ fn message_building_creates_system_and_user() {
 #[test]
 fn message_building_includes_history() {
     let workspace = create_test_workspace(&[]);
-    let builder = ContextBuilder::new(workspace.path().to_path_buf()).unwrap();
+    let builder = ContextBuilder::new(workspace.path().to_path_buf(), nanobot_provider::Options::default()).unwrap();
 
     let history = vec![Message::user("Previous question"), Message::assistant("Previous answer")];
 
@@ -185,7 +185,7 @@ fn bootstrap_files_loads_all_files() {
         ("IDENTITY.md", "This is the IDENTITY.md content"),
     ];
     let workspace = create_test_workspace(&files);
-    let builder = ContextBuilder::new(workspace.path().to_path_buf()).unwrap();
+    let builder = ContextBuilder::new(workspace.path().to_path_buf(), nanobot_provider::Options::default()).unwrap();
 
     let bootstrap = builder.load_bootstrap_files();
 
@@ -203,7 +203,7 @@ fn bootstrap_files_handles_missing_files() {
     // Only create AGENTS.md, leave others missing
     let files = vec![("AGENTS.md", "AGENTS content")];
     let workspace = create_test_workspace(&files);
-    let builder = ContextBuilder::new(workspace.path().to_path_buf()).unwrap();
+    let builder = ContextBuilder::new(workspace.path().to_path_buf(), nanobot_provider::Options::default()).unwrap();
 
     let bootstrap = builder.load_bootstrap_files();
 
@@ -221,7 +221,7 @@ fn bootstrap_files_skips_empty_files() {
         ("USER.md", ""),           // Empty
     ];
     let workspace = create_test_workspace(&files);
-    let builder = ContextBuilder::new(workspace.path().to_path_buf()).unwrap();
+    let builder = ContextBuilder::new(workspace.path().to_path_buf(), nanobot_provider::Options::default()).unwrap();
 
     let bootstrap = builder.load_bootstrap_files();
 
@@ -237,7 +237,7 @@ fn bootstrap_files_returns_empty_when_no_valid_files() {
         ("USER.md", ""),           // Empty
     ];
     let workspace = create_test_workspace(&files);
-    let builder = ContextBuilder::new(workspace.path().to_path_buf()).unwrap();
+    let builder = ContextBuilder::new(workspace.path().to_path_buf(), nanobot_provider::Options::default()).unwrap();
 
     let bootstrap = builder.load_bootstrap_files();
 
@@ -248,7 +248,7 @@ fn bootstrap_files_returns_empty_when_no_valid_files() {
 fn bootstrap_files_handles_io_errors() {
     let files = vec![("AGENTS.md", "AGENTS content")];
     let workspace = create_test_workspace(&files);
-    let builder = ContextBuilder::new(workspace.path().to_path_buf()).unwrap();
+    let builder = ContextBuilder::new(workspace.path().to_path_buf(), nanobot_provider::Options::default()).unwrap();
 
     let bootstrap = builder.load_bootstrap_files();
 
@@ -260,7 +260,7 @@ fn bootstrap_files_handles_io_errors() {
 fn bootstrap_files_maintains_order() {
     let files = vec![("AGENTS.md", "1"), ("SOUL.md", "2"), ("USER.md", "3"), ("TOOLS.md", "4"), ("IDENTITY.md", "5")];
     let workspace = create_test_workspace(&files);
-    let builder = ContextBuilder::new(workspace.path().to_path_buf()).unwrap();
+    let builder = ContextBuilder::new(workspace.path().to_path_buf(), nanobot_provider::Options::default()).unwrap();
 
     let bootstrap = builder.load_bootstrap_files();
 
@@ -281,7 +281,7 @@ fn bootstrap_files_maintains_order() {
 fn system_prompt_includes_bootstrap_files() {
     let files = vec![("AGENTS.md", "Bootstrap content")];
     let workspace = create_test_workspace(&files);
-    let builder = ContextBuilder::new(workspace.path().to_path_buf()).unwrap();
+    let builder = ContextBuilder::new(workspace.path().to_path_buf(), nanobot_provider::Options::default()).unwrap();
 
     let prompt = builder.build_system_prompt().unwrap();
 
@@ -294,7 +294,7 @@ fn system_prompt_includes_bootstrap_files() {
 fn system_prompt_uses_separator_with_bootstrap_files() {
     let files = vec![("AGENTS.md", "Bootstrap content")];
     let workspace = create_test_workspace(&files);
-    let builder = ContextBuilder::new(workspace.path().to_path_buf()).unwrap();
+    let builder = ContextBuilder::new(workspace.path().to_path_buf(), nanobot_provider::Options::default()).unwrap();
 
     let prompt = builder.build_system_prompt().unwrap();
 
@@ -316,7 +316,7 @@ fn system_prompt_skips_separator_without_bootstrap_files() {
     fs::create_dir_all(&memory_dir).expect("Failed to create memory dir");
     fs::write(memory_dir.join("MEMORY.md"), "Memory content").expect("Failed to write memory");
 
-    let builder = ContextBuilder::new(workspace.path().to_path_buf()).unwrap();
+    let builder = ContextBuilder::new(workspace.path().to_path_buf(), nanobot_provider::Options::default()).unwrap();
     let prompt = builder.build_system_prompt().unwrap();
 
     assert!(prompt.contains("# nanobot"), "Should include core identity");
@@ -338,7 +338,7 @@ fn system_prompt_assembly_order() {
     fs::create_dir_all(&memory_dir).expect("Failed to create memory dir");
     fs::write(memory_dir.join("MEMORY.md"), "Memory section").expect("Failed to write memory");
 
-    let builder = ContextBuilder::new(workspace.path().to_path_buf()).unwrap();
+    let builder = ContextBuilder::new(workspace.path().to_path_buf(), nanobot_provider::Options::default()).unwrap();
     let prompt = builder.build_system_prompt().unwrap();
 
     // Verify all sections exist
@@ -378,7 +378,7 @@ fn end_to_end_full_bootstrap_integration() {
     fs::write(memory_dir.join("MEMORY.md"), "# Memory\n\nImportant information stored here.")
         .expect("Failed to write memory");
 
-    let builder = ContextBuilder::new(workspace.path().to_path_buf()).unwrap();
+    let builder = ContextBuilder::new(workspace.path().to_path_buf(), nanobot_provider::Options::default()).unwrap();
     let prompt = builder.build_system_prompt().unwrap();
 
     // Verify all bootstrap sections are present
@@ -426,7 +426,7 @@ fn end_to_end_empty_bootstrap_scenario() {
     fs::create_dir_all(&memory_dir).expect("Failed to create memory dir");
     fs::write(memory_dir.join("MEMORY.md"), "Memory content").expect("Failed to write memory");
 
-    let builder = ContextBuilder::new(workspace.path().to_path_buf()).unwrap();
+    let builder = ContextBuilder::new(workspace.path().to_path_buf(), nanobot_provider::Options::default()).unwrap();
     let prompt = builder.build_system_prompt().unwrap();
 
     // Should still build successfully without bootstrap files
@@ -441,7 +441,7 @@ fn end_to_output_format_consistency() {
     // Verify that the output format matches expectations
     let files = vec![("AGENTS.md", "Test content")];
     let workspace = create_test_workspace(&files);
-    let builder = ContextBuilder::new(workspace.path().to_path_buf()).unwrap();
+    let builder = ContextBuilder::new(workspace.path().to_path_buf(), nanobot_provider::Options::default()).unwrap();
 
     let bootstrap = builder.load_bootstrap_files();
 

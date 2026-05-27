@@ -148,7 +148,13 @@ impl<P: Provider> AgentLoop<P> {
         let sessions = Arc::new(SessionManager::new(config.workspace.clone()));
 
         // Initialize ContextBuilder (which contains MemoryStore)
-        let context = ContextBuilder::new(config.workspace.clone()).expect("Failed to initialize ContextBuilder");
+        let consolidation_options = nanobot_provider::Options {
+            max_tokens: config.max_tokens as u16,
+            temperature: config.temperature as f32,
+            reasoning_effort: config.reasoning_effort,
+        };
+        let context = ContextBuilder::new(config.workspace.clone(), consolidation_options)
+            .expect("Failed to initialize ContextBuilder");
 
         Ok(Self {
             provider,
