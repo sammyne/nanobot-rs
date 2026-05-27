@@ -636,6 +636,122 @@ fn env_empty_value_ignored() {
     });
 }
 
+// ==================== EmailConfig 测试 ====================
+
+#[test]
+fn email_config_default_values() {
+    let config = channel::EmailConfig::default();
+    assert!(!config.enabled);
+    assert!(!config.consent_granted);
+    assert_eq!(config.imap.port, 993);
+    assert!(config.imap.use_ssl);
+    assert!(!config.imap.use_tls);
+    assert_eq!(config.imap.mailbox, "INBOX");
+    assert_eq!(config.smtp.port, 587);
+    assert!(config.smtp.use_tls);
+    assert!(!config.smtp.use_ssl);
+    assert!(config.auto_reply_enabled);
+    assert_eq!(config.poll_interval_seconds, 30);
+    assert!(config.mark_seen);
+    assert_eq!(config.max_body_chars, 12000);
+    assert_eq!(config.subject_prefix, "Re: ");
+    assert!(config.allow_from.is_empty());
+    assert!(config.verify_dkim);
+    assert!(config.verify_spf);
+}
+
+#[test]
+fn email_config_camel_case_serde() {
+    let json = r#"{
+        "enabled": true,
+        "consentGranted": true,
+        "imap": {
+            "host": "imap.qq.com",
+            "port": 993,
+            "username": "test@qq.com",
+            "password": "authcode123"
+        },
+        "smtp": {
+            "host": "smtp.qq.com",
+            "port": 465,
+            "username": "test@qq.com",
+            "password": "authcode123",
+            "useSsl": true,
+            "useTls": false
+        },
+        "verifyDkim": false,
+        "pollIntervalSeconds": 60
+    }"#;
+    let config: channel::EmailConfig = serde_json::from_str(json).unwrap();
+    assert!(config.enabled);
+    assert!(config.consent_granted);
+    assert_eq!(config.imap.host, "imap.qq.com");
+    assert_eq!(config.smtp.port, 465);
+    assert!(config.smtp.use_ssl);
+    assert!(!config.smtp.use_tls);
+    assert!(!config.verify_dkim);
+    assert_eq!(config.poll_interval_seconds, 60);
+}
+
+#[test]
+fn email_config_validate_missing_fields() {
+    // All required fields empty
+    let config = channel::EmailConfig { enabled: true, ..Default::default() };
+    let err = config.validate().unwrap_err();
+    assert!(err.to_string().contains("imap.host"));
+
+    // Only imap.host set
+    let config = channel::EmailConfig {
+        enabled: true,
+        imap: channel::ImapConfig { host: "imap.qq.com".to_string(), ..Default::default() },
+        ..Default::default()
+    };
+    let err = config.validate().unwrap_err();
+    assert!(err.to_string().contains("imap.username"));
+
+    // All required fields set
+    let config = channel::EmailConfig {
+        enabled: true,
+        imap: channel::ImapConfig {
+            host: "imap.qq.com".to_string(),
+            username: "user@qq.com".to_string(),
+            password: "pass".to_string(),
+            ..Default::default()
+        },
+        smtp: channel::SmtpConfig {
+            host: "smtp.qq.com".to_string(),
+            username: "user@qq.com".to_string(),
+            password: "pass".to_string(),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    assert!(config.validate().is_ok());
+}
+
+#[test]
+fn email_config_in_channels_config() {
+    let json = r#"{
+        "email": {
+            "enabled": true,
+            "consentGranted": true,
+            "imap": {
+                "host": "imap.example.com",
+                "username": "u",
+                "password": "p"
+            },
+            "smtp": {
+                "host": "smtp.example.com",
+                "username": "u",
+                "password": "p"
+            }
+        }
+    }"#;
+    let config: ChannelsConfig = serde_json::from_str(json).unwrap();
+    assert!(config.email.enabled);
+    assert_eq!(config.email.imap.host, "imap.example.com");
+}
+
 // ==================== DingTalkConfig 测试 ====================
 
 #[test]

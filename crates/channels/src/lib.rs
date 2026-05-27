@@ -50,6 +50,7 @@
 //! ```
 
 pub mod dingtalk;
+pub mod email;
 pub mod error;
 pub mod feishu;
 pub mod manager;
@@ -58,6 +59,7 @@ pub mod traits;
 
 // 重新导出常用类型
 pub use dingtalk::DingTalk;
+pub use email::Email;
 pub use error::{ChannelError, ChannelResult};
 pub use feishu::Feishu;
 pub use manager::ChannelManager;

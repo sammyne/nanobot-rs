@@ -1,6 +1,6 @@
 # channels crate
 
-消息通道抽象及实现（钉钉、飞书）。
+消息通道抽象及实现（钉钉、飞书、Email）。
 
 ## 架构
 
@@ -10,8 +10,8 @@
 │  channels: HashMap<name, Arc<dyn Channel>>│
 │                                          │
 │  ┌──────────┐  ┌────────┐  ┌─────────┐  │
-│  │ DingTalk │  │ Feishu │  │(future) │  │
-│  │Stream SDK│  │WebSocket│  │         │  │
+│  │ DingTalk │  │ Feishu │  │  Email  │  │
+│  │Stream SDK│  │WebSocket│  │IMAP+SMTP│  │
 │  └────┬─────┘  └───┬────┘  └────┬────┘  │
 │       └────────────┼────────────┘        │
 │                    │                     │
@@ -45,6 +45,7 @@
 - **`ChannelError`** (enum) -- `StartFailed`, `StopFailed`, `SendFailed`, `Config`, `Api`, `Auth`, `Network` 等
 - **`DingTalk`** -- 钉钉 Stream SDK 通道实现
 - **`Feishu`** -- 飞书 WebSocket 通道实现
+- **`Email`** -- IMAP 轮询收件 + SMTP 发件通道实现；`fetch_messages_between_dates()` 支持按日期范围查询历史邮件
 
 ## 内部依赖
 

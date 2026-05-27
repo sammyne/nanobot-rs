@@ -5,12 +5,13 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use nanobot_config::{ChannelsConfig, DingTalkConfig, FeishuConfig};
+use nanobot_config::{ChannelsConfig, DingTalkConfig, EmailConfig, FeishuConfig};
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use tracing::{debug, error, info, warn};
 
 use crate::dingtalk::DingTalk;
+use crate::email::Email;
 use crate::error::{ChannelError, ChannelResult};
 use crate::feishu::Feishu;
 use crate::messages::{InboundMessage, OutboundMessage};
@@ -85,6 +86,10 @@ impl ChannelManager {
             manager.add_feishu_channel(manager.config.feishu.clone()).await?;
         }
 
+        if manager.config.email.enabled {
+            manager.add_email_channel(manager.config.email.clone())?;
+        }
+
         info!("通道管理器初始化完成，共 {} 个通道", manager.channels.len());
         Ok(manager)
     }
@@ -112,6 +117,19 @@ impl ChannelManager {
         self.channels.insert(name.clone(), Arc::new(channel));
 
         info!("飞书通道添加成功: {}", name);
+        Ok(())
+    }
+
+    /// 添加邮件通道
+    fn add_email_channel(&mut self, config: EmailConfig) -> ChannelResult<()> {
+        info!("添加邮件通道");
+
+        let channel = Email::new(config, self.inbound_tx.clone())?;
+        let name = channel.name().to_string();
+
+        self.channels.insert(name.clone(), Arc::new(channel));
+
+        info!("邮件通道添加成功: {}", name);
         Ok(())
     }
 

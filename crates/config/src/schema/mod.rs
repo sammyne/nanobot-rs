@@ -131,7 +131,7 @@ mod provider;
 mod tools;
 
 pub use agent::{AgentDefaults, AgentsConfig, ReasoningEffort};
-pub use channel::{ChannelsConfig, DingTalkConfig, FeishuConfig};
+pub use channel::{ChannelsConfig, DingTalkConfig, EmailConfig, FeishuConfig, ImapConfig, SmtpConfig};
 pub use gateway::{GatewayConfig, HeartbeatConfig};
 pub use mcp::McpServerConfig;
 pub use provider::{ProviderConfig, ProvidersConfig};
@@ -390,6 +390,10 @@ impl Config {
         }
         if self.channels.feishu.enabled {
             self.channels.feishu.validate()?;
+        }
+
+        if self.channels.email.enabled {
+            self.channels.email.validate()?;
         }
 
         // 验证 gateway 配置

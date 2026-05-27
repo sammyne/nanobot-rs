@@ -17,6 +17,8 @@ walkdir = "2"
 tokio-test = "0.4"
 tempfile = "3"
 regex = "1"
+imap = "2.4"
+native-tls = "0.2"
 
 # Internal crates
 nanobot-config.path = "crates/config"
@@ -86,3 +88,11 @@ features = ["client", "client-side-sse", "transport-child-process", "transport-s
 [workspace.dependencies.reqwest]
 version = "0.12"
 features = ["json"]
+
+[workspace.dependencies.lettre]
+version = "0.11"
+features = ["tokio1-native-tls"]
+
+[workspace.dependencies.mail-parser]
+version = "0.11"
+features = ["full_encoding"]
