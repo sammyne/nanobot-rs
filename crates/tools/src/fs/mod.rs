@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use tokio::fs;
 use tracing::{debug, info};
 
-use crate::core::{Tool, ToolContext, ToolError, ToolResult, bool_param, require_param};
+use crate::core::{Tool, ToolContext, ToolError, ToolResult};
 
 /// 读取文件的最大字符数限制（128K 字符）
 const MAX_CHARS: usize = 128_000;
@@ -49,10 +49,23 @@ fn resolve_path(path: &str, workspace: &Path, allowed_dir: Option<&Path>) -> Res
 
 /// ReadFile 参数结构
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase")]
 pub struct ReadFileArgs {
     /// 文件或目录路径，支持相对路径（基于workspace）或绝对路径
     pub path: String,
+    /// 起始行号（1-indexed，默认 1）
+    #[serde(default = "default_offset")]
+    pub offset: usize,
+    /// 最大读取行数（默认 2000）
+    #[serde(default = "default_limit")]
+    pub limit: usize,
+}
+
+fn default_offset() -> usize {
+    1
+}
+
+fn default_limit() -> usize {
+    2000
 }
 
 /// Lazy-initialized global schema for ReadFileArgs
@@ -90,16 +103,16 @@ impl Tool for ReadFileTool {
     }
 
     async fn execute(&self, _ctx: &ToolContext, params: serde_json::Value) -> ToolResult {
-        let path_str = require_param(&params, "path")?;
-        let path = resolve_path(&path_str, &self.workspace, self.allowed_dir.as_deref())?;
+        let args: ReadFileArgs = serde_json::from_value(params)?;
+        let path = resolve_path(&args.path, &self.workspace, self.allowed_dir.as_deref())?;
 
-        debug!("读取文件: {:?}", path);
+        debug!("读取文件: {:?} (offset={}, limit={})", path, args.offset, args.limit);
 
         // 检查是否存在且为文件
         let metadata = fs::metadata(&path).await.map_err(ToolError::io)?;
 
         if !metadata.is_file() {
-            return Err(ToolError::path(format!("路径不是文件: {path_str}")));
+            return Err(ToolError::path(format!("路径不是文件: {}", args.path)));
         }
 
         // 检查文件大小，防止读取过大文件导致 OOM
@@ -113,21 +126,33 @@ impl Tool for ReadFileTool {
         // 读取内容
         let content = fs::read_to_string(&path).await.map_err(ToolError::io)?;
 
-        // 检查字符数，必要时截断
-        if content.len() > MAX_CHARS {
-            let char_count = content.chars().count();
-            if char_count > MAX_CHARS {
-                let truncated: String = content.chars().take(MAX_CHARS).collect();
-                let result = format!(
-                    "{truncated}\n\n[文件已截断：显示前 {MAX_CHARS} 字符，共 {char_count} 字符 ({file_size} bytes)。使用 exec 工具的 head/tail/grep 查看完整内容。]"
-                );
-                info!("文件已截断: {} ({} chars, {} bytes)", path_str, char_count, file_size);
-                return Ok(result);
-            }
+        // 按行分页，输出带行号
+        let lines: Vec<&str> = content.lines().collect();
+        let total = lines.len();
+        let start = (args.offset.max(1) - 1).min(total); // 0-indexed
+        let end = (start + args.limit).min(total);
+
+        if start >= total {
+            return Ok(format!("(File has {total} lines. Offset {} is beyond the end.)", args.offset));
         }
 
-        info!("成功读取文件: {} ({} bytes)", path_str, content.len());
-        Ok(content)
+        let numbered: Vec<String> =
+            lines[start..end].iter().enumerate().map(|(i, line)| format!("{}: {line}", start + i + 1)).collect();
+
+        let mut result = numbered.join("\n");
+
+        // 附加分页提示
+        if end < total {
+            result.push_str(&format!(
+                "\n\n(Showing lines {}-{} of {total}. Use offset={} to continue.)",
+                start + 1,
+                end,
+                end + 1
+            ));
+        }
+
+        info!("成功读取文件: {} (lines {}-{} of {})", args.path, start + 1, end, total);
+        Ok(result)
     }
 }
 
@@ -135,7 +160,6 @@ impl Tool for ReadFileTool {
 
 /// WriteFile 参数结构
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase")]
 pub struct WriteFileArgs {
     /// 目标文件路径
     pub path: String,
@@ -178,10 +202,8 @@ impl Tool for WriteFileTool {
     }
 
     async fn execute(&self, _ctx: &ToolContext, params: serde_json::Value) -> ToolResult {
-        let path_str = require_param(&params, "path")?;
-        let content = require_param(&params, "content")?;
-
-        let path = resolve_path(&path_str, &self.workspace, self.allowed_dir.as_deref())?;
+        let args: WriteFileArgs = serde_json::from_value(params)?;
+        let path = resolve_path(&args.path, &self.workspace, self.allowed_dir.as_deref())?;
 
         debug!("写入文件: {:?}", path);
 
@@ -191,10 +213,10 @@ impl Tool for WriteFileTool {
         }
 
         // 写入文件
-        fs::write(&path, &content).await.map_err(ToolError::io)?;
+        fs::write(&path, &args.content).await.map_err(ToolError::io)?;
 
-        info!("成功写入文件: {} ({} bytes)", path_str, content.len());
-        Ok(format!("文件写入成功: {} ({} bytes)", path_str, content.len()))
+        info!("成功写入文件: {} ({} bytes)", args.path, args.content.len());
+        Ok(format!("文件写入成功: {} ({} bytes)", args.path, args.content.len()))
     }
 }
 
@@ -202,7 +224,6 @@ impl Tool for WriteFileTool {
 
 /// EditFile 参数结构
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase")]
 pub struct EditFileArgs {
     /// 目标文件路径
     pub path: String,
@@ -210,6 +231,9 @@ pub struct EditFileArgs {
     pub old_text: String,
     /// 替换后的新文本
     pub new_text: String,
+    /// 是否替换所有匹配（默认 false，多匹配时报错）
+    #[serde(default)]
+    pub replace_all: bool,
 }
 
 /// Lazy-initialized global schema for EditFileArgs
@@ -260,38 +284,35 @@ impl Tool for EditFileTool {
     }
 
     async fn execute(&self, _ctx: &ToolContext, params: serde_json::Value) -> ToolResult {
-        let path_str = require_param(&params, "path")?;
-        let old_text = require_param(&params, "old_text")?;
-        let new_text = require_param(&params, "new_text")?;
+        let args: EditFileArgs = serde_json::from_value(params)?;
+        let path = resolve_path(&args.path, &self.workspace, self.allowed_dir.as_deref())?;
 
-        let path = resolve_path(&path_str, &self.workspace, self.allowed_dir.as_deref())?;
-
-        debug!("编辑文件: {:?}", path);
+        debug!("编辑文件: {:?} (replace_all={})", path, args.replace_all);
 
         // 读取文件内容
         let content = fs::read_to_string(&path).await.map_err(ToolError::io)?;
 
         // 查找匹配位置
-        let _matches = Self::find_matches(&content, &old_text);
-
-        let matches = Self::find_matches(&content, &old_text);
+        let matches = Self::find_matches(&content, &args.old_text);
         match matches.len() {
-            0 => {
-                // 无匹配，返回错误和上下文
-                Err(ToolError::execution("未找到匹配的文本。请确保 old_text 与文件内容完全匹配。".to_string()))
-            }
+            0 => Err(ToolError::execution("未找到匹配的文本。请确保 old_text 与文件内容完全匹配。".to_string())),
             1 => {
-                // 唯一匹配，执行替换
-                let new_content = content.replacen(&old_text, &new_text, 1);
+                let new_content = content.replacen(&args.old_text, &args.new_text, 1);
                 fs::write(&path, new_content).await.map_err(ToolError::io)?;
 
-                info!("成功编辑文件: {}", path_str);
-                Ok(format!("文件编辑成功: {path_str}"))
+                info!("成功编辑文件: {}", args.path);
+                Ok(format!("文件编辑成功: {}", args.path))
             }
-            n => {
-                // 多次匹配，警告用户
-                Err(ToolError::execution(format!("找到 {n} 处匹配，无法确定唯一位置。请提供更多上下文。")))
+            n if args.replace_all => {
+                let new_content = content.replace(&args.old_text, &args.new_text);
+                fs::write(&path, new_content).await.map_err(ToolError::io)?;
+
+                info!("成功编辑文件: {} (替换 {} 处)", args.path, n);
+                Ok(format!("文件编辑成功: {}（已替换 {n} 处匹配）", args.path))
             }
+            n => Err(ToolError::execution(format!(
+                "找到 {n} 处匹配，无法确定唯一位置。请提供更多上下文，或使用 replace_all=true 替换所有匹配。"
+            ))),
         }
     }
 }
@@ -300,13 +321,19 @@ impl Tool for EditFileTool {
 
 /// ListDir 参数结构
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase")]
 pub struct ListDirArgs {
     /// 目录路径
     pub path: String,
     /// 是否递归列出子目录
     #[serde(default)]
     pub recursive: bool,
+    /// 最大条目数（默认 200）
+    #[serde(default = "default_max_entries")]
+    pub max_entries: usize,
+}
+
+fn default_max_entries() -> usize {
+    200
 }
 
 /// Lazy-initialized global schema for ListDirArgs
@@ -352,22 +379,19 @@ impl Tool for ListDirTool {
     }
 
     async fn execute(&self, _ctx: &ToolContext, params: serde_json::Value) -> ToolResult {
-        let path_str = require_param(&params, "path")?;
-        let recursive = bool_param(&params, "recursive");
-
-        let path = resolve_path(&path_str, &self.workspace, self.allowed_dir.as_deref())?;
+        let args: ListDirArgs = serde_json::from_value(params)?;
+        let path = resolve_path(&args.path, &self.workspace, self.allowed_dir.as_deref())?;
 
         // 检查是否为目录
         let metadata = fs::metadata(&path).await.map_err(ToolError::io)?;
 
         if !metadata.is_dir() {
-            return Err(ToolError::path(format!("路径不是目录: {path_str}")));
+            return Err(ToolError::path(format!("路径不是目录: {}", args.path)));
         }
 
-        let mut results = vec![format!("目录: {}", path_str)];
+        let mut results = vec![format!("目录: {}", args.path)];
 
-        if recursive {
-            // 递归遍历
+        if args.recursive {
             let mut entries: Vec<_> = walkdir::WalkDir::new(&path).into_iter().filter_map(|e| e.ok()).collect();
             entries.sort_by(|a, b| a.path().cmp(b.path()));
 
@@ -380,7 +404,6 @@ impl Tool for ListDirTool {
                 }
             }
         } else {
-            // 非递归列出
             let mut entries = fs::read_dir(&path).await.map_err(ToolError::io)?;
 
             while let Some(entry) = entries.next_entry().await.map_err(ToolError::io)? {
@@ -391,7 +414,13 @@ impl Tool for ListDirTool {
             }
         }
 
-        info!("成功列出目录: {} ({} 项)", path_str, results.len() - 1);
+        let total = results.len() - 1;
+        if total > args.max_entries {
+            results.truncate(args.max_entries + 1);
+            results.push(format!("... 共 {total} 个条目，已显示前 {} 个", args.max_entries));
+        }
+
+        info!("成功列出目录: {} ({} 项)", args.path, total.min(args.max_entries));
         Ok(results.join("\n"))
     }
 }

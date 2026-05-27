@@ -44,3 +44,19 @@ fn extract_absolute_paths_includes_tilde() {
     assert!(paths.contains(&"~/.nanobot/config.json".to_string()));
     assert!(paths.contains(&"/etc/passwd".to_string()));
 }
+
+#[test]
+fn truncate_output_short_string() {
+    let s = "hello world".to_string();
+    assert_eq!(truncate_output(s.clone(), 100), s);
+}
+
+#[test]
+fn truncate_output_head_tail() {
+    // 20 chars, max_len=10 → head 5 + tail 5
+    let s = "abcdefghijklmnopqrst".to_string();
+    let result = truncate_output(s, 10);
+    assert!(result.starts_with("abcde"), "should start with head: {result}");
+    assert!(result.ends_with("pqrst"), "should end with tail: {result}");
+    assert!(result.contains("truncated"), "should contain truncation notice: {result}");
+}
