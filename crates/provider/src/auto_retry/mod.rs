@@ -6,7 +6,7 @@ use anyhow::Result;
 use nanobot_tools::ToolDefinition;
 use tracing::warn;
 
-use crate::{Message, Options, Provider, ProviderError};
+use crate::{Message, Options, Provider, ProviderError, strip_images};
 
 /// 默认最大重试次数
 const DEFAULT_MAX_RETRIES: u32 = 3;
@@ -50,6 +50,16 @@ impl<P: Provider> Provider for AutoRetryProvider<P> {
                         last_err = Some(e);
                         continue;
                     }
+
+                    // 图片拒绝：strip images 后重试一次
+                    if let Some(pe) = e.downcast_ref::<ProviderError>()
+                        && pe.is_image_unsupported()
+                        && let Some(stripped) = strip_images(messages)
+                    {
+                        warn!("LLM 拒绝图片输入，移除图片后重试");
+                        return self.inner.chat(&stripped, options).await;
+                    }
+
                     return Err(e);
                 }
             }

@@ -5,7 +5,7 @@ use anyhow::Result;
 use nanobot_tools::ToolDefinition;
 
 use super::*;
-use crate::{Message, Options, Provider, ProviderError};
+use crate::{ContentPart, Message, Options, Provider, ProviderError, UserContent};
 
 /// 可配置的 Mock Provider
 ///
@@ -83,4 +83,98 @@ async fn non_provider_error_no_retry() {
     let result = provider.chat(&[], &Options::default()).await;
     assert!(result.is_err(), "should fail immediately");
     assert_eq!(mock.calls(), 1, "should call inner only once for non-ProviderError");
+}
+
+/// 构造包含图片的消息列表
+fn messages_with_image() -> Vec<Message> {
+    vec![Message::User {
+        content: UserContent::Parts(vec![
+            ContentPart::Text { text: "describe this".to_string() },
+            ContentPart::Image { media_type: "image/png".to_string(), data: "abc".to_string() },
+        ]),
+    }]
+}
+
+/// Mock Provider：首次返回图片拒绝错误，第二次根据消息内容决定
+#[derive(Clone)]
+struct ImageRejectMock {
+    call_count: Arc<AtomicU32>,
+    second_call_succeeds: bool,
+}
+
+#[async_trait::async_trait]
+impl Provider for ImageRejectMock {
+    async fn chat(&self, messages: &[Message], _options: &Options) -> Result<Message> {
+        let n = self.call_count.fetch_add(1, Ordering::SeqCst);
+        if n == 0 {
+            return Err(ProviderError::Api("image_url is only supported by vision models".to_string()).into());
+        }
+        // 验证重试时图片已被 strip
+        if let Some(Message::User { content: UserContent::Parts(parts) }) = messages.first() {
+            for p in parts {
+                if matches!(p, ContentPart::Image { .. }) {
+                    panic!("retry should not contain Image parts");
+                }
+            }
+        }
+        if self.second_call_succeeds {
+            Ok(Message::assistant("described without image"))
+        } else {
+            Err(ProviderError::Api("still failing".to_string()).into())
+        }
+    }
+
+    fn bind_tools(&mut self, _tools: Vec<ToolDefinition>) {}
+}
+
+#[tokio::test]
+async fn image_unsupported_retries_without_images() {
+    tokio::time::pause();
+
+    let mock = ImageRejectMock { call_count: Arc::new(AtomicU32::new(0)), second_call_succeeds: true };
+    let call_count = mock.call_count.clone();
+    let provider = AutoRetryProvider::new(mock);
+
+    let result = provider.chat(&messages_with_image(), &Options::default()).await;
+    assert!(result.is_ok(), "should succeed after stripping images: {result:?}");
+    assert_eq!(call_count.load(Ordering::SeqCst), 2, "should call inner 2 times");
+}
+
+#[tokio::test]
+async fn image_unsupported_no_images_to_strip() {
+    tokio::time::pause();
+
+    let mock =
+        MockProvider::new(1, |_| ProviderError::Api("image_url is only supported by vision models".to_string()).into());
+    let provider = AutoRetryProvider::new(mock.clone());
+
+    // 纯文本消息，无图片可 strip
+    let result = provider.chat(&[Message::user("hello")], &Options::default()).await;
+    assert!(result.is_err(), "should fail when no images to strip");
+    assert_eq!(mock.calls(), 1, "should call inner only once");
+}
+
+#[tokio::test]
+async fn image_unsupported_retry_also_fails() {
+    tokio::time::pause();
+
+    let mock = ImageRejectMock { call_count: Arc::new(AtomicU32::new(0)), second_call_succeeds: false };
+    let call_count = mock.call_count.clone();
+    let provider = AutoRetryProvider::new(mock);
+
+    let result = provider.chat(&messages_with_image(), &Options::default()).await;
+    assert!(result.is_err(), "should fail when retry also fails");
+    assert_eq!(call_count.load(Ordering::SeqCst), 2, "should call inner 2 times");
+}
+
+#[tokio::test]
+async fn non_image_error_no_image_retry() {
+    tokio::time::pause();
+
+    let mock = MockProvider::new(1, |_| ProviderError::Api("401 unauthorized".to_string()).into());
+    let provider = AutoRetryProvider::new(mock.clone());
+
+    let result = provider.chat(&messages_with_image(), &Options::default()).await;
+    assert!(result.is_err(), "should fail without image retry");
+    assert_eq!(mock.calls(), 1, "should call inner only once");
 }

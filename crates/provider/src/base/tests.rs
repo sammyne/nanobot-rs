@@ -292,3 +292,63 @@ fn token_len_empty_message() {
     // 4 (overhead) + 0 = 4
     assert_eq!(msg.token_len(), 4);
 }
+
+#[test]
+fn is_image_unsupported_detects_markers() {
+    let cases = [
+        "image_url is only supported by certain models",
+        "This model does not support image input",
+        "Images are not supported for this endpoint",
+        "image input is not supported",
+        "image_url is not supported",
+        "unsupported image input type",
+    ];
+    for msg in cases {
+        let err = ProviderError::Api(msg.to_string());
+        assert!(err.is_image_unsupported(), "should detect: {msg}");
+    }
+}
+
+#[test]
+fn is_image_unsupported_rejects_non_image_errors() {
+    let cases = [
+        ProviderError::Api("401 unauthorized".to_string()),
+        ProviderError::Api("invalid request".to_string()),
+        ProviderError::Timeout,
+        ProviderError::RateLimit("rate limited".to_string()),
+        ProviderError::ServerError("HTTP 500".to_string()),
+    ];
+    for err in cases {
+        assert!(!err.is_image_unsupported(), "should not detect: {err}");
+    }
+}
+
+#[test]
+fn strip_images_replaces_image_parts() {
+    let messages = vec![
+        Message::system("you are helpful"),
+        Message::User {
+            content: UserContent::Parts(vec![
+                ContentPart::Text { text: "describe this".to_string() },
+                ContentPart::Image { media_type: "image/png".to_string(), data: "abc".to_string() },
+            ]),
+        },
+    ];
+
+    let stripped = strip_images(&messages).expect("should find images");
+    assert_eq!(stripped.len(), 2);
+
+    if let Message::User { content: UserContent::Parts(parts) } = &stripped[1] {
+        assert_eq!(parts.len(), 2);
+        assert!(matches!(&parts[0], ContentPart::Text { text } if text == "describe this"));
+        assert!(matches!(&parts[1], ContentPart::Text { text } if text == "[image omitted]"));
+    } else {
+        panic!("expected User with Parts");
+    }
+}
+
+#[test]
+fn strip_images_returns_none_without_images() {
+    let messages = vec![Message::user("hello"), Message::assistant("hi")];
+    assert!(strip_images(&messages).is_none());
+}
