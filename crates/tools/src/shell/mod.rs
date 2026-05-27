@@ -147,7 +147,7 @@ impl ExecTool {
     /// 验证命令中的路径是否在工作空间内
     fn validate_paths_in_workspace(&self, cmd: &str, cwd: &Path) -> Result<(), ToolError> {
         for raw in extract_absolute_paths(cmd) {
-            let path = PathBuf::from(raw.trim());
+            let path = nanobot_utils::paths::expand_tilde(Path::new(raw.trim()));
             if path.is_absolute() {
                 // 尝试规范化路径
                 let canonical_path = if path.exists() { path.canonicalize().unwrap_or(path) } else { path };
