@@ -64,6 +64,30 @@ impl OpenAILike {
     }
 }
 
+impl From<&crate::ContentPart> for ChatCompletionRequestUserMessageContentPart {
+    fn from(part: &crate::ContentPart) -> Self {
+        match part {
+            crate::ContentPart::Text { text } => {
+                Self::Text(ChatCompletionRequestMessageContentPartText { text: text.clone() })
+            }
+            crate::ContentPart::Image { media_type, data } => {
+                Self::ImageUrl(ChatCompletionRequestMessageContentPartImage {
+                    image_url: ImageUrl { url: format!("data:{media_type};base64,{data}"), detail: None },
+                })
+            }
+        }
+    }
+}
+
+impl From<&crate::UserContent> for ChatCompletionRequestUserMessageContent {
+    fn from(content: &crate::UserContent) -> Self {
+        match content {
+            crate::UserContent::Text(text) => Self::Text(text.clone()),
+            crate::UserContent::Parts(parts) => Self::Array(parts.iter().map(Into::into).collect()),
+        }
+    }
+}
+
 /// 将内部 Message 类型转换为 OpenAI 的请求消息格式
 impl TryFrom<&Message> for ChatCompletionRequestMessage {
     type Error = anyhow::Error;
@@ -74,41 +98,15 @@ impl TryFrom<&Message> for ChatCompletionRequestMessage {
                 ChatCompletionRequestSystemMessageArgs::default().content(content.as_str()).build()?,
             ),
             Message::User { content } => {
-                let user_content: ChatCompletionRequestUserMessageContent = match content {
-                    crate::UserContent::Text(text) => ChatCompletionRequestUserMessageContent::Text(text.clone()),
-                    crate::UserContent::Parts(parts) => {
-                        let openai_parts: Vec<ChatCompletionRequestUserMessageContentPart> = parts
-                            .iter()
-                            .map(|part| match part {
-                                crate::ContentPart::Text { text } => ChatCompletionRequestUserMessageContentPart::Text(
-                                    ChatCompletionRequestMessageContentPartText { text: text.clone() },
-                                ),
-                                crate::ContentPart::Image { media_type, data } => {
-                                    ChatCompletionRequestUserMessageContentPart::ImageUrl(
-                                        ChatCompletionRequestMessageContentPartImage {
-                                            image_url: ImageUrl {
-                                                url: format!("data:{media_type};base64,{data}"),
-                                                detail: None,
-                                            },
-                                        },
-                                    )
-                                }
-                            })
-                            .collect();
-                        ChatCompletionRequestUserMessageContent::Array(openai_parts)
-                    }
-                };
+                let user_content: ChatCompletionRequestUserMessageContent = content.into();
                 ChatCompletionRequestMessage::User(user_content.into())
             }
             Message::Assistant { content, tool_calls, .. } => {
                 let mut assistant_msg =
                     ChatCompletionRequestAssistantMessageArgs::default().content(content.as_str()).build()?;
-
-                // 如果有工具调用，添加到消息中
                 if !tool_calls.is_empty() {
                     assistant_msg.tool_calls = Some(tool_calls.iter().map(Into::into).collect());
                 }
-
                 ChatCompletionRequestMessage::Assistant(assistant_msg)
             }
             Message::Tool { tool_call_id, content } => ChatCompletionRequestMessage::Tool(

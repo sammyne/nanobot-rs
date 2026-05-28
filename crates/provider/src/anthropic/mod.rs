@@ -72,6 +72,21 @@ struct ImageSource {
     data: String,
 }
 
+impl From<&crate::ContentPart> for ContentBlock {
+    fn from(part: &crate::ContentPart) -> Self {
+        match part {
+            crate::ContentPart::Text { text } => Self::Text { text: text.clone(), cache_control: None },
+            crate::ContentPart::Image { media_type, data } => Self::Image {
+                source: ImageSource {
+                    r#type: "base64".to_string(),
+                    media_type: media_type.clone(),
+                    data: data.clone(),
+                },
+            },
+        }
+    }
+}
+
 /// Anthropic cache control 标记
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct CacheControl {
@@ -213,21 +228,7 @@ fn convert_messages(messages: &[Message]) -> (Option<Vec<SystemBlock>>, Vec<Anth
                     crate::UserContent::Text(text) => {
                         vec![ContentBlock::Text { text: text.clone(), cache_control: None }]
                     }
-                    crate::UserContent::Parts(parts) => parts
-                        .iter()
-                        .map(|part| match part {
-                            crate::ContentPart::Text { text } => {
-                                ContentBlock::Text { text: text.clone(), cache_control: None }
-                            }
-                            crate::ContentPart::Image { media_type, data } => ContentBlock::Image {
-                                source: ImageSource {
-                                    r#type: "base64".to_string(),
-                                    media_type: media_type.clone(),
-                                    data: data.clone(),
-                                },
-                            },
-                        })
-                        .collect(),
+                    crate::UserContent::Parts(parts) => parts.iter().map(Into::into).collect(),
                 };
                 result.push(AnthropicMessage { role: "user".to_string(), content: blocks });
             }
