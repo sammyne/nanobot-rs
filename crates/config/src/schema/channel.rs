@@ -46,32 +46,43 @@ impl DingTalkConfig {
 /// 飞书通道配置
 ///
 /// 飞书通道的配置字段。
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
 pub struct FeishuConfig {
     /// 是否启用此通道
-    #[serde(default)]
     pub enabled: bool,
 
     /// App ID
-    #[serde(default)]
     pub app_id: String,
 
     /// App Secret
-    #[serde(default)]
     pub app_secret: String,
 
     /// 允许的用户列表（为空则允许所有用户）
-    #[serde(default)]
     pub allow_from: Vec<String>,
 
     /// 收到消息时添加的表情回应类型（为空则禁用）
-    #[serde(default = "default_react_emoji")]
     pub react_emoji: String,
 
     /// 是否以引用回复方式发送消息（引用气泡）
-    #[serde(default)]
     pub reply_to_message: bool,
+
+    /// 是否启用 CardKit 流式输出（默认 true）
+    pub streaming: bool,
+}
+
+impl Default for FeishuConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            app_id: String::new(),
+            app_secret: String::new(),
+            allow_from: Vec::new(),
+            react_emoji: "THUMBSUP".to_string(),
+            reply_to_message: false,
+            streaming: true,
+        }
+    }
 }
 
 impl FeishuConfig {
@@ -292,8 +303,4 @@ impl SmtpConfig {
 
 fn default_send_progress() -> bool {
     true
-}
-
-fn default_react_emoji() -> String {
-    "THUMBSUP".to_string()
 }

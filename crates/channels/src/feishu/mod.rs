@@ -10,6 +10,7 @@ mod post;
 use std::collections::HashMap;
 use std::pin::Pin;
 use std::sync::Arc;
+use std::time::Instant;
 
 use async_trait::async_trait;
 use feishu_sdk::client::Client;
@@ -23,6 +24,24 @@ use tracing::{debug, error, info, warn};
 use crate::error::{ChannelError, ChannelResult};
 use crate::messages::{InboundMessage, OutboundMessage};
 use crate::traits::Channel;
+
+/// 流式卡片的 markdown 元素 ID
+const STREAM_ELEMENT_ID: &str = "streaming_md";
+
+/// 流式更新最小间隔（毫秒）
+const STREAM_EDIT_INTERVAL_MS: u64 = 500;
+
+/// 飞书 CardKit 流式缓冲区
+struct StreamBuf {
+    /// 累积的文本内容
+    text: String,
+    /// CardKit 卡片 ID（创建失败时为 None）
+    card_id: Option<String>,
+    /// 递增的序列号
+    sequence: u32,
+    /// 上次更新时间
+    last_edit: Instant,
+}
 
 /// 飞书通道
 pub struct Feishu {
@@ -52,6 +71,9 @@ pub struct Feishu {
 
     /// 解析后的 allow_from 列表（昵称已转为 open_id）
     resolved_allow_from: Vec<String>,
+
+    /// 每个 chat_id 的流式缓冲区
+    stream_bufs: Arc<RwLock<HashMap<String, StreamBuf>>>,
 }
 
 impl Feishu {
@@ -82,6 +104,7 @@ impl Feishu {
             inbound_tx,
             message_context: Arc::new(RwLock::new(HashMap::new())),
             resolved_allow_from,
+            stream_bufs: Arc::new(RwLock::new(HashMap::new())),
         })
     }
 
@@ -419,6 +442,196 @@ impl Clone for Feishu {
             inbound_tx: self.inbound_tx.clone(),
             message_context: Arc::clone(&self.message_context),
             resolved_allow_from: self.resolved_allow_from.clone(),
+            stream_bufs: Arc::clone(&self.stream_bufs),
+        }
+    }
+}
+
+impl Feishu {
+    /// 创建 CardKit 流式卡片并发送到聊天
+    ///
+    /// 返回 card_id，失败时返回 None。
+    async fn create_streaming_card(&self, chat_id: &str) -> Option<String> {
+        use feishu_sdk::api::{SendMessageBody, SendMessageQuery};
+        use feishu_sdk::core::RequestOptions;
+
+        // 创建 CardKit 卡片
+        let card_body = serde_json::json!({
+            "schema": "2.0",
+            "config": {
+                "streaming_mode": true,
+                "update_multi": true
+            },
+            "body": {
+                "elements": [{
+                    "tag": "markdown",
+                    "content": "",
+                    "element_id": STREAM_ELEMENT_ID
+                }]
+            }
+        });
+
+        let resp = match self
+            .client
+            .request(
+                reqwest::Method::POST,
+                "/open-apis/cardkit/v1/cards",
+                Vec::<(String, String)>::new(),
+                Some(card_body),
+                RequestOptions::default(),
+            )
+            .await
+        {
+            Ok(r) => r,
+            Err(e) => {
+                warn!("CardKit 创建卡片失败: {e}");
+                return None;
+            }
+        };
+
+        let json: serde_json::Value = match resp.json_value() {
+            Ok(v) => v,
+            Err(e) => {
+                warn!("CardKit 响应解析失败: {e}");
+                return None;
+            }
+        };
+
+        let card_id = json["data"]["card_id"].as_str()?.to_string();
+
+        // 发送卡片消息到聊天
+        let msg_content = serde_json::json!({
+            "type": "card",
+            "data": { "card_id": card_id }
+        });
+
+        let body = SendMessageBody {
+            receive_id: chat_id.to_string(),
+            msg_type: "interactive".to_string(),
+            content: serde_json::to_string(&msg_content).unwrap_or_default(),
+            uuid: None,
+        };
+        let query = SendMessageQuery { receive_id_type: Some("chat_id".to_string()) };
+
+        match self.client.im_v1_message().send_typed(&query, &body, RequestOptions::default()).await {
+            Ok(r) if r.code == 0 => {
+                debug!("CardKit 流式卡片发送成功: card_id={card_id}");
+                Some(card_id)
+            }
+            Ok(r) => {
+                warn!("CardKit 流式卡片发送失败: code={}, msg={}", r.code, r.msg);
+                None
+            }
+            Err(e) => {
+                warn!("CardKit 流式卡片发送失败: {e}");
+                None
+            }
+        }
+    }
+
+    /// 更新流式卡片的 markdown 内容
+    async fn stream_update_text(&self, card_id: &str, text: &str, sequence: u32) {
+        use feishu_sdk::core::RequestOptions;
+
+        let body = serde_json::json!({
+            "content": text,
+            "sequence": sequence
+        });
+
+        let path = format!("/open-apis/cardkit/v1/cards/{card_id}/elements/{STREAM_ELEMENT_ID}/content");
+
+        if let Err(e) = self
+            .client
+            .request(reqwest::Method::PUT, &path, Vec::<(String, String)>::new(), Some(body), RequestOptions::default())
+            .await
+        {
+            warn!("CardKit 更新内容失败: {e}");
+        }
+    }
+
+    /// 关闭流式模式
+    async fn close_streaming_mode(&self, card_id: &str, sequence: u32) {
+        use feishu_sdk::core::RequestOptions;
+
+        let body = serde_json::json!({
+            "settings": {
+                "streaming_mode": false
+            },
+            "sequence": sequence
+        });
+
+        let path = format!("/open-apis/cardkit/v1/cards/{card_id}/settings");
+
+        if let Err(e) = self
+            .client
+            .request(
+                reqwest::Method::PATCH,
+                &path,
+                Vec::<(String, String)>::new(),
+                Some(body),
+                RequestOptions::default(),
+            )
+            .await
+        {
+            warn!("CardKit 关闭流式模式失败: {e}");
+        }
+    }
+
+    /// 处理流式进度消息
+    async fn handle_stream_progress(&self, chat_id: &str, content: &str) {
+        let mut bufs = self.stream_bufs.write().await;
+        let buf = bufs.entry(chat_id.to_string()).or_insert_with(|| StreamBuf {
+            text: String::new(),
+            card_id: None,
+            sequence: 0,
+            last_edit: Instant::now(),
+        });
+
+        // 累积文本
+        if !buf.text.is_empty() {
+            buf.text.push('\n');
+        }
+        buf.text.push_str(content);
+
+        if buf.card_id.is_none() {
+            // 首次：创建流式卡片
+            drop(bufs);
+            let card_id = self.create_streaming_card(chat_id).await;
+            let mut bufs = self.stream_bufs.write().await;
+            if let Some(buf) = bufs.get_mut(chat_id) {
+                buf.card_id = card_id.clone();
+                if let Some(ref cid) = card_id {
+                    buf.sequence += 1;
+                    let seq = buf.sequence;
+                    let text = buf.text.clone();
+                    let cid = cid.clone();
+                    drop(bufs);
+                    self.stream_update_text(&cid, &text, seq).await;
+                }
+            }
+        } else {
+            // 后续：节流更新
+            let elapsed = buf.last_edit.elapsed().as_millis() as u64;
+            if elapsed >= STREAM_EDIT_INTERVAL_MS {
+                buf.sequence += 1;
+                let seq = buf.sequence;
+                let text = buf.text.clone();
+                let cid = buf.card_id.clone().unwrap();
+                buf.last_edit = Instant::now();
+                drop(bufs);
+                self.stream_update_text(&cid, &text, seq).await;
+            }
+        }
+    }
+
+    /// 关闭活跃的流式卡片（发送最终内容并关闭流式模式）
+    async fn finalize_stream(&self, chat_id: &str, final_content: &str) {
+        if let Some(StreamBuf { card_id: Some(ref card_id), sequence, .. }) =
+            self.stream_bufs.write().await.remove(chat_id)
+        {
+            let seq = sequence + 1;
+            self.stream_update_text(card_id, final_content, seq).await;
+            self.close_streaming_mode(card_id, seq + 1).await;
         }
     }
 }
@@ -490,6 +703,20 @@ impl Channel for Feishu {
 
     async fn send(&self, msg: OutboundMessage) -> ChannelResult<()> {
         debug!("发送飞书消息到: {}, 内容: {}", msg.chat_id, msg.content);
+
+        // 流式处理：进度消息走 CardKit 流式路径
+        if self.config.streaming {
+            if msg.is_progress() {
+                self.handle_stream_progress(&msg.chat_id, &msg.content).await;
+                return Ok(());
+            }
+            // 非进度消息：先关闭活跃的流式卡片
+            if self.stream_bufs.read().await.contains_key(&msg.chat_id) {
+                let markdown = format!("**Nanobot Reply**\n\n{}", msg.content);
+                self.finalize_stream(&msg.chat_id, &markdown).await;
+                return Ok(());
+            }
+        }
 
         // 从上下文中获取原始消息
         let context = self.message_context.read().await;
