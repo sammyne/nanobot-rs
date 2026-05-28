@@ -54,7 +54,8 @@ pub enum CronScheduleArgs {
 pub enum CronArgs {
     /// Add a new scheduled job
     Add {
-        /// Reminder message to display
+        /// Instruction for the agent to execute when the job triggers
+        /// (e.g., "Send a reminder to WeChat: xxx" or "Check system status and report")
         message: String,
         /// Schedule definition.
         ///
@@ -83,7 +84,9 @@ struct CronArgsSchema {
     #[schemars(extend("enum" = ["add", "list", "remove"]))]
     action: String,
 
-    /// Reminder message to display. Required when action="add".
+    /// Instruction for the agent to execute when the job triggers
+    /// (e.g., "Send a reminder to WeChat: xxx" or "Check system status and report").
+    /// Required when action="add".
     #[serde(default, skip_serializing_if = "String::is_empty")]
     message: String,
 
