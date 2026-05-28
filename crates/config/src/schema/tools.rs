@@ -32,6 +32,9 @@ use super::mcp::McpServerConfig;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct ExecToolConfig {
+    /// 是否禁用 shell 执行工具
+    pub disabled: bool,
+
     /// 命令执行超时时间（单位：秒）
     pub timeout: u64,
 
@@ -41,7 +44,7 @@ pub struct ExecToolConfig {
 
 impl Default for ExecToolConfig {
     fn default() -> Self {
-        Self { timeout: 60, path_append: String::new() }
+        Self { disabled: false, timeout: 60, path_append: String::new() }
     }
 }
 
