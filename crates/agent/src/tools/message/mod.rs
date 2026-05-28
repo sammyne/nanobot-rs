@@ -120,8 +120,11 @@ impl Tool for MessageTool {
     }
 
     async fn execute(&self, ctx: &ToolContext, params: serde_json::Value) -> ToolResult {
-        let params: MessageParams = serde_json::from_value(params)
+        let mut params: MessageParams = serde_json::from_value(params)
             .map_err(|e| ToolError::validation("params", format!("invalid parameters: {e}")))?;
+
+        // 剥离 <think> 块，防止 LLM 思考过程泄露到聊天消息
+        params.content = crate::r#loop::strip_think(&params.content);
 
         let channel = params.channel.unwrap_or_else(|| ctx.channel.clone());
         let chat_id = params.chat_id.unwrap_or_else(|| ctx.chat_id.clone());
