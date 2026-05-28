@@ -47,17 +47,19 @@ impl ToolRegistry {
         registry.tools.insert(list_tool.name().to_string(), Box::new(list_tool) as Box<dyn Tool>);
 
         // 应用 exec_config 到 ExecToolOptions
-        let exec_options = ExecToolOptions {
-            workspace: Some(workspace.clone()),
-            restrict_to_workspace,
-            timeout: exec_config.timeout,
-            path_append: exec_config.path_append.clone(),
-            ..Default::default()
-        };
+        if !exec_config.disabled {
+            let exec_options = ExecToolOptions {
+                workspace: Some(workspace.clone()),
+                restrict_to_workspace,
+                timeout: exec_config.timeout,
+                path_append: exec_config.path_append.clone(),
+                ..Default::default()
+            };
 
-        let shell_tool = ExecTool::new(exec_options);
-        info!("注册工具: {}", shell_tool.name());
-        registry.tools.insert(shell_tool.name().to_string(), Box::new(shell_tool) as Box<dyn Tool>);
+            let shell_tool = ExecTool::new(exec_options);
+            info!("注册工具: {}", shell_tool.name());
+            registry.tools.insert(shell_tool.name().to_string(), Box::new(shell_tool) as Box<dyn Tool>);
+        }
 
         info!("已注册 {} 个默认工具", registry.tools.len());
 

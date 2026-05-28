@@ -81,7 +81,21 @@ struct ExecuteErrorTestCase {
     expected_error_contains: &'static str,
 }
 
-/// 表驱动测试：执行不存在的工具
+/// 测试 disabled=true 时不注册 shell 工具
+#[tokio::test]
+async fn registry_exec_disabled() {
+    let temp_dir = setup();
+    let workspace = temp_dir.path().to_str().unwrap();
+    let config = nanobot_config::ExecToolConfig { disabled: true, ..Default::default() };
+    let registry = ToolRegistry::new(workspace, config, false);
+
+    assert!(!registry.contains("shell"));
+    assert!(registry.contains("read_file"));
+    assert!(registry.contains("write_file"));
+    assert!(registry.contains("edit_file"));
+    assert!(registry.contains("list_dir"));
+    assert_eq!(registry.get_definitions().len(), 4);
+}
 #[tokio::test]
 async fn registry_execute_nonexistent_tool() {
     let test_cases =

@@ -179,7 +179,7 @@ async fn tool_registry_with_tools_config() {
     let workspace = PathBuf::from(temp_dir.path());
 
     // 创建 ExecToolConfig
-    let exec_config = ExecToolConfig { timeout: 30, path_append: String::new() };
+    let exec_config = ExecToolConfig { timeout: 30, ..Default::default() };
     let restrict_to_workspace = true;
 
     // 使用配置创建 ToolRegistry
