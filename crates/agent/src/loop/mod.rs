@@ -209,6 +209,7 @@ impl<P: Provider> AgentLoop<P> {
     /// * `initial_messages` - 初始消息列表
     /// * `channel` - 通道名称
     /// * `chat_id` - 聊天标识
+    /// * `hook` - 生命周期钩子
     ///
     /// # Returns
     /// ReActResult 包含最终结果、工具使用列表和消息历史
@@ -217,13 +218,14 @@ impl<P: Provider> AgentLoop<P> {
         mut messages: Vec<Message>,
         channel: &str,
         chat_id: &str,
-        on_progress: Option<std::sync::Arc<dyn crate::ProgressTracker>>,
+        hook: &dyn crate::Hook,
         scheduled: bool,
     ) -> Result<ReActResult> {
         let max_iterations = self.config.max_tool_iterations;
         let mut iteration = 0;
         let mut tools_used: Vec<String> = Vec::new();
-        let ctx = if scheduled { ToolContext::scheduled(channel, chat_id) } else { ToolContext::new(channel, chat_id) };
+        let tool_ctx =
+            if scheduled { ToolContext::scheduled(channel, chat_id) } else { ToolContext::new(channel, chat_id) };
 
         info!("启动 ReAct 循环: max_iterations={}, 可用工具={:?}", max_iterations, self.tool_registry.tool_names());
 
@@ -231,30 +233,27 @@ impl<P: Provider> AgentLoop<P> {
             iteration += 1;
             debug!("ReAct 迭代 #{}", iteration);
 
+            // hook: before_iteration
+            let usage = self.last_usage.lock().unwrap().clone();
+            let hook_ctx = crate::HookCtx { content: "", tool_calls: &[], usage: usage.as_ref() };
+            if let Err(e) = hook.before_iteration(&hook_ctx).await {
+                error!("hook before_iteration failed: {e}");
+            }
+
             // 调用 LLM
             let response = self.call_llm(&messages).await?;
 
             // 在消费 response 之前提取后续需要的数据
             let content = response.content().to_string();
             let tool_calls = response.tool_calls().to_vec();
+            let usage = self.last_usage.lock().unwrap().clone();
             let response = response.message;
 
             if !tool_calls.is_empty() {
-                // 发送进度通知
-                if let Some(ref tracker) = on_progress {
-                    // 1. 发送清理后的思考内容（如果有）
-                    let cleaned = strip_think(&content);
-                    if !cleaned.is_empty()
-                        && let Err(e) = tracker.track(cleaned, false).await
-                    {
-                        error!("发送思考进度失败: {}", e);
-                    }
-
-                    // 2. 发送工具提示
-                    let hint = format_tool_hint(&tool_calls);
-                    if let Err(e) = tracker.track(hint, true).await {
-                        error!("发送工具提示失败: {}", e);
-                    }
+                // hook: before_execute_tools
+                let hook_ctx = crate::HookCtx { content: &content, tool_calls: &tool_calls, usage: usage.as_ref() };
+                if let Err(e) = hook.before_execute_tools(&hook_ctx).await {
+                    error!("hook before_execute_tools failed: {e}");
                 }
 
                 // 记录工具调用
@@ -279,7 +278,7 @@ impl<P: Provider> AgentLoop<P> {
                     };
 
                     // 执行工具
-                    let tool_result = self.tool_registry.execute(&ctx, &tool_call.name, args).await;
+                    let tool_result = self.tool_registry.execute(&tool_ctx, &tool_call.name, args).await;
 
                     // 转换结果为字符串
                     let result_content = match tool_result {
@@ -292,6 +291,12 @@ impl<P: Provider> AgentLoop<P> {
 
                     // 添加工具结果消息
                     messages.push(Message::tool(&tool_call.id, result_content));
+                }
+
+                // hook: after_iteration
+                let hook_ctx = crate::HookCtx { content: &content, tool_calls: &tool_calls, usage: usage.as_ref() };
+                if let Err(e) = hook.after_iteration(&hook_ctx).await {
+                    error!("hook after_iteration failed: {e}");
                 }
             } else {
                 // 没有工具调用，返回最终结果
@@ -312,6 +317,10 @@ impl<P: Provider> AgentLoop<P> {
 
                 messages.push(response);
 
+                // hook: finalize_content (content passed separately, ctx uses empty)
+                let hook_ctx = crate::HookCtx { content: "", tool_calls: &[], usage: usage.as_ref() };
+                let content = hook.finalize_content(&hook_ctx, Some(content)).await.unwrap_or_default();
+
                 info!("ReAct 循环完成: 迭代次数={}, 最终内容长度={} 字符", iteration, content.len());
 
                 return Ok(ReActResult { content, tools_used, messages });
@@ -325,6 +334,11 @@ impl<P: Provider> AgentLoop<P> {
         );
 
         messages.push(Message::assistant(&warning_msg));
+
+        // hook: finalize_content (content passed separately, ctx uses empty)
+        let usage = self.last_usage.lock().unwrap().clone();
+        let hook_ctx = crate::HookCtx { content: "", tool_calls: &[], usage: usage.as_ref() };
+        let warning_msg = hook.finalize_content(&hook_ctx, Some(warning_msg)).await.unwrap_or_default();
 
         Ok(ReActResult { content: warning_msg, tools_used, messages })
     }
@@ -340,6 +354,7 @@ impl<P: Provider> AgentLoop<P> {
     /// * `channel` - 可选的通道名称，默认为 "cli"
     /// * `chat_id` - 可选的聊天标识，默认为 "direct"
     /// * `media` - 可选的媒体文件路径列表
+    /// * `hook` - 可选的生命周期钩子
     pub async fn process_direct(
         &self,
         content: &str,
@@ -347,7 +362,7 @@ impl<P: Provider> AgentLoop<P> {
         channel: Option<&str>,
         chat_id: Option<&str>,
         media: Option<&[std::path::PathBuf]>,
-        on_progress: Option<std::sync::Arc<dyn crate::ProgressTracker>>,
+        hook: Option<Arc<dyn crate::Hook>>,
     ) -> Result<String> {
         info!("直接处理消息: {}", content);
 
@@ -362,7 +377,7 @@ impl<P: Provider> AgentLoop<P> {
                 inbound = inbound.add_media(path.display().to_string());
             }
         }
-        let outbound = self.process_message(inbound, Some(session_key), on_progress).await;
+        let outbound = self.process_message(inbound, Some(session_key), hook).await;
 
         Ok(outbound.content)
     }
@@ -410,14 +425,9 @@ impl<P: Provider> AgentLoop<P> {
             let self_clone = Arc::clone(&self);
             let channel = msg.channel.clone();
             let chat_id = msg.chat_id.clone();
-            let on_progress = std::sync::Arc::new(crate::ChannelProgressTracker::new(
-                self.outbound_tx.clone(),
-                channel.clone(),
-                chat_id.clone(),
-            ));
+            let hook: Arc<dyn crate::Hook> = Arc::new(crate::LoopHook::new(self.outbound_tx.clone(), channel, chat_id));
 
-            let mut handle =
-                tokio::spawn(async move { self_clone.process_message(msg, None, Some(on_progress)).await });
+            let mut handle = tokio::spawn(async move { self_clone.process_message(msg, None, Some(hook)).await });
 
             // 等待任务完成，同时监听 /stop 命令
             loop {
@@ -520,7 +530,8 @@ impl<P: Provider> AgentLoop<P> {
                 let skip = messages.len() - 1;
 
                 // 执行 ReAct 循环
-                match self.re_act(messages, target_channel, target_chat_id, None, false).await {
+                let noop = crate::NoopHook;
+                match self.re_act(messages, target_channel, target_chat_id, &noop, false).await {
                     Ok(result) => {
                         // 保存本回合消息
                         session.save_turn(&result.messages, skip);
@@ -614,19 +625,25 @@ impl<P: Provider> AgentLoop<P> {
     /// # Arguments
     /// * `inbound` - 入站消息
     /// * `session_key` - 可选的会话标识，格式为 "channel:chat_id"；不存在时从 inbound.session_key() 获取
-    /// * `on_progress` - 可选的进度追踪器
+    /// * `hook` - 可选的生命周期钩子
     ///
     /// 注意：此方法总是返回 OutboundMessage，错误会被转换为错误消息内容
     async fn process_message(
         &self,
         inbound: InboundMessage,
         session_key: Option<&str>,
-        on_progress: Option<std::sync::Arc<dyn crate::ProgressTracker>>,
+        hook: Option<Arc<dyn crate::Hook>>,
     ) -> OutboundMessage {
         // 系统消息：从 chat_id 解析目标路由（格式为 "channel:chat_id"）
         if inbound.channel == "system" {
             return self.process_system_message(inbound).await;
         }
+
+        let noop = crate::NoopHook;
+        let hook: &dyn crate::Hook = match hook.as_deref() {
+            Some(h) => h,
+            None => &noop,
+        };
 
         // 获取或创建会话：优先使用传入的 session_key，否则从 inbound 获取
         let session_key = session_key.map(|s| s.to_string()).unwrap_or_else(|| inbound.session_key());
@@ -676,7 +693,7 @@ impl<P: Provider> AgentLoop<P> {
         let scheduled = session_key.starts_with("cron:");
 
         // 执行 ReAct 循环（支持工具调用）
-        let result = match self.re_act(messages, &channel, &chat_id, on_progress, scheduled).await {
+        let result = match self.re_act(messages, &channel, &chat_id, hook, scheduled).await {
             Ok(v) => v,
             Err(e) => {
                 error!("处理消息失败: {}", e);
@@ -729,7 +746,7 @@ fn is_stop_cmd(content: &str) -> bool {
 ///
 /// 移除某些模型在内容中嵌入的 `<think>…</think>` 标签块。
 /// 参考 Python 版本的 `_strip_think` 方法。
-fn strip_think(text: &str) -> String {
+pub fn strip_think(text: &str) -> String {
     /// 用于匹配 think 标签的正则表达式（含孤立闭合标签）
     static THINK_REGEX: LazyLock<regex::Regex> =
         LazyLock::new(|| regex::Regex::new(r"<think>[\s\S]*?</think>|</think>").expect("Invalid regex pattern"));
@@ -741,7 +758,7 @@ fn strip_think(text: &str) -> String {
 ///
 /// 将工具调用列表格式化为易读的字符串，例如 `web_search("query")`。
 /// 参考 Python 版本的 `_tool_hint` 方法。
-fn format_tool_hint(tool_calls: &[nanobot_provider::ToolCall]) -> String {
+pub(crate) fn format_tool_hint(tool_calls: &[nanobot_provider::ToolCall]) -> String {
     tool_calls.iter().map(|tc| tc.preview()).collect::<Vec<_>>().join(", ")
 }
 
