@@ -12,7 +12,8 @@ fn convert_messages_extracts_system() {
 
     let (system, msgs) = convert_messages(&messages);
 
-    assert_eq!(system, Some("You are helpful.".to_string()));
+    let system_text: String = system.unwrap().into_iter().map(|b| b.text).collect::<Vec<_>>().join("\n");
+    assert_eq!(system_text, "You are helpful.");
     assert_eq!(msgs.len(), 1);
     assert_eq!(msgs[0].role, "user");
 }
@@ -23,7 +24,8 @@ fn convert_messages_multiple_system_joined() {
 
     let (system, msgs) = convert_messages(&messages);
 
-    assert_eq!(system, Some("You are helpful.\nBe concise.".to_string()));
+    let system_text: String = system.unwrap().into_iter().map(|b| b.text).collect::<Vec<_>>().join("\n");
+    assert_eq!(system_text, "You are helpful.\nBe concise.");
     assert_eq!(msgs.len(), 1);
 }
 
@@ -39,8 +41,8 @@ fn convert_messages_user_and_assistant() {
     assert_eq!(msgs[1].role, "assistant");
 
     // 验证 content blocks
-    assert!(matches!(&msgs[0].content[0], ContentBlock::Text { text } if text == "Hello"));
-    assert!(matches!(&msgs[1].content[0], ContentBlock::Text { text } if text == "Hi there"));
+    assert!(matches!(&msgs[0].content[0], ContentBlock::Text { text, .. } if text == "Hello"));
+    assert!(matches!(&msgs[1].content[0], ContentBlock::Text { text, .. } if text == "Hi there"));
 }
 
 #[test]
@@ -54,7 +56,7 @@ fn convert_messages_assistant_with_tool_calls() {
     assert_eq!(msgs[0].role, "assistant");
     assert_eq!(msgs[0].content.len(), 2);
 
-    assert!(matches!(&msgs[0].content[0], ContentBlock::Text { text } if text == "Let me check."));
+    assert!(matches!(&msgs[0].content[0], ContentBlock::Text { text, .. } if text == "Let me check."));
     assert!(
         matches!(&msgs[0].content[1], ContentBlock::ToolUse { id, name, input } if id == "toolu_01" && name == "get_weather" && input["location"] == "Paris")
     );
@@ -145,7 +147,7 @@ fn response_deserialize_text_only() {
 
     let resp: AnthropicResponse = serde_json::from_str(json).unwrap();
     assert_eq!(resp.content.len(), 1);
-    assert!(matches!(&resp.content[0], ContentBlock::Text { text } if text == "Hello!"));
+    assert!(matches!(&resp.content[0], ContentBlock::Text { text, .. } if text == "Hello!"));
     assert_eq!(resp.stop_reason, Some("end_turn".to_string()));
 }
 
@@ -165,7 +167,7 @@ fn response_deserialize_with_tool_use() {
 
     let resp: AnthropicResponse = serde_json::from_str(json).unwrap();
     assert_eq!(resp.content.len(), 2);
-    assert!(matches!(&resp.content[0], ContentBlock::Text { text } if text == "Let me check."));
+    assert!(matches!(&resp.content[0], ContentBlock::Text { text, .. } if text == "Let me check."));
     assert!(
         matches!(&resp.content[1], ContentBlock::ToolUse { id, name, input } if id == "toolu_01" && name == "get_weather" && input["location"] == "Paris")
     );
@@ -188,7 +190,7 @@ fn response_deserialize_with_thinking_block() {
     let resp: AnthropicResponse = serde_json::from_str(json).unwrap();
     assert_eq!(resp.content.len(), 2);
     assert!(matches!(&resp.content[0], ContentBlock::Thinking { thinking, .. } if thinking == "Let me think..."));
-    assert!(matches!(&resp.content[1], ContentBlock::Text { text } if text == "Here is my answer."));
+    assert!(matches!(&resp.content[1], ContentBlock::Text { text, .. } if text == "Here is my answer."));
 }
 
 // ============ AnthropicLike 构造测试 ============
@@ -221,4 +223,40 @@ fn new_with_timeout() {
     let provider = AnthropicLike::new_with_timeout(&config, "claude-sonnet-4-20250514", 60).unwrap();
 
     assert_eq!(provider.timeout, 60);
+}
+
+// ============ cache_control 断点测试 ============
+
+#[test]
+fn system_block_has_no_cache_control_by_default() {
+    let messages = [Message::system("prompt"), Message::user("hi")];
+    let (system, _) = convert_messages(&messages);
+    let blocks = system.unwrap();
+    assert!(blocks[0].cache_control.is_none());
+}
+
+#[test]
+fn cache_control_serializes_correctly() {
+    let block = SystemBlock {
+        r#type: "text".to_string(),
+        text: "hello".to_string(),
+        cache_control: Some(CacheControl::ephemeral()),
+    };
+    let json = serde_json::to_value(&block).unwrap();
+    assert_eq!(json["cache_control"]["type"], "ephemeral");
+}
+
+#[test]
+fn text_block_cache_control_serializes_correctly() {
+    let block = ContentBlock::Text { text: "hello".to_string(), cache_control: Some(CacheControl::ephemeral()) };
+    let json = serde_json::to_value(&block).unwrap();
+    assert_eq!(json["cache_control"]["type"], "ephemeral");
+    assert_eq!(json["type"], "text");
+}
+
+#[test]
+fn text_block_without_cache_control_omits_field() {
+    let block = ContentBlock::Text { text: "hello".to_string(), cache_control: None };
+    let json = serde_json::to_value(&block).unwrap();
+    assert!(json.get("cache_control").is_none());
 }

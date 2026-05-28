@@ -24,7 +24,7 @@ struct AnthropicRequest<'a> {
     max_tokens: u16,
     messages: Vec<AnthropicMessage>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    system: Option<String>,
+    system: Option<Vec<SystemBlock>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     temperature: Option<f32>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -45,7 +45,11 @@ struct AnthropicMessage {
 #[serde(tag = "type", rename_all = "snake_case")]
 enum ContentBlock {
     /// 文本内容
-    Text { text: String },
+    Text {
+        text: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        cache_control: Option<CacheControl>,
+    },
     /// 工具调用（请求/响应中）
     ToolUse { id: String, name: String, input: serde_json::Value },
     /// 工具结果（请求中）
@@ -68,6 +72,26 @@ struct ImageSource {
     data: String,
 }
 
+/// Anthropic cache control 标记
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct CacheControl {
+    r#type: String,
+}
+
+impl CacheControl {
+    fn ephemeral() -> Self {
+        Self { r#type: "ephemeral".to_string() }
+    }
+}
+
+/// Anthropic system prompt block（支持 cache_control）
+#[derive(Debug, Clone, Serialize)]
+struct SystemBlock {
+    r#type: String,
+    text: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    cache_control: Option<CacheControl>,
+}
 /// Anthropic 工具定义
 #[derive(Debug, Clone, Serialize)]
 struct AnthropicTool {
@@ -162,7 +186,7 @@ impl AnthropicLike {
 /// 返回 `(system, messages)`：
 /// - `system`：从 `Message::System` 中提取的系统提示（多个则拼接）
 /// - `messages`：转换后的 Anthropic 消息列表
-fn convert_messages(messages: &[Message]) -> (Option<String>, Vec<AnthropicMessage>) {
+fn convert_messages(messages: &[Message]) -> (Option<Vec<SystemBlock>>, Vec<AnthropicMessage>) {
     let mut system_parts: Vec<&str> = Vec::new();
     let mut result: Vec<AnthropicMessage> = Vec::new();
     // 用于收集连续的 Tool 消息
@@ -184,12 +208,14 @@ fn convert_messages(messages: &[Message]) -> (Option<String>, Vec<AnthropicMessa
             Message::User { content } => {
                 let blocks = match content {
                     crate::UserContent::Text(text) => {
-                        vec![ContentBlock::Text { text: text.clone() }]
+                        vec![ContentBlock::Text { text: text.clone(), cache_control: None }]
                     }
                     crate::UserContent::Parts(parts) => parts
                         .iter()
                         .map(|part| match part {
-                            crate::ContentPart::Text { text } => ContentBlock::Text { text: text.clone() },
+                            crate::ContentPart::Text { text } => {
+                                ContentBlock::Text { text: text.clone(), cache_control: None }
+                            }
                             crate::ContentPart::Image { media_type, data } => ContentBlock::Image {
                                 source: ImageSource {
                                     r#type: "base64".to_string(),
@@ -211,7 +237,7 @@ fn convert_messages(messages: &[Message]) -> (Option<String>, Vec<AnthropicMessa
                 }
 
                 if !content.is_empty() {
-                    blocks.push(ContentBlock::Text { text: content.clone() });
+                    blocks.push(ContentBlock::Text { text: content.clone(), cache_control: None });
                 }
                 for tc in tool_calls {
                     let input = serde_json::from_str(&tc.arguments).unwrap_or_default();
@@ -219,7 +245,7 @@ fn convert_messages(messages: &[Message]) -> (Option<String>, Vec<AnthropicMessa
                 }
                 // Anthropic 要求 content 非空
                 if blocks.is_empty() {
-                    blocks.push(ContentBlock::Text { text: String::new() });
+                    blocks.push(ContentBlock::Text { text: String::new(), cache_control: None });
                 }
                 result.push(AnthropicMessage { role: "assistant".to_string(), content: blocks });
             }
@@ -235,7 +261,11 @@ fn convert_messages(messages: &[Message]) -> (Option<String>, Vec<AnthropicMessa
         result.push(AnthropicMessage { role: "user".to_string(), content: pending_tool_results });
     }
 
-    let system = if system_parts.is_empty() { None } else { Some(system_parts.join("\n")) };
+    let system = if system_parts.is_empty() {
+        None
+    } else {
+        Some(vec![SystemBlock { r#type: "text".to_string(), text: system_parts.join("\n"), cache_control: None }])
+    };
 
     (system, result)
 }
@@ -246,7 +276,22 @@ impl Provider for AnthropicLike {
         let tools: Vec<AnthropicTool> = if self.tools.is_empty() { Vec::new() } else { (*self.tools).clone() };
         debug!("发送 Anthropic 聊天请求, 消息数量: {}, 工具数量: {}", messages.len(), tools.len());
 
-        let (system, anthropic_messages) = convert_messages(messages);
+        let (mut system, mut anthropic_messages) = convert_messages(messages);
+
+        // 注入 cache_control 断点
+        // 断点 1: 系统消息 — 缓存静态系统提示词
+        if let Some(ref mut blocks) = system
+            && let Some(last) = blocks.last_mut()
+        {
+            last.cache_control = Some(CacheControl::ephemeral());
+        }
+        // 断点 2: 倒数第二条消息 — 缓存对话历史前缀
+        let msg_len = anthropic_messages.len();
+        if msg_len >= 3
+            && let Some(ContentBlock::Text { cache_control, .. }) = anthropic_messages[msg_len - 2].content.last_mut()
+        {
+            *cache_control = Some(CacheControl::ephemeral());
+        }
 
         let tool_choice = options.tool_choice.as_ref().map(|tc| match tc {
             crate::ToolChoice::Auto => serde_json::json!({"type": "auto"}),
@@ -321,7 +366,7 @@ impl Provider for AnthropicLike {
 
         for block in resp.content {
             match block {
-                ContentBlock::Text { text } => {
+                ContentBlock::Text { text, .. } => {
                     text_parts.push(text);
                 }
                 ContentBlock::ToolUse { id, name, input } => {
