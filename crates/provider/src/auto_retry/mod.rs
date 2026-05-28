@@ -6,7 +6,7 @@ use anyhow::Result;
 use nanobot_tools::ToolDefinition;
 use tracing::warn;
 
-use crate::{Message, Options, Provider, ProviderError, strip_images};
+use crate::{Message, MeteredMessage, Options, Provider, ProviderError, strip_images};
 
 /// 默认最大重试次数
 const DEFAULT_MAX_RETRIES: u32 = 3;
@@ -33,7 +33,7 @@ impl<P: Provider> AutoRetryProvider<P> {
 
 #[async_trait::async_trait]
 impl<P: Provider> Provider for AutoRetryProvider<P> {
-    async fn chat(&self, messages: &[Message], options: &Options) -> Result<Message> {
+    async fn chat(&self, messages: &[Message], options: &Options) -> Result<MeteredMessage> {
         let mut last_err = None;
 
         for attempt in 0..=self.max_retries {

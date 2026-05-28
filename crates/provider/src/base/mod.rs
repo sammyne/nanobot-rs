@@ -1,6 +1,7 @@
 //! Provider 基础 trait 和类型定义
 
 use std::borrow::Cow;
+use std::ops::{Deref, DerefMut};
 
 use anyhow::Result;
 use nanobot_tools::ToolDefinition;
@@ -416,11 +417,52 @@ impl ProviderResponse {
     }
 }
 
+/// LLM API 调用的 token 用量
+#[derive(Debug, Clone, Default)]
+pub struct Usage {
+    /// 输入 token 数
+    pub input_tokens: u64,
+    /// 输出 token 数
+    pub output_tokens: u64,
+}
+
+/// 带 token 用量的 LLM 响应
+///
+/// 通过 `Deref<Target=Message>` 透明访问 Message 方法，
+/// 调用方无需关心 usage 即可像使用 Message 一样使用。
+#[derive(Debug, Clone)]
+pub struct MeteredMessage {
+    /// 响应消息
+    pub message: Message,
+    /// token 用量（部分 provider 可能不返回）
+    pub usage: Option<Usage>,
+}
+
+impl Deref for MeteredMessage {
+    type Target = Message;
+
+    fn deref(&self) -> &Self::Target {
+        &self.message
+    }
+}
+
+impl DerefMut for MeteredMessage {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.message
+    }
+}
+
+impl From<Message> for MeteredMessage {
+    fn from(message: Message) -> Self {
+        Self { message, usage: None }
+    }
+}
+
 /// LLM 提供者 trait
 #[async_trait::async_trait]
 pub trait Provider: Send + Sync + Clone + 'static {
     /// 发送聊天请求
-    async fn chat(&self, messages: &[Message], options: &Options) -> Result<Message>;
+    async fn chat(&self, messages: &[Message], options: &Options) -> Result<MeteredMessage>;
 
     /// 绑定可用工具列表（在调用 `chat` 之前设置）
     ///

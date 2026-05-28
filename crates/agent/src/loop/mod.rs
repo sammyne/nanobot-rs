@@ -8,20 +8,21 @@
 
 use std::collections::HashSet;
 use std::sync::{Arc, LazyLock};
+use std::time::Instant;
 
 use anyhow::Result;
 use nanobot_config::AgentDefaults;
 use nanobot_context::ContextBuilder;
 use nanobot_cron::{CronService, CronTool};
 use nanobot_mcp::connect;
-use nanobot_provider::{Message, Provider};
+use nanobot_provider::{Message, MeteredMessage, Provider, Usage};
 use nanobot_session::SessionManager;
 use nanobot_subagent::{SpawnTool, SubagentManager};
 use nanobot_tools::{Tool, ToolContext, ToolRegistry};
 use tokio::sync::{Mutex, mpsc};
 use tracing::{debug, error, info, warn};
 
-use crate::cmd::{Command, HelpCmd, NewCmd, RestartCmd, StopCmd};
+use crate::cmd::{Command, HelpCmd, NewCmd, RestartCmd, StatusCmd, StopCmd};
 use crate::utils::parse_system_message_target;
 use crate::{InboundMessage, OutboundMessage};
 
@@ -63,6 +64,12 @@ pub struct AgentLoop<P: Provider> {
 
     /// 出站消息发送端（用于 run() 和 MessageTool）
     outbound_tx: mpsc::Sender<OutboundMessage>,
+
+    /// 启动时间
+    start_time: Instant,
+
+    /// 最近一次 LLM 调用的 token 用量
+    last_usage: std::sync::Mutex<Option<Usage>>,
 }
 
 impl<P: Provider> AgentLoop<P> {
@@ -166,11 +173,13 @@ impl<P: Provider> AgentLoop<P> {
             consolidating: Arc::new(Mutex::new(HashSet::new())),
             subagent_manager,
             outbound_tx,
+            start_time: Instant::now(),
+            last_usage: std::sync::Mutex::new(None),
         })
     }
 
     /// 调用 LLM 并返回响应消息
-    async fn call_llm(&self, messages: &[Message]) -> Result<Message> {
+    async fn call_llm(&self, messages: &[Message]) -> Result<MeteredMessage> {
         debug!("调用 LLM: 消息数量={}", messages.len());
 
         let options = nanobot_provider::Options {
@@ -180,6 +189,9 @@ impl<P: Provider> AgentLoop<P> {
             tool_choice: None,
         };
         let response = self.provider.chat(messages, &options).await?;
+
+        // 记录最近一次 token 用量
+        *self.last_usage.lock().unwrap() = response.usage.clone();
 
         info!("收到 LLM 响应, 角色={}, 内容长度={} 字符", response.role(), response.content().len());
 
@@ -225,6 +237,7 @@ impl<P: Provider> AgentLoop<P> {
             // 在消费 response 之前提取后续需要的数据
             let content = response.content().to_string();
             let tool_calls = response.tool_calls().to_vec();
+            let response = response.message;
 
             if !tool_calls.is_empty() {
                 // 发送进度通知
@@ -573,6 +586,16 @@ impl<P: Provider> AgentLoop<P> {
                 stop_cmd.run(msg, session_key.to_string()).await
             }
             "restart" => RestartCmd.run(msg, session_key.to_string()).await,
+            "status" => {
+                let session = self.sessions.get_or_create(session_key);
+                let status_cmd = StatusCmd {
+                    model: self.config.model.clone(),
+                    start_time: self.start_time,
+                    last_usage: self.last_usage.lock().unwrap().clone(),
+                    session_message_count: session.messages.len(),
+                };
+                status_cmd.run(msg, session_key.to_string()).await
+            }
             // 不支持的命令返回提示信息
             _ => Err(format!("❌ Unsupported command: /{cmd}\nTry /help for available commands")),
         };

@@ -10,7 +10,7 @@ use nanobot_tools::ToolDefinition;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
 
-use crate::{Message, Options, Provider, ProviderError, ToolCall};
+use crate::{Message, MeteredMessage, Options, Provider, ProviderError, ToolCall, Usage};
 
 /// Anthropic API 版本
 const ANTHROPIC_VERSION: &str = "2023-06-01";
@@ -82,6 +82,14 @@ struct AnthropicResponse {
     content: Vec<ContentBlock>,
     #[allow(dead_code)]
     stop_reason: Option<String>,
+    usage: Option<AnthropicUsage>,
+}
+
+/// Anthropic API usage 信息
+#[derive(Debug, Deserialize)]
+struct AnthropicUsage {
+    input_tokens: u64,
+    output_tokens: u64,
 }
 
 /// Anthropic API 错误响应
@@ -234,7 +242,7 @@ fn convert_messages(messages: &[Message]) -> (Option<String>, Vec<AnthropicMessa
 
 #[async_trait::async_trait]
 impl Provider for AnthropicLike {
-    async fn chat(&self, messages: &[Message], options: &Options) -> Result<Message> {
+    async fn chat(&self, messages: &[Message], options: &Options) -> Result<MeteredMessage> {
         let tools: Vec<AnthropicTool> = if self.tools.is_empty() { Vec::new() } else { (*self.tools).clone() };
         debug!("发送 Anthropic 聊天请求, 消息数量: {}, 工具数量: {}", messages.len(), tools.len());
 
@@ -304,6 +312,8 @@ impl Provider for AnthropicLike {
         let resp: AnthropicResponse =
             serde_json::from_str(&body).map_err(|e| ProviderError::Api(format!("响应解析失败: {e}")))?;
 
+        let usage = resp.usage.map(|u| Usage { input_tokens: u.input_tokens, output_tokens: u.output_tokens });
+
         // 从响应中提取文本、工具调用和 thinking
         let mut text_parts: Vec<String> = Vec::new();
         let mut tool_calls: Vec<ToolCall> = Vec::new();
@@ -334,10 +344,11 @@ impl Provider for AnthropicLike {
             info!("收到 Anthropic 响应, 长度: {}", content.len());
         }
 
-        match thinking {
-            Some(t) => Ok(Message::assistant_with_thinking(content, tool_calls, t)),
-            None => Ok(Message::assistant_with_tools(content, tool_calls)),
-        }
+        let message = match thinking {
+            Some(t) => Message::assistant_with_thinking(content, tool_calls, t),
+            None => Message::assistant_with_tools(content, tool_calls),
+        };
+        Ok(MeteredMessage { message, usage })
     }
 
     fn bind_tools(&mut self, tools: Vec<ToolDefinition>) {

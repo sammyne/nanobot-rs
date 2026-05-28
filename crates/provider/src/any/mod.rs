@@ -9,7 +9,7 @@ use nanobot_tools::ToolDefinition;
 use crate::anthropic::AnthropicLike;
 use crate::auto_retry::AutoRetryProvider;
 use crate::openai::OpenAILike;
-use crate::{Message, Options, Provider};
+use crate::{Message, MeteredMessage, Options, Provider};
 
 /// 统一 Provider 枚举，包装所有支持的 Provider 实现
 #[derive(Clone)]
@@ -43,7 +43,7 @@ impl AnyProvider {
 
 #[async_trait::async_trait]
 impl Provider for AnyProvider {
-    async fn chat(&self, messages: &[Message], options: &Options) -> Result<Message> {
+    async fn chat(&self, messages: &[Message], options: &Options) -> Result<MeteredMessage> {
         match self {
             Self::OpenAI(p) => p.chat(messages, options).await,
             Self::Anthropic(p) => p.chat(messages, options).await,

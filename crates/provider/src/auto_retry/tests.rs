@@ -5,7 +5,7 @@ use anyhow::Result;
 use nanobot_tools::ToolDefinition;
 
 use super::*;
-use crate::{ContentPart, Message, Options, Provider, ProviderError, UserContent};
+use crate::{ContentPart, Message, MeteredMessage, Options, Provider, ProviderError, UserContent};
 
 /// 可配置的 Mock Provider
 ///
@@ -29,9 +29,9 @@ impl MockProvider {
 
 #[async_trait::async_trait]
 impl Provider for MockProvider {
-    async fn chat(&self, _messages: &[Message], _options: &Options) -> Result<Message> {
+    async fn chat(&self, _messages: &[Message], _options: &Options) -> Result<MeteredMessage> {
         let n = self.call_count.fetch_add(1, Ordering::SeqCst);
-        if n < self.fail_count { Err((self.error_factory)(n)) } else { Ok(Message::assistant("ok")) }
+        if n < self.fail_count { Err((self.error_factory)(n)) } else { Ok(Message::assistant("ok").into()) }
     }
 
     fn bind_tools(&mut self, _tools: Vec<ToolDefinition>) {}
@@ -104,7 +104,7 @@ struct ImageRejectMock {
 
 #[async_trait::async_trait]
 impl Provider for ImageRejectMock {
-    async fn chat(&self, messages: &[Message], _options: &Options) -> Result<Message> {
+    async fn chat(&self, messages: &[Message], _options: &Options) -> Result<MeteredMessage> {
         let n = self.call_count.fetch_add(1, Ordering::SeqCst);
         if n == 0 {
             return Err(ProviderError::Api("image_url is only supported by vision models".to_string()).into());
@@ -118,7 +118,7 @@ impl Provider for ImageRejectMock {
             }
         }
         if self.second_call_succeeds {
-            Ok(Message::assistant("described without image"))
+            Ok(Message::assistant("described without image").into())
         } else {
             Err(ProviderError::Api("still failing".to_string()).into())
         }

@@ -12,7 +12,7 @@ pub use anthropic::AnthropicLike;
 pub use any::AnyProvider;
 pub use auto_retry::AutoRetryProvider;
 pub use base::{
-    ContentPart, Message, Options, Provider, ProviderError, ProviderResponse, ToolCall, ToolChoice, UserContent,
-    strip_images,
+    ContentPart, Message, MeteredMessage, Options, Provider, ProviderError, ProviderResponse, ToolCall, ToolChoice,
+    Usage, UserContent, strip_images,
 };
 pub use openai::OpenAILike;
