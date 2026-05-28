@@ -10,7 +10,7 @@ use nanobot_tools::ToolDefinition;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
 
-use crate::{Message, MeteredMessage, Options, Provider, ProviderError, ToolCall, Usage};
+use crate::{Message, MeteredMessage, Options, Provider, ProviderError, TokenUsage, ToolCall};
 
 /// Anthropic API 版本
 const ANTHROPIC_VERSION: &str = "2023-06-01";
@@ -114,6 +114,9 @@ struct AnthropicResponse {
 struct AnthropicUsage {
     input_tokens: u64,
     output_tokens: u64,
+    /// Prompt cache 读取的 token 数
+    #[serde(default)]
+    cache_read_input_tokens: Option<u64>,
 }
 
 /// Anthropic API 错误响应
@@ -357,7 +360,11 @@ impl Provider for AnthropicLike {
         let resp: AnthropicResponse =
             serde_json::from_str(&body).map_err(|e| ProviderError::Api(format!("响应解析失败: {e}")))?;
 
-        let usage = resp.usage.map(|u| Usage { input_tokens: u.input_tokens, output_tokens: u.output_tokens });
+        let usage = resp.usage.map(|u| TokenUsage {
+            input: u.input_tokens,
+            output: u.output_tokens,
+            cached: u.cache_read_input_tokens.filter(|&v| v > 0),
+        });
 
         // 从响应中提取文本、工具调用和 thinking
         let mut text_parts: Vec<String> = Vec::new();

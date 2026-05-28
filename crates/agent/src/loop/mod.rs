@@ -15,7 +15,7 @@ use nanobot_config::AgentDefaults;
 use nanobot_context::ContextBuilder;
 use nanobot_cron::{CronService, CronTool};
 use nanobot_mcp::connect;
-use nanobot_provider::{Message, MeteredMessage, Provider, Usage};
+use nanobot_provider::{Message, MeteredMessage, Provider, TokenUsage};
 use nanobot_session::SessionManager;
 use nanobot_subagent::{SpawnTool, SubagentManager};
 use nanobot_tools::{Tool, ToolContext, ToolRegistry};
@@ -69,7 +69,7 @@ pub struct AgentLoop<P: Provider> {
     start_time: Instant,
 
     /// 最近一次 LLM 调用的 token 用量
-    last_usage: std::sync::Mutex<Option<Usage>>,
+    last_usage: std::sync::Mutex<Option<TokenUsage>>,
 }
 
 impl<P: Provider> AgentLoop<P> {

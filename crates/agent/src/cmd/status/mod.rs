@@ -2,7 +2,7 @@
 
 use std::time::Instant;
 
-use nanobot_provider::Usage;
+use nanobot_provider::TokenUsage;
 
 use super::Command;
 use crate::InboundMessage;
@@ -14,7 +14,7 @@ pub struct StatusCmd {
     /// 启动时间
     pub start_time: Instant,
     /// 最近一次 LLM 调用的 token 用量
-    pub last_usage: Option<Usage>,
+    pub last_usage: Option<TokenUsage>,
     /// 当前会话消息数
     pub session_message_count: usize,
 }
@@ -25,16 +25,25 @@ impl Command for StatusCmd {
         let secs = self.start_time.elapsed().as_secs();
         let uptime = format_uptime(secs);
 
-        let (tokens_in, tokens_out) = match &self.last_usage {
-            Some(u) => (format!("{}", u.input_tokens), format!("{}", u.output_tokens)),
-            None => ("N/A".to_string(), "N/A".to_string()),
+        let (tokens_in, tokens_out, cache_info) = match &self.last_usage {
+            Some(u) => {
+                let cache_str = match u.cached {
+                    Some(cached) if u.input > 0 => {
+                        let pct = cached * 100 / u.input;
+                        format!(" ({pct}% cached)")
+                    }
+                    _ => String::new(),
+                };
+                (format!("{}", u.input), format!("{}", u.output), cache_str)
+            }
+            None => ("N/A".to_string(), "N/A".to_string(), String::new()),
         };
 
         Ok(format!(
             "\
 🐈 nanobot v{version}
 Model: {model}
-Tokens (last call): {tokens_in} in / {tokens_out} out
+Tokens (last call): {tokens_in} in / {tokens_out} out{cache_info}
 Session messages: {msg_count}
 Uptime: {uptime}",
             model = self.model,

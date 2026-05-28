@@ -419,11 +419,13 @@ impl ProviderResponse {
 
 /// LLM API 调用的 token 用量
 #[derive(Debug, Clone, Default)]
-pub struct Usage {
+pub struct TokenUsage {
     /// 输入 token 数
-    pub input_tokens: u64,
+    pub input: u64,
     /// 输出 token 数
-    pub output_tokens: u64,
+    pub output: u64,
+    /// 缓存命中的 token 数（Anthropic cache_read_input_tokens / OpenAI cached_tokens）
+    pub cached: Option<u64>,
 }
 
 /// 带 token 用量的 LLM 响应
@@ -435,7 +437,7 @@ pub struct MeteredMessage {
     /// 响应消息
     pub message: Message,
     /// token 用量（部分 provider 可能不返回）
-    pub usage: Option<Usage>,
+    pub usage: Option<TokenUsage>,
 }
 
 impl Deref for MeteredMessage {

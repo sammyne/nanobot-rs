@@ -13,7 +13,7 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use async_trait::async_trait;
-use nanobot_provider::{ToolCall, Usage};
+use nanobot_provider::{TokenUsage, ToolCall};
 use tokio::sync::mpsc;
 use tracing::error;
 
@@ -29,7 +29,7 @@ pub struct HookCtx<'a> {
     /// 当前迭代的工具调用列表
     pub tool_calls: &'a [ToolCall],
     /// 当前迭代的 token 用量
-    pub usage: Option<&'a Usage>,
+    pub usage: Option<&'a TokenUsage>,
 }
 
 /// Agent 生命周期钩子
