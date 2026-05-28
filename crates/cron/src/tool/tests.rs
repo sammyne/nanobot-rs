@@ -8,8 +8,11 @@ use super::*;
 #[test]
 fn cron_args_add_interop() {
     // enum → JSON → struct
-    let enum_val =
-        CronArgs::Add { message: "Daily standup".to_string(), schedule: CronScheduleArgs::Every { every_seconds: 60 } };
+    let enum_val = CronArgs::Add {
+        message: "Daily standup".to_string(),
+        schedule: CronScheduleArgs::Every { every_seconds: 60 },
+        deliver: true,
+    };
     let json = serde_json::to_value(&enum_val).unwrap();
     let struct_val: CronArgsSchema = serde_json::from_value(json).unwrap();
     assert_eq!(struct_val.action, "add");
