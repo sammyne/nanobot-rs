@@ -227,7 +227,7 @@ where
             let tool_calls = response.tool_calls().to_vec();
             if !tool_calls.is_empty() {
                 // 将原始 LLM 响应直接添加到上下文（保留 thinking 等 provider 特定字段）
-                messages.push(response);
+                messages.push(response.message);
 
                 // 执行每个工具调用
                 for tool_call in &tool_calls {

@@ -31,7 +31,11 @@ impl MockProvider {
 
 #[async_trait]
 impl Provider for MockProvider {
-    async fn chat(&self, _messages: &[Message], _options: &nanobot_provider::Options) -> anyhow::Result<Message> {
+    async fn chat(
+        &self,
+        _messages: &[Message],
+        _options: &nanobot_provider::Options,
+    ) -> anyhow::Result<nanobot_provider::MeteredMessage> {
         // 检查是否绑定了 save_memory 工具
         let has_save_memory = self.bound_tools.iter().any(|t| t.name == "save_memory");
 
@@ -45,10 +49,10 @@ impl Provider for MockProvider {
                     "memory_update": "Updated long-term memory"
                 }),
             );
-            Ok(Message::assistant_with_tools("Memory saved", vec![tool_call]))
+            Ok(Message::assistant_with_tools("Memory saved", vec![tool_call]).into())
         } else {
             // 返回普通响应
-            Ok(Message::assistant(&self.response))
+            Ok(Message::assistant(&self.response).into())
         }
     }
 
@@ -809,35 +813,35 @@ async fn try_handle_cmd_recognizes_and_processes_commands() {
             input: "/help",
             channel: "cli",
             chat_id: "test123",
-            expected_response: "🐈 nanobot commands:\n/new — Start a new conversation\n/stop — Stop current processing and cancel background tasks\n/restart — Restart the agent process\n/help — Show available commands",
+            expected_response: "🐈 nanobot commands:\n/new — Start a new conversation\n/stop — Stop current processing and cancel background tasks\n/status — Show bot runtime status\n/restart — Restart the agent process\n/help — Show available commands",
         },
         CommandCase {
             name: "大小写不敏感 - /HELP",
             input: "/HELP",
             channel: "cli",
             chat_id: "test123",
-            expected_response: "🐈 nanobot commands:\n/new — Start a new conversation\n/stop — Stop current processing and cancel background tasks\n/restart — Restart the agent process\n/help — Show available commands",
+            expected_response: "🐈 nanobot commands:\n/new — Start a new conversation\n/stop — Stop current processing and cancel background tasks\n/status — Show bot runtime status\n/restart — Restart the agent process\n/help — Show available commands",
         },
         CommandCase {
             name: "大小写不敏感 - /Help",
             input: "/Help",
             channel: "cli",
             chat_id: "test123",
-            expected_response: "🐈 nanobot commands:\n/new — Start a new conversation\n/stop — Stop current processing and cancel background tasks\n/restart — Restart the agent process\n/help — Show available commands",
+            expected_response: "🐈 nanobot commands:\n/new — Start a new conversation\n/stop — Stop current processing and cancel background tasks\n/status — Show bot runtime status\n/restart — Restart the agent process\n/help — Show available commands",
         },
         CommandCase {
             name: "忽略前后空格 - /help ",
             input: "/help ",
             channel: "cli",
             chat_id: "test123",
-            expected_response: "🐈 nanobot commands:\n/new — Start a new conversation\n/stop — Stop current processing and cancel background tasks\n/restart — Restart the agent process\n/help — Show available commands",
+            expected_response: "🐈 nanobot commands:\n/new — Start a new conversation\n/stop — Stop current processing and cancel background tasks\n/status — Show bot runtime status\n/restart — Restart the agent process\n/help — Show available commands",
         },
         CommandCase {
             name: "忽略前后空格 - /HELP  ",
             input: "/HELP  ",
             channel: "cli",
             chat_id: "test123",
-            expected_response: "🐈 nanobot commands:\n/new — Start a new conversation\n/stop — Stop current processing and cancel background tasks\n/restart — Restart the agent process\n/help — Show available commands",
+            expected_response: "🐈 nanobot commands:\n/new — Start a new conversation\n/stop — Stop current processing and cancel background tasks\n/status — Show bot runtime status\n/restart — Restart the agent process\n/help — Show available commands",
         },
         CommandCase {
             name: "未知命令返回提示信息",
@@ -942,7 +946,7 @@ async fn process_message_integrates_command_handling() {
 
     assert_eq!(
         outbound_cmd.content,
-        "🐈 nanobot commands:\n/new — Start a new conversation\n/stop — Stop current processing and cancel background tasks\n/restart — Restart the agent process\n/help — Show available commands",
+        "🐈 nanobot commands:\n/new — Start a new conversation\n/stop — Stop current processing and cancel background tasks\n/status — Show bot runtime status\n/restart — Restart the agent process\n/help — Show available commands",
         "command should be processed and return help info"
     );
     assert_eq!(outbound_cmd.channel, "cli", "channel should be preserved");
@@ -1388,7 +1392,11 @@ impl ThinkingMockProvider {
 
 #[async_trait]
 impl Provider for ThinkingMockProvider {
-    async fn chat(&self, _messages: &[Message], _options: &nanobot_provider::Options) -> anyhow::Result<Message> {
+    async fn chat(
+        &self,
+        _messages: &[Message],
+        _options: &nanobot_provider::Options,
+    ) -> anyhow::Result<nanobot_provider::MeteredMessage> {
         let call = self.call_count.fetch_add(1, Ordering::SeqCst);
         match call {
             0 => {
@@ -1400,13 +1408,13 @@ impl Provider for ThinkingMockProvider {
                 );
                 let thinking =
                     serde_json::json!({"type": "thinking", "thinking": "Let me think...", "signature": "sig123"});
-                Ok(Message::assistant_with_thinking("thinking response", vec![tool_call], thinking))
+                Ok(Message::assistant_with_thinking("thinking response", vec![tool_call], thinking).into())
             }
             _ => {
                 // 第二次调用：返回带 thinking 但无 tool call 的响应
                 let thinking =
                     serde_json::json!({"type": "thinking", "thinking": "Done thinking.", "signature": "sig456"});
-                Ok(Message::assistant_with_thinking("final answer", vec![], thinking))
+                Ok(Message::assistant_with_thinking("final answer", vec![], thinking).into())
             }
         }
     }

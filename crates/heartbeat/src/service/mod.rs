@@ -298,7 +298,7 @@ where
                     let tool_call_id = tool_call.id.clone();
 
                     // Add assistant response (carries tool_calls) then tool result
-                    messages.push(response);
+                    messages.push(response.message);
                     messages.push(Message::tool(&tool_call_id, error_msg));
                 }
                 Err(e) => {

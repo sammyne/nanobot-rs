@@ -14,8 +14,8 @@ impl Provider for MockProvider {
         &self,
         _messages: &[nanobot_provider::Message],
         _options: &nanobot_provider::Options,
-    ) -> anyhow::Result<nanobot_provider::Message> {
-        Ok(nanobot_provider::Message::assistant("ok"))
+    ) -> anyhow::Result<nanobot_provider::MeteredMessage> {
+        Ok(nanobot_provider::Message::assistant("ok").into())
     }
 
     fn bind_tools(&mut self, _tools: Vec<nanobot_tools::ToolDefinition>) {}

@@ -26,12 +26,14 @@ pub trait Command: Send + Sync {
 mod help;
 mod new;
 mod restart;
+mod status;
 mod stop;
 
 // Re-export common command types
 pub use help::HelpCmd;
 pub use new::NewCmd;
 pub use restart::RestartCmd;
+pub use status::StatusCmd;
 pub use stop::StopCmd;
 
 #[cfg(test)]

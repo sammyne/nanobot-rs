@@ -37,10 +37,14 @@ impl MockProvider {
 
 #[async_trait::async_trait]
 impl Provider for MockProvider {
-    async fn chat(&self, _messages: &[Message], _options: &nanobot_provider::Options) -> anyhow::Result<Message> {
+    async fn chat(
+        &self,
+        _messages: &[Message],
+        _options: &nanobot_provider::Options,
+    ) -> anyhow::Result<nanobot_provider::MeteredMessage> {
         let index = self.response_index.fetch_add(1, Ordering::SeqCst);
         if index < self.responses.len() {
-            Ok(self.responses[index].clone())
+            Ok(self.responses[index].clone().into())
         } else {
             anyhow::bail!("No more mock responses")
         }
@@ -185,7 +189,11 @@ async fn error_handling() {
 
     #[async_trait::async_trait]
     impl Provider for FailingProvider {
-        async fn chat(&self, _messages: &[Message], _options: &nanobot_provider::Options) -> anyhow::Result<Message> {
+        async fn chat(
+            &self,
+            _messages: &[Message],
+            _options: &nanobot_provider::Options,
+        ) -> anyhow::Result<nanobot_provider::MeteredMessage> {
             anyhow::bail!("LLM call failed")
         }
 
@@ -282,7 +290,11 @@ async fn maximum_iterations_limit() {
 
     #[async_trait::async_trait]
     impl Provider for InfiniteToolProvider {
-        async fn chat(&self, _messages: &[Message], _options: &nanobot_provider::Options) -> anyhow::Result<Message> {
+        async fn chat(
+            &self,
+            _messages: &[Message],
+            _options: &nanobot_provider::Options,
+        ) -> anyhow::Result<nanobot_provider::MeteredMessage> {
             Ok(Message::assistant_with_tools(
                 "Calling tool",
                 vec![nanobot_provider::ToolCall::new(
@@ -290,7 +302,8 @@ async fn maximum_iterations_limit() {
                     "write_file",
                     json!({"path": "test.txt", "content": "test"}),
                 )],
-            ))
+            )
+            .into())
         }
 
         fn bind_tools(&mut self, _tools: Vec<ToolDefinition>) {}
@@ -444,9 +457,13 @@ async fn cancel_by_session_aborts_tasks() {
 
     #[async_trait::async_trait]
     impl Provider for SlowProvider {
-        async fn chat(&self, _messages: &[Message], _options: &nanobot_provider::Options) -> anyhow::Result<Message> {
+        async fn chat(
+            &self,
+            _messages: &[Message],
+            _options: &nanobot_provider::Options,
+        ) -> anyhow::Result<nanobot_provider::MeteredMessage> {
             tokio::time::sleep(tokio::time::Duration::from_secs(60)).await;
-            Ok(Message::assistant("done"))
+            Ok(Message::assistant("done").into())
         }
 
         fn bind_tools(&mut self, _tools: Vec<ToolDefinition>) {}
@@ -485,9 +502,13 @@ async fn cancel_by_session_only_affects_target() {
 
     #[async_trait::async_trait]
     impl Provider for SlowProvider {
-        async fn chat(&self, _messages: &[Message], _options: &nanobot_provider::Options) -> anyhow::Result<Message> {
+        async fn chat(
+            &self,
+            _messages: &[Message],
+            _options: &nanobot_provider::Options,
+        ) -> anyhow::Result<nanobot_provider::MeteredMessage> {
             tokio::time::sleep(tokio::time::Duration::from_secs(60)).await;
-            Ok(Message::assistant("done"))
+            Ok(Message::assistant("done").into())
         }
 
         fn bind_tools(&mut self, _tools: Vec<ToolDefinition>) {}

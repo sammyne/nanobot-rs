@@ -17,7 +17,7 @@ use nanobot_config::{Config as NanobotConfig, ProviderConfig};
 use nanobot_tools::ToolDefinition;
 use tracing::{debug, info};
 
-use crate::{Message, Options, Provider, ProviderError, ToolCall};
+use crate::{Message, MeteredMessage, Options, Provider, ProviderError, ToolCall, Usage};
 
 /// OpenAI 提供者
 #[derive(Clone)]
@@ -124,7 +124,7 @@ impl TryFrom<&Message> for ChatCompletionRequestMessage {
 
 #[async_trait::async_trait]
 impl Provider for OpenAILike {
-    async fn chat(&self, messages: &[Message], options: &Options) -> Result<Message> {
+    async fn chat(&self, messages: &[Message], options: &Options) -> Result<MeteredMessage> {
         use crate::ToolCall;
 
         // 工具已经由 bind_tools 转换为 OpenAI 格式，直接使用
@@ -180,6 +180,12 @@ impl Provider for OpenAILike {
             .map_err(|_| ProviderError::Timeout)?
             .map_err(|e| ProviderError::Api(e.to_string()))?;
 
+        // 提取 usage 信息
+        let usage = response
+            .usage
+            .as_ref()
+            .map(|u| Usage { input_tokens: u.prompt_tokens as u64, output_tokens: u.completion_tokens as u64 });
+
         // 消耗 choices，取出第一个 ChatChoice，避免后续拷贝
         let choice =
             response.choices.into_iter().next().ok_or_else(|| ProviderError::Api("响应中没有选择".to_string()))?;
@@ -196,13 +202,13 @@ impl Provider for OpenAILike {
             info!("收到 LLM 响应(带工具调用): {} 个工具调用, 内容长度: {}", converted_tool_calls.len(), content.len());
 
             // 构造包含工具调用的响应
-            return Ok(Message::assistant_with_tools(content, converted_tool_calls));
+            return Ok(MeteredMessage { message: Message::assistant_with_tools(content, converted_tool_calls), usage });
         }
 
         info!("收到 LLM 响应, 长度: {}", content.len());
 
         // 返回普通文本响应
-        Ok(Message::assistant(content))
+        Ok(MeteredMessage { message: Message::assistant(content), usage })
     }
 
     fn bind_tools(&mut self, tools: Vec<ToolDefinition>) {

@@ -170,9 +170,9 @@ impl nanobot_provider::Provider for MockProvider {
         &self,
         _messages: &[nanobot_provider::Message],
         _options: &nanobot_provider::Options,
-    ) -> Result<nanobot_provider::Message, anyhow::Error> {
+    ) -> Result<nanobot_provider::MeteredMessage, anyhow::Error> {
         // Mock implementation - return an empty assistant response
-        Ok(nanobot_provider::Message::assistant(String::new()))
+        Ok(nanobot_provider::Message::assistant(String::new()).into())
     }
 }
 
@@ -288,7 +288,7 @@ mod parse_retry {
             &self,
             messages: &[nanobot_provider::Message],
             _options: &nanobot_provider::Options,
-        ) -> Result<nanobot_provider::Message, anyhow::Error> {
+        ) -> Result<nanobot_provider::MeteredMessage, anyhow::Error> {
             // Count how many tool messages with "Invalid arguments format" we have received
             let retry_count = messages
                 .iter()
@@ -303,7 +303,8 @@ mod parse_retry {
                 Ok(Message::assistant_with_tools(
                     String::new(),
                     vec![nanobot_provider::ToolCall::new("call_test", "heartbeat", serde_json::json!("skip"))],
-                ))
+                )
+                .into())
             } else {
                 // Return invalid JSON arguments
                 Ok(Message::assistant_with_tools(
@@ -313,7 +314,8 @@ mod parse_retry {
                         "heartbeat",
                         serde_json::json!({"invalid": "format"}),
                     )],
-                ))
+                )
+                .into())
             }
         }
     }
@@ -398,7 +400,7 @@ mod post_run_evaluation {
             &self,
             _messages: &[Message],
             _options: &nanobot_provider::Options,
-        ) -> Result<Message, anyhow::Error> {
+        ) -> Result<nanobot_provider::MeteredMessage, anyhow::Error> {
             Ok(Message::assistant_with_tools(
                 String::new(),
                 vec![ToolCall::new(
@@ -406,7 +408,8 @@ mod post_run_evaluation {
                     "heartbeat",
                     serde_json::json!({"action": "run", "tasks": "check status"}),
                 )],
-            ))
+            )
+            .into())
         }
     }
 

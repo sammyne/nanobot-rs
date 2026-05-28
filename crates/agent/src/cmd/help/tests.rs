@@ -21,7 +21,7 @@ async fn returns_correct_message() {
 /// Verify help message format
 #[test]
 fn message_format() {
-    let expected = "🐈 nanobot commands:\n/new — Start a new conversation\n/stop — Stop current processing and cancel background tasks\n/restart — Restart the agent process\n/help — Show available commands";
+    let expected = "🐈 nanobot commands:\n/new — Start a new conversation\n/stop — Stop current processing and cancel background tasks\n/status — Show bot runtime status\n/restart — Restart the agent process\n/help — Show available commands";
 
     assert!(expected.contains("nanobot commands"));
     assert!(expected.contains("/new"));

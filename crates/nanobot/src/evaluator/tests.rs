@@ -35,9 +35,13 @@ impl MockProvider {
 
 #[async_trait::async_trait]
 impl Provider for MockProvider {
-    async fn chat(&self, _messages: &[Message], _options: &Options) -> anyhow::Result<Message> {
+    async fn chat(
+        &self,
+        _messages: &[Message],
+        _options: &Options,
+    ) -> anyhow::Result<nanobot_provider::MeteredMessage> {
         match &self.response {
-            MockResponse::Ok(msg) => Ok(msg.clone()),
+            MockResponse::Ok(msg) => Ok(msg.clone().into()),
             MockResponse::Err(e) => Err(anyhow::anyhow!("{e}")),
         }
     }
