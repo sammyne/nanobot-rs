@@ -62,6 +62,10 @@ pub enum CronArgs {
         /// Use `cron` for time-based scheduling (e.g., "daily at 8 AM").
         /// Use `every` only for interval-based scheduling (e.g., "every 60 seconds").
         schedule: CronScheduleArgs,
+        /// Whether to deliver the execution result to the user channel (default true).
+        /// Set to false for silent background tasks.
+        #[serde(default = "default_deliver")]
+        deliver: bool,
     },
     /// List all scheduled jobs
     List,
@@ -98,9 +102,19 @@ struct CronArgsSchema {
     #[serde(skip_serializing_if = "Option::is_none")]
     schedule: Option<CronScheduleArgs>,
 
+    /// Whether to deliver the execution result to the user channel.
+    /// Defaults to true. Set to false for silent background tasks.
+    /// Only used when action="add".
+    #[serde(default = "default_deliver")]
+    deliver: bool,
+
     /// Job ID to remove. Required when action="remove".
     #[serde(default, skip_serializing_if = "String::is_empty")]
     job_id: String,
+}
+
+fn default_deliver() -> bool {
+    true
 }
 
 /// Tool to schedule reminders and recurring tasks.
@@ -119,6 +133,7 @@ impl CronTool {
         &self,
         message: String,
         schedule: CronScheduleArgs,
+        deliver: bool,
         channel: &str,
         chat_id: &str,
     ) -> ToolResult {
@@ -158,7 +173,7 @@ impl CronTool {
                 message.chars().take(30).collect(),
                 schedule,
                 message.clone(),
-                true,
+                deliver,
                 Some(channel.to_string()),
                 Some(chat_id.to_string()),
                 delete_after_run,
@@ -227,7 +242,9 @@ impl Tool for CronTool {
             CronArgs::Add { .. } if ctx.scheduled => {
                 Err(ToolError::execution("cannot schedule new jobs from within a cron job execution"))
             }
-            CronArgs::Add { message, schedule } => self.handle_add(message, schedule, &ctx.channel, &ctx.chat_id).await,
+            CronArgs::Add { message, schedule, deliver } => {
+                self.handle_add(message, schedule, deliver, &ctx.channel, &ctx.chat_id).await
+            }
             CronArgs::List => self.handle_list().await,
             CronArgs::Remove { job_id } => self.handle_remove(job_id).await,
         }
