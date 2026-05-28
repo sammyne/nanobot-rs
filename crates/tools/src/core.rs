@@ -127,6 +127,14 @@ pub trait Tool: Send + Sync {
     /// 成功返回输出字符串，失败返回 ToolError
     async fn execute(&self, ctx: &ToolContext, params: serde_json::Value) -> ToolResult;
 
+    /// 是否为只读工具（无副作用，可安全并行）
+    ///
+    /// 返回 `true` 的工具在同一轮迭代中可与其他只读工具并行执行。
+    /// 默认 `false`（串行执行）。
+    fn read_only(&self) -> bool {
+        false
+    }
+
     /// 转换为 OpenAI Function Calling 格式
     fn to_definition(&self) -> ToolDefinition {
         ToolDefinition {

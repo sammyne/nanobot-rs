@@ -60,3 +60,36 @@ fn parse_system_message_target_various_cases() {
         assert_eq!(session_key, case.expect_session_key, "case[{}]: session_key mismatch", case.name);
     }
 }
+
+#[test]
+fn persist_small_result_returns_unchanged() {
+    let result = "short result";
+    let out = maybe_persist_tool_result(result, 16000, "call1", "cli:direct", std::path::Path::new("/tmp"));
+    assert_eq!(out, result);
+}
+
+#[test]
+fn persist_large_result_writes_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let workspace = dir.path();
+    let big = "x".repeat(20000);
+
+    let out = maybe_persist_tool_result(&big, 16000, "call1", "test:chat", workspace);
+
+    // 返回值包含预览和文件路径
+    assert!(out.contains("xxxx"), "should contain preview");
+    assert!(out.contains("20000 chars total"), "should mention total size");
+    assert!(out.contains("call1.txt"), "should mention file path");
+
+    // 文件应存在且内容完整
+    let file = workspace.join(".nanobot/tool-results/test:chat/call1.txt");
+    assert!(file.exists());
+    assert_eq!(std::fs::read_to_string(&file).unwrap().len(), 20000);
+}
+
+#[test]
+fn persist_exactly_at_threshold_returns_unchanged() {
+    let result = "y".repeat(16000);
+    let out = maybe_persist_tool_result(&result, 16000, "call2", "s", std::path::Path::new("/tmp"));
+    assert_eq!(out, result);
+}

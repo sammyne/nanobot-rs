@@ -102,6 +102,10 @@ impl Tool for ReadFileTool {
         READ_FILE_PARAMETERS_SCHEMA.clone()
     }
 
+    fn read_only(&self) -> bool {
+        true
+    }
+
     async fn execute(&self, _ctx: &ToolContext, params: serde_json::Value) -> ToolResult {
         let args: ReadFileArgs = serde_json::from_value(params)?;
         let path = resolve_path(&args.path, &self.workspace, self.allowed_dir.as_deref())?;
@@ -376,6 +380,10 @@ impl Tool for ListDirTool {
 
     fn parameters(&self) -> Schema {
         LIST_DIR_PARAMETERS_SCHEMA.clone()
+    }
+
+    fn read_only(&self) -> bool {
+        true
     }
 
     async fn execute(&self, _ctx: &ToolContext, params: serde_json::Value) -> ToolResult {

@@ -263,34 +263,26 @@ impl<P: Provider> AgentLoop<P> {
                 // 将原始 LLM 响应直接添加到历史（保留 thinking 等 provider 特定字段）
                 messages.push(response);
 
-                // 执行每个工具调用
-                for tool_call in &tool_calls {
-                    tools_used.push(tool_call.name.clone());
-                    info!("执行工具 {}: {}", tool_call.name, tool_call.arguments);
-
-                    // 解析参数
-                    let args = match serde_json::from_str::<serde_json::Value>(&tool_call.arguments) {
-                        Ok(v) => v,
-                        Err(e) => {
-                            error!("解析工具 {} 参数失败: {}, 参数内容: {}", tool_call.name, e, tool_call.arguments);
-                            serde_json::Value::String(tool_call.arguments.clone())
+                // 按只读/副作用分批执行工具
+                let session_key = format!("{channel}:{chat_id}");
+                let batches = partition_tool_batches(&tool_calls, &self.tool_registry);
+                for batch in batches {
+                    if batch.len() > 1 {
+                        // 并行执行只读工具批次
+                        let futs: Vec<_> =
+                            batch.iter().map(|tc| self.execute_one_tool(tc, &tool_ctx, &session_key)).collect();
+                        let results = futures::future::join_all(futs).await;
+                        for (tc, (name, result_content)) in batch.iter().zip(results) {
+                            tools_used.push(name);
+                            messages.push(Message::tool(&tc.id, result_content));
                         }
-                    };
-
-                    // 执行工具
-                    let tool_result = self.tool_registry.execute(&tool_ctx, &tool_call.name, args).await;
-
-                    // 转换结果为字符串
-                    let result_content = match tool_result {
-                        Ok(output) => format!("Tool Call Result:\n{output}"),
-                        Err(e) => {
-                            error!("工具 {} 执行失败: {}", tool_call.name, e);
-                            format!("Tool Call Error: {e}")
-                        }
-                    };
-
-                    // 添加工具结果消息
-                    messages.push(Message::tool(&tool_call.id, result_content));
+                    } else {
+                        // 串行执行单个工具
+                        let tc = batch[0];
+                        let (name, result_content) = self.execute_one_tool(tc, &tool_ctx, &session_key).await;
+                        tools_used.push(name);
+                        messages.push(Message::tool(&tc.id, result_content));
+                    }
                 }
 
                 // hook: after_iteration
@@ -735,6 +727,44 @@ impl<P: Provider> AgentLoop<P> {
     pub fn config(&self) -> &AgentDefaults {
         &self.config
     }
+
+    /// 执行单个工具调用，返回 (工具名, 结果内容)
+    async fn execute_one_tool(
+        &self,
+        tool_call: &nanobot_provider::ToolCall,
+        tool_ctx: &ToolContext,
+        session_key: &str,
+    ) -> (String, String) {
+        info!("执行工具 {}: {}", tool_call.name, tool_call.arguments);
+
+        let args = match serde_json::from_str::<serde_json::Value>(&tool_call.arguments) {
+            Ok(v) => v,
+            Err(e) => {
+                error!("解析工具 {} 参数失败: {}, 参数内容: {}", tool_call.name, e, tool_call.arguments);
+                serde_json::Value::String(tool_call.arguments.clone())
+            }
+        };
+
+        let tool_result = self.tool_registry.execute(tool_ctx, &tool_call.name, args).await;
+
+        let result_content = match tool_result {
+            Ok(output) => format!("Tool Call Result:\n{output}"),
+            Err(e) => {
+                error!("工具 {} 执行失败: {}", tool_call.name, e);
+                format!("Tool Call Error: {e}")
+            }
+        };
+
+        let result_content = crate::utils::maybe_persist_tool_result(
+            &result_content,
+            self.config.max_tool_result_chars,
+            &tool_call.id,
+            session_key,
+            &self.config.workspace,
+        );
+
+        (tool_call.name.clone(), result_content)
+    }
 }
 
 /// 检查消息内容是否为 /stop 命令
@@ -760,6 +790,31 @@ pub fn strip_think(text: &str) -> String {
 /// 参考 Python 版本的 `_tool_hint` 方法。
 pub(crate) fn format_tool_hint(tool_calls: &[nanobot_provider::ToolCall]) -> String {
     tool_calls.iter().map(|tc| tc.preview()).collect::<Vec<_>>().join(", ")
+}
+
+/// 将工具调用分批：连续的只读工具分为一批（可并行），其余每个单独一批（串行）
+fn partition_tool_batches<'a>(
+    tool_calls: &'a [nanobot_provider::ToolCall],
+    registry: &ToolRegistry,
+) -> Vec<Vec<&'a nanobot_provider::ToolCall>> {
+    let mut batches: Vec<Vec<&nanobot_provider::ToolCall>> = Vec::new();
+    let mut current_batch: Vec<&nanobot_provider::ToolCall> = Vec::new();
+
+    for tc in tool_calls {
+        let is_read_only = registry.get(&tc.name).is_some_and(|t| t.read_only());
+        if is_read_only {
+            current_batch.push(tc);
+        } else {
+            if !current_batch.is_empty() {
+                batches.push(std::mem::take(&mut current_batch));
+            }
+            batches.push(vec![tc]);
+        }
+    }
+    if !current_batch.is_empty() {
+        batches.push(current_batch);
+    }
+    batches
 }
 
 /// 运行记忆整合任务（token-based 多轮整合）

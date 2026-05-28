@@ -94,19 +94,27 @@ impl ToolRegistry {
         self.tools.values().map(|t| t.to_definition()).collect()
     }
 
-    /// 异步执行指定工具
-    pub async fn execute(&self, ctx: &ToolContext, name: &str, params: Value) -> ToolResult {
+    /// 验证工具调用：查找工具并解析参数
+    ///
+    /// 在执行前先验证工具是否存在，返回工具引用和解析后的参数。
+    pub fn prepare_call(&self, name: &str, params: Value) -> Result<(&dyn Tool, Value), ToolError> {
         let tool = self.tools.get(name).ok_or_else(|| {
             let available = self.tool_names().join(", ");
             ToolError::NotFound(format!("工具 '{name}' 不存在。可用工具: [{available}]"))
         })?;
+        Ok((&**tool, params))
+    }
 
-        info!("执行工具: {} 参数: {:?}", name, params);
+    /// 异步执行指定工具
+    pub async fn execute(&self, ctx: &ToolContext, name: &str, params: Value) -> ToolResult {
+        let (tool, params) = self.prepare_call(name, params)?;
+
+        info!("执行工具: {name} 参数: {params:?}");
 
         let result = tool.execute(ctx, params).await;
 
         if let Err(ref e) = result {
-            error!("工具 {} 执行失败: {:?}", name, e);
+            error!("工具 {name} 执行失败: {e:?}");
         }
 
         result
