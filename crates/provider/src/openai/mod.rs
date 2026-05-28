@@ -125,8 +125,6 @@ impl TryFrom<&Message> for ChatCompletionRequestMessage {
 #[async_trait::async_trait]
 impl Provider for OpenAILike {
     async fn chat(&self, messages: &[Message], options: &Options) -> Result<MeteredMessage> {
-        use crate::ToolCall;
-
         // 工具已经由 bind_tools 转换为 OpenAI 格式，直接使用
         let chat_tools: Vec<ChatCompletionTool> =
             if self.tools.is_empty() { Vec::new() } else { (*self.tools).clone() };
@@ -174,42 +172,14 @@ impl Provider for OpenAILike {
 
         let request = builder.build()?;
 
-        // 发送请求（带超时）
-        let response = tokio::time::timeout(Duration::from_secs(self.timeout), self.client.chat().create(request))
-            .await
-            .map_err(|_| ProviderError::Timeout)?
-            .map_err(|e| ProviderError::Api(e.to_string()))?;
+        // 发送请求（带超时），使用 byot 直接反序列化为自定义响应结构以提取非标准字段（如 reasoning_content）
+        let resp: response::ChatCompletionResponse =
+            tokio::time::timeout(Duration::from_secs(self.timeout), self.client.chat().create_byot(request))
+                .await
+                .map_err(|_| ProviderError::Timeout)?
+                .map_err(|e| ProviderError::Api(e.to_string()))?;
 
-        // 提取 usage 信息
-        let usage = response.usage.as_ref().map(|u| {
-            let cached_tokens =
-                u.prompt_tokens_details.as_ref().and_then(|d| d.cached_tokens).filter(|&v| v > 0).map(|v| v as u64);
-            TokenUsage { input: u.prompt_tokens as u64, output: u.completion_tokens as u64, cached: cached_tokens }
-        });
-
-        // 消耗 choices，取出第一个 ChatChoice，避免后续拷贝
-        let choice =
-            response.choices.into_iter().next().ok_or_else(|| ProviderError::Api("响应中没有选择".to_string()))?;
-
-        // 提取回复内容（转移所有权，避免 clone）
-        let content = choice.message.content.unwrap_or_default();
-
-        // 检查是否有工具调用
-        if let Some(tool_calls) = choice.message.tool_calls
-            && !tool_calls.is_empty()
-        {
-            let converted_tool_calls: Vec<ToolCall> = tool_calls.into_iter().map(Into::into).collect();
-
-            info!("收到 LLM 响应(带工具调用): {} 个工具调用, 内容长度: {}", converted_tool_calls.len(), content.len());
-
-            // 构造包含工具调用的响应
-            return Ok(MeteredMessage { message: Message::assistant_with_tools(content, converted_tool_calls), usage });
-        }
-
-        info!("收到 LLM 响应, 长度: {}", content.len());
-
-        // 返回普通文本响应
-        Ok(MeteredMessage { message: Message::assistant(content), usage })
+        resp.try_into()
     }
 
     fn bind_tools(&mut self, tools: Vec<ToolDefinition>) {
@@ -228,6 +198,51 @@ impl Provider for OpenAILike {
                 })
                 .collect(),
         );
+    }
+}
+
+mod response;
+
+impl TryFrom<response::ChatCompletionResponse> for MeteredMessage {
+    type Error = anyhow::Error;
+
+    fn try_from(resp: response::ChatCompletionResponse) -> Result<Self> {
+        let usage = resp.usage.map(|u| {
+            let cached = u.prompt_tokens_details.and_then(|d| d.cached_tokens).filter(|&v| v > 0);
+            TokenUsage { input: u.prompt_tokens, output: u.completion_tokens, cached }
+        });
+
+        let choice =
+            resp.choices.into_iter().next().ok_or_else(|| ProviderError::Api("响应中没有 choices".to_string()))?;
+        let content = choice.message.content.unwrap_or_default();
+        let reasoning = choice.message.reasoning_content;
+
+        let tool_calls: Vec<ToolCall> = choice
+            .message
+            .tool_calls
+            .unwrap_or_default()
+            .into_iter()
+            .map(|tc| {
+                ToolCall::new(tc.id, tc.function.name, serde_json::from_str(&tc.function.arguments).unwrap_or_default())
+            })
+            .collect();
+
+        let message = if !tool_calls.is_empty() {
+            info!("收到 LLM 响应(带工具调用): {} 个工具调用, 内容长度: {}", tool_calls.len(), content.len());
+            let mut msg = Message::assistant_with_tools(content, tool_calls);
+            if let (Some(rc), Message::Assistant { thinking, .. }) = (reasoning, &mut msg) {
+                *thinking = Some(serde_json::Value::String(rc));
+            }
+            msg
+        } else {
+            info!("收到 LLM 响应, 长度: {}", content.len());
+            match reasoning {
+                Some(rc) => Message::assistant_with_thinking(&content, Vec::new(), serde_json::Value::String(rc)),
+                None => Message::assistant(content),
+            }
+        };
+
+        Ok(MeteredMessage { message, usage })
     }
 }
 

@@ -395,3 +395,117 @@ fn bind_tools_complex_schema() {
     openai.bind_tools(vec![complex_tool]);
     // 验证 bind_tools 能正确处理复杂 schema
 }
+
+// ============ parse_value_response 测试 ============
+
+#[test]
+fn parse_response_text_only() {
+    let resp = json!({
+        "choices": [{"message": {"content": "Hello world"}}],
+        "usage": {"prompt_tokens": 10, "completion_tokens": 5}
+    });
+    let result =
+        MeteredMessage::try_from(serde_json::from_value::<super::response::ChatCompletionResponse>(resp).unwrap())
+            .unwrap();
+    assert_eq!(result.content(), "Hello world");
+    assert!(result.tool_calls().is_empty());
+    assert!(result.thinking().is_none());
+    let usage = result.usage.unwrap();
+    assert_eq!(usage.input, 10);
+    assert_eq!(usage.output, 5);
+    assert!(usage.cached.is_none());
+}
+
+#[test]
+fn parse_response_with_tool_calls() {
+    let resp = json!({
+        "choices": [{"message": {
+            "content": "Let me search",
+            "tool_calls": [{
+                "id": "call_1",
+                "type": "function",
+                "function": {"name": "search", "arguments": "{\"q\":\"rust\"}"}
+            }]
+        }}],
+        "usage": {"prompt_tokens": 20, "completion_tokens": 10}
+    });
+    let result =
+        MeteredMessage::try_from(serde_json::from_value::<super::response::ChatCompletionResponse>(resp).unwrap())
+            .unwrap();
+    assert_eq!(result.content(), "Let me search");
+    assert_eq!(result.tool_calls().len(), 1);
+    assert_eq!(result.tool_calls()[0].name, "search");
+}
+
+#[test]
+fn parse_response_with_reasoning_content() {
+    let resp = json!({
+        "choices": [{"message": {
+            "content": "The answer is 42",
+            "reasoning_content": "Let me think step by step..."
+        }}],
+        "usage": {"prompt_tokens": 100, "completion_tokens": 50}
+    });
+    let result =
+        MeteredMessage::try_from(serde_json::from_value::<super::response::ChatCompletionResponse>(resp).unwrap())
+            .unwrap();
+    assert_eq!(result.content(), "The answer is 42");
+    let thinking = result.thinking().expect("should have thinking");
+    assert_eq!(thinking.as_str().unwrap(), "Let me think step by step...");
+}
+
+#[test]
+fn parse_response_with_reasoning_and_tool_calls() {
+    let resp = json!({
+        "choices": [{"message": {
+            "content": "I'll check",
+            "reasoning_content": "Need to use search tool",
+            "tool_calls": [{
+                "id": "call_1",
+                "type": "function",
+                "function": {"name": "web_search", "arguments": "{\"query\":\"weather\"}"}
+            }]
+        }}]
+    });
+    let result =
+        MeteredMessage::try_from(serde_json::from_value::<super::response::ChatCompletionResponse>(resp).unwrap())
+            .unwrap();
+    assert_eq!(result.tool_calls().len(), 1);
+    let thinking = result.thinking().expect("should have thinking with tool calls");
+    assert_eq!(thinking.as_str().unwrap(), "Need to use search tool");
+}
+
+#[test]
+fn parse_response_with_cached_tokens() {
+    let resp = json!({
+        "choices": [{"message": {"content": "hi"}}],
+        "usage": {
+            "prompt_tokens": 1000,
+            "completion_tokens": 10,
+            "prompt_tokens_details": {"cached_tokens": 800}
+        }
+    });
+    let result =
+        MeteredMessage::try_from(serde_json::from_value::<super::response::ChatCompletionResponse>(resp).unwrap())
+            .unwrap();
+    let usage = result.usage.unwrap();
+    assert_eq!(usage.cached, Some(800));
+}
+
+#[test]
+fn parse_response_no_usage() {
+    let resp = json!({"choices": [{"message": {"content": "hi"}}]});
+    let result =
+        MeteredMessage::try_from(serde_json::from_value::<super::response::ChatCompletionResponse>(resp).unwrap())
+            .unwrap();
+    assert!(result.usage.is_none());
+}
+
+#[test]
+fn parse_response_empty_choices_fails() {
+    let resp = json!({"choices": []});
+    assert!(
+        MeteredMessage::try_from(serde_json::from_value::<super::response::ChatCompletionResponse>(resp).unwrap())
+            .is_err()
+    );
+}
