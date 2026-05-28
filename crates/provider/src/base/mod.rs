@@ -62,16 +62,8 @@ pub fn strip_images(messages: &[Message]) -> Option<Vec<Message>> {
         .iter()
         .map(|msg| match msg {
             Message::User { content: UserContent::Parts(parts) } => {
-                let new_parts: Vec<ContentPart> = parts
-                    .iter()
-                    .map(|p| match p {
-                        ContentPart::Image { .. } => {
-                            found = true;
-                            ContentPart::Text { text: "[image omitted]".to_string() }
-                        }
-                        other => other.clone(),
-                    })
-                    .collect();
+                let mut new_parts = parts.clone();
+                found |= new_parts.iter_mut().fold(false, |acc, p| acc | p.strip_image());
                 Message::User { content: UserContent::Parts(new_parts) }
             }
             other => other.clone(),
@@ -216,6 +208,19 @@ pub enum ContentPart {
         /// 裸 base64 编码数据（不含 `data:...;base64,` 前缀）
         data: String,
     },
+}
+
+impl ContentPart {
+    /// 如果是图片，原地替换为文本占位符并返回 true；否则返回 false。
+    pub fn strip_image(&mut self) -> bool {
+        match self {
+            Self::Image { .. } => {
+                *self = Self::Text { text: "[image omitted]".to_string() };
+                true
+            }
+            Self::Text { .. } => false,
+        }
+    }
 }
 
 /// 聊天消息枚举
