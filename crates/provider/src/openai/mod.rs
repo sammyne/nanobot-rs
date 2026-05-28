@@ -17,7 +17,7 @@ use nanobot_config::{Config as NanobotConfig, ProviderConfig};
 use nanobot_tools::ToolDefinition;
 use tracing::{debug, info};
 
-use crate::{Message, MeteredMessage, Options, Provider, ProviderError, ToolCall, Usage};
+use crate::{Message, MeteredMessage, Options, Provider, ProviderError, TokenUsage, ToolCall};
 
 /// OpenAI 提供者
 #[derive(Clone)]
@@ -181,10 +181,11 @@ impl Provider for OpenAILike {
             .map_err(|e| ProviderError::Api(e.to_string()))?;
 
         // 提取 usage 信息
-        let usage = response
-            .usage
-            .as_ref()
-            .map(|u| Usage { input_tokens: u.prompt_tokens as u64, output_tokens: u.completion_tokens as u64 });
+        let usage = response.usage.as_ref().map(|u| {
+            let cached_tokens =
+                u.prompt_tokens_details.as_ref().and_then(|d| d.cached_tokens).filter(|&v| v > 0).map(|v| v as u64);
+            TokenUsage { input: u.prompt_tokens as u64, output: u.completion_tokens as u64, cached: cached_tokens }
+        });
 
         // 消耗 choices，取出第一个 ChatChoice，避免后续拷贝
         let choice =

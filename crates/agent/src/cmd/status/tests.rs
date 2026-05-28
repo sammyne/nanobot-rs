@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-use nanobot_provider::Usage;
+use nanobot_provider::TokenUsage;
 
 use super::*;
 use crate::InboundMessage;
@@ -38,13 +38,27 @@ async fn status_with_usage() {
     let cmd = StatusCmd {
         model: "test".to_string(),
         start_time: Instant::now(),
-        last_usage: Some(Usage { input_tokens: 1234, output_tokens: 567 }),
+        last_usage: Some(TokenUsage { input: 1234, output: 567, cached: None }),
         session_message_count: 0,
     };
     let msg = InboundMessage::new("test", "user", "chat", "/status");
     let result = cmd.run(msg, "test:chat".to_string()).await.unwrap();
     assert!(result.contains("1234"));
     assert!(result.contains("567"));
+    assert!(!result.contains("cached"));
+}
+
+#[tokio::test]
+async fn status_with_cached_tokens() {
+    let cmd = StatusCmd {
+        model: "test".to_string(),
+        start_time: Instant::now(),
+        last_usage: Some(TokenUsage { input: 10000, output: 200, cached: Some(8200) }),
+        session_message_count: 3,
+    };
+    let msg = InboundMessage::new("test", "user", "chat", "/status");
+    let result = cmd.run(msg, "test:chat".to_string()).await.unwrap();
+    assert!(result.contains("10000 in / 200 out (82% cached)"), "got: {result}");
 }
 
 #[tokio::test]
