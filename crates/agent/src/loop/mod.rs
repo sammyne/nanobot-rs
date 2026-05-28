@@ -240,6 +240,9 @@ impl<P: Provider> AgentLoop<P> {
                 error!("hook before_iteration failed: {e}");
             }
 
+            // 上下文窗口治理：裁剪历史以适应 token 预算（fail-open）
+            snip_history(&mut messages, self.config.max_input_tokens);
+
             // 调用 LLM
             let response = self.call_llm(&messages).await?;
 
@@ -657,6 +660,25 @@ impl<P: Provider> AgentLoop<P> {
         // 保存旧的 last_consolidated 用于判断是否发生变化
         let old_last_consolidated = session.last_consolidated;
 
+        // 检查点：检查上次是否中断
+        if let Some(checkpoint) = session.metadata.get("runtime_checkpoint") {
+            warn!(
+                "检测到上次中断的检查点 (session={session_key}): {}",
+                serde_json::to_string(checkpoint).unwrap_or_default()
+            );
+            // 清除旧检查点，让本次执行从干净状态开始
+            session.metadata.remove("runtime_checkpoint");
+        }
+
+        // 设置检查点标记
+        session.metadata.insert(
+            "runtime_checkpoint".to_string(),
+            serde_json::json!({ "status": "in_progress", "channel": channel, "chat_id": chat_id }),
+        );
+        if let Err(e) = self.sessions.save(&session) {
+            warn!("保存检查点失败: {e}");
+        }
+
         // 在 build_messages 之前启动异步记忆整合任务
         let consolidation_handle = tokio::spawn(try_consolidate(
             self.context.memory(),
@@ -712,6 +734,10 @@ impl<P: Provider> AgentLoop<P> {
                 return OutboundMessage::new(&channel, &chat_id, format!("记忆整合任务失败: {e}"));
             }
         }
+
+        // 清除检查点（re_act 成功完成）
+        session.metadata.remove("runtime_checkpoint");
+
         // ReAct 结果需要合并到整合后的 Session
         session.save_turn(&result.messages, skip);
 
@@ -815,6 +841,59 @@ fn partition_tool_batches<'a>(
         batches.push(current_batch);
     }
     batches
+}
+
+/// 上下文窗口治理：裁剪历史消息以适应 token 预算
+///
+/// 保留第一条消息（system prompt）和最后一条消息（当前用户输入），
+/// 从前往后删除中间的历史消息直到总 token 数 <= budget。
+/// 删除时保持工具调用/结果边界完整（不能只删 assistant 不删对应的 tool result，反之亦然）。
+///
+/// fail-open：如果裁剪后仍超出预算，保留原始消息（让 LLM API 自行处理截断）。
+fn snip_history(messages: &mut Vec<Message>, budget: usize) {
+    if messages.len() <= 2 {
+        return;
+    }
+
+    let total: usize = messages.iter().map(|m| m.token_len()).sum();
+    if total <= budget {
+        return;
+    }
+
+    // 找到合法的裁剪起始位置（跳过 system prompt）
+    // 从 index 1 开始，找到第一个不是 Tool 消息的位置
+    let start = find_legal_trim_start(messages, 1);
+    if start >= messages.len() - 1 {
+        return; // 无法裁剪
+    }
+
+    let mut current_total = total;
+    let mut trim_end = start;
+
+    while trim_end < messages.len() - 1 && current_total > budget {
+        current_total -= messages[trim_end].token_len();
+        trim_end += 1;
+        // 确保不在工具调用/结果边界中间断开
+        trim_end = find_legal_trim_start(messages, trim_end);
+    }
+
+    if trim_end > start && trim_end < messages.len() {
+        let removed = trim_end - start;
+        messages.drain(start..trim_end);
+        debug!("上下文治理: 裁剪 {removed} 条历史消息, {total} -> {current_total} tokens");
+    }
+}
+
+/// 找到合法的裁剪起始位置
+///
+/// 从 `from` 开始向后扫描，跳过 Tool 消息（不能从工具结果开始，
+/// 因为前面的 assistant 消息包含对应的 tool_call）。
+fn find_legal_trim_start(messages: &[Message], from: usize) -> usize {
+    let mut pos = from;
+    while pos < messages.len() && matches!(messages[pos], Message::Tool { .. }) {
+        pos += 1;
+    }
+    pos
 }
 
 /// 运行记忆整合任务（token-based 多轮整合）

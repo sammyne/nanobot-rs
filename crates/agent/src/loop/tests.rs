@@ -1499,3 +1499,51 @@ async fn re_act_replaces_empty_content_with_placeholder() {
         result.messages.iter().find(|m| m.role() == "assistant").expect("should have assistant message");
     assert_eq!(assistant_msg.content().as_ref(), "(empty)", "assistant message content should be (empty)");
 }
+
+#[test]
+fn snip_history_no_op_when_under_budget() {
+    let mut msgs = vec![Message::system("sys"), Message::user("hi"), Message::assistant("hello")];
+    let original_len = msgs.len();
+    super::snip_history(&mut msgs, 999_999);
+    assert_eq!(msgs.len(), original_len);
+}
+
+#[test]
+fn snip_history_trims_middle_messages() {
+    // 构造超出预算的消息列表
+    let big = "x".repeat(4000); // ~1000 tokens each
+    let mut msgs = vec![
+        Message::system("sys"),
+        Message::user(&big),
+        Message::assistant(&big),
+        Message::user(&big),
+        Message::assistant(&big),
+        Message::user("current"),
+    ];
+    // 预算设为很小，应该裁剪中间消息
+    super::snip_history(&mut msgs, 500);
+    // system 和最后一条应保留
+    assert_eq!(msgs.first().unwrap().role(), "system");
+    assert_eq!(msgs.last().unwrap().content().as_ref(), "current");
+    assert!(msgs.len() < 6);
+}
+
+#[test]
+fn snip_history_preserves_tool_boundaries() {
+    let mut msgs = vec![
+        Message::system("sys"),
+        Message::assistant("thinking"),    // has tool_calls conceptually
+        Message::tool("call1", "result1"), // tool result
+        Message::user("current"),
+    ];
+    // 预算很小，但不应从 Tool 消息开始裁剪
+    super::snip_history(&mut msgs, 10);
+    // 如果裁剪了 assistant，tool result 也应一起被裁剪
+    for (i, m) in msgs.iter().enumerate() {
+        if matches!(m, Message::Tool { .. }) {
+            // tool result 前面应该有 assistant
+            assert!(i > 0, "tool result should not be first after system");
+            assert_eq!(msgs[i - 1].role(), "assistant", "tool result should follow assistant");
+        }
+    }
+}
