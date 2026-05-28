@@ -60,6 +60,10 @@ pub struct AgentDefaults {
     #[serde(default = "default_max_input_tokens")]
     pub max_input_tokens: usize,
 
+    /// 单次工具结果的最大字符数，超出后持久化到磁盘
+    #[serde(default = "default_max_tool_result_chars")]
+    pub max_tool_result_chars: usize,
+
     /// 推理力度（low/medium/high），用于启用 o-series 等模型的思维模式
     #[serde(default)]
     pub reasoning_effort: Option<ReasoningEffort>,
@@ -93,6 +97,10 @@ fn default_max_input_tokens() -> usize {
     128_000
 }
 
+fn default_max_tool_result_chars() -> usize {
+    16_000
+}
+
 /// 反序列化路径，将 ~ 替换为用户主目录
 fn deserialize_path_with_tilde<'de, D>(deserializer: D) -> Result<PathBuf, D::Error>
 where
@@ -112,6 +120,7 @@ impl Default for AgentDefaults {
             max_tool_iterations: default_max_tool_iterations(),
             memory_window: default_memory_window(),
             max_input_tokens: default_max_input_tokens(),
+            max_tool_result_chars: default_max_tool_result_chars(),
             reasoning_effort: None,
         }
     }
