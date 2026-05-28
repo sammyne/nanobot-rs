@@ -1441,7 +1441,8 @@ async fn re_act_preserves_thinking_in_messages() {
 
     let messages = vec![Message::system("You are helpful."), Message::user("Hello")];
 
-    let result = agent.re_act(messages, "cli", "test", None, false).await.expect("re_act should succeed");
+    let noop = crate::NoopHook;
+    let result = agent.re_act(messages, "cli", "test", &noop, false).await.expect("re_act should succeed");
 
     // 收集所有 assistant 消息
     let assistant_messages: Vec<&Message> = result.messages.iter().filter(|m| m.role() == "assistant").collect();
@@ -1479,7 +1480,8 @@ async fn re_act_replaces_empty_content_with_placeholder() {
 
     let messages = vec![Message::system("You are helpful."), Message::user("Hello")];
 
-    let result = agent.re_act(messages, "cli", "test", None, false).await.expect("re_act should succeed");
+    let noop = crate::NoopHook;
+    let result = agent.re_act(messages, "cli", "test", &noop, false).await.expect("re_act should succeed");
 
     assert_eq!(result.content, "(empty)", "empty content should be replaced with (empty)");
 

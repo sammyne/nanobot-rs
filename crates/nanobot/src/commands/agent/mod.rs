@@ -6,8 +6,9 @@ use std::io::{
 use std::sync::Arc;
 
 use anyhow::Result;
+use async_trait::async_trait;
 use clap::Args;
-use nanobot_agent::{AgentLoop, InboundMessage, OutboundMessage, ProgressTracker};
+use nanobot_agent::{AgentLoop, InboundMessage, OutboundMessage};
 use nanobot_config::Config;
 use nanobot_cron::CronService;
 use nanobot_provider::AnyProvider;
@@ -110,22 +111,14 @@ impl AgentCmd {
 
         let send_tool_hints = config.channels.send_tool_hints;
         let send_progress = config.channels.send_progress;
-        let on_progress: Arc<dyn ProgressTracker> = Arc::new(move |content: String, is_tool_hint: bool| {
-            if is_tool_hint && !send_tool_hints {
-                return;
-            }
-            if !is_tool_hint && !send_progress {
-                return;
-            }
-            println!("\x1b[2m  ↳ {content}\x1b[0m");
-        });
+        let hook: Arc<dyn nanobot_agent::Hook> = Arc::new(CliHook { send_tool_hints, send_progress });
 
         // 构建图片路径列表
         let media_paths: Vec<std::path::PathBuf> =
             self.image.as_deref().unwrap_or_default().iter().map(std::path::PathBuf::from).collect();
         let media_ref = if media_paths.is_empty() { None } else { Some(media_paths.as_slice()) };
 
-        match agent.process_direct(input, &self.session, None, None, media_ref, Some(on_progress)).await {
+        match agent.process_direct(input, &self.session, None, None, media_ref, Some(hook)).await {
             Ok(response) => {
                 println!("{response}");
                 while let Ok(msg) = outbound_rx.try_recv() {
@@ -300,6 +293,38 @@ impl AgentCmd {
 /// 检查是否为退出命令
 fn is_exit_command(input: &str) -> bool {
     EXIT_COMMANDS.contains(&input.to_lowercase().as_str())
+}
+
+/// CLI 模式的生命周期钩子
+///
+/// 在 `before_execute_tools` 中根据配置打印思考内容和工具提示到 stdout，
+/// 在 `finalize_content` 中剥离 `<think>` 标签。
+struct CliHook {
+    send_tool_hints: bool,
+    send_progress: bool,
+}
+
+#[async_trait]
+impl nanobot_agent::Hook for CliHook {
+    async fn before_execute_tools(&self, ctx: &nanobot_agent::HookCtx<'_>) -> anyhow::Result<()> {
+        // 发送思考内容
+        let cleaned = nanobot_agent::strip_think(ctx.content);
+        if !cleaned.is_empty() && self.send_progress {
+            println!("\x1b[2m  ↳ {cleaned}\x1b[0m");
+        }
+
+        // 发送工具提示
+        if self.send_tool_hints {
+            let hint: String = ctx.tool_calls.iter().map(|tc| tc.preview()).collect::<Vec<_>>().join(", ");
+            println!("\x1b[2m  ↳ {hint}\x1b[0m");
+        }
+
+        Ok(())
+    }
+
+    async fn finalize_content(&self, _ctx: &nanobot_agent::HookCtx<'_>, content: Option<String>) -> Option<String> {
+        content.map(|c| nanobot_agent::strip_think(&c))
+    }
 }
 
 #[cfg(test)]
