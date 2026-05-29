@@ -23,6 +23,7 @@ pub trait Command: Send + Sync {
 }
 
 // Command sub-modules
+mod dream;
 mod help;
 mod new;
 mod restart;
@@ -30,6 +31,7 @@ mod status;
 mod stop;
 
 // Re-export common command types
+pub use dream::{DreamCmd, DreamLogCmd, DreamRestoreCmd};
 pub use help::HelpCmd;
 pub use new::NewCmd;
 pub use restart::RestartCmd;

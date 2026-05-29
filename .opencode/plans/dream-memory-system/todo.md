@@ -118,9 +118,9 @@
 - 验收标准: Dream 作为系统 cron 任务注册，按 DreamConfig.cron 调度执行
 - 信心评估: 3
 - 步骤:
-  - [ ] CronService 新增 `register_system_job(name, schedule, callback)` — 幂等注册内部任务
-  - [ ] gateway 启动时注册 Dream 系统任务
-  - [ ] `cargo test -p nanobot-cron` 验证
+  - [x] CronService 新增 `register_system_job(name, schedule, callback)` — 幂等注册内部任务
+  - [x] gateway 启动时注册 Dream 系统任务
+  - [x] `cargo test -p nanobot-cron` 验证
 
 ### 7. /dream 命令
 
@@ -130,11 +130,11 @@
 - 验收标准: /dream 手动触发 Dream；/dream-log 显示变更；/dream-restore 回退
 - 信心评估: 4
 - 步骤:
-  - [ ] 新增 `DreamCmd` 实现 `Command` trait — 触发 Dream::run()
-  - [ ] 新增 `DreamLogCmd` — 调用 GitStore::log/diff
-  - [ ] 新增 `DreamRestoreCmd` — 调用 GitStore::revert
-  - [ ] 在 `try_handle_cmd()` 中注册 /dream、/dream-log、/dream-restore
-  - [ ] `cargo test -p nanobot-agent` 验证
+  - [x] 新增 `DreamCmd` 实现 `Command` trait — 触发 Dream::run()
+  - [x] 新增 `DreamLogCmd` — 调用 GitStore::log/diff
+  - [x] 新增 `DreamRestoreCmd` — 调用 GitStore::revert
+  - [x] 在 `try_handle_cmd()` 中注册 /dream、/dream-log、/dream-restore
+  - [x] `cargo test -p nanobot-agent` 验证
 
 ## 实现建议
 

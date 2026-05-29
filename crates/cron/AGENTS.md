@@ -31,6 +31,7 @@ Cron 定时任务调度、存储和执行。
   - `start()` / `stop()` -- 启动/停止执行循环
   - `set_on_job_callback(callback)` -- 设置任务触发时的回调
   - `add_job(...)` / `remove_job()` / `enable_job()` / `list_jobs()` -- CRUD
+  - `register_system_job(name, schedule, message) -> Result<(), String>` -- 幂等注册内部系统任务（deliver=false）
 - **`CronJob`** -- `id`, `name`, `enabled`, `schedule`, `payload`, `state`, 时间戳, `delete_after_run`
 - **`CronSchedule`** (enum) -- `At { at_ms }` | `Every { every_ms }` | `Cron { expr, tz }`
 - **`CronPayload`** -- `kind`, `message`, `deliver`, `channel`, `to`
