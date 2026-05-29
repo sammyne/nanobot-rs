@@ -7,11 +7,13 @@
 //! Memory consolidation is triggered when conversation history exceeds
 //! a configured threshold, using LLM to extract and compress key information.
 
+pub mod dream;
 mod error;
 pub mod gitstore;
 pub mod history;
 mod store;
 
+pub use dream::{Dream, DreamResult};
 pub use error::MemoryError;
 pub use gitstore::{CommitInfo, GitStore};
 pub use history::{History, HistoryEntry};

@@ -13,6 +13,10 @@
   - `get_memory_context() -> Result<String>` -- 格式化记忆内容供系统提示使用
   - `pick_consolidation_boundary(messages, last_consolidated, tokens_to_remove) -> Option<(usize, usize)>` -- 在 user 消息边界选择整合切割点
   - `raw_archive(messages)` -- 降级策略：原文转储到 history.jsonl
+- **`Dream`** -- 两阶段记忆处理器，持有 `Arc<MemoryStore>`、`GitStore`、`DreamConfig`、`workspace`
+  - `new(memory, workspace, config) -> Result<Self, MemoryError>` -- 初始化 GitStore，git 不可用时报错
+  - `async run<P: Provider>(provider) -> Result<DreamResult, MemoryError>` -- 执行两阶段处理：Phase 1 分析 + Phase 2 编辑，推进 cursor 并 git commit
+- **`DreamResult`** -- `{ entries_processed: usize, files_changed: Vec<String> }`
 - **`History`** -- history.jsonl 的 append-only JSONL 存储
   - `new(memory_dir)` -- 创建 History 实例
   - `append(content) -> Result<u64>` -- 追加条目，返回 cursor
@@ -20,6 +24,7 @@
   - `read_since(cursor) -> Result<Vec<HistoryEntry>>` -- 读取指定 cursor 之后的条目
   - `max_cursor() -> Result<u64>` -- 获取当前最大 cursor
 - **`HistoryEntry`** -- `{ cursor: u64, timestamp: String, content: String }`
+- **`GitStore`** -- git CLI 版本控制，管理 memory/ 目录
 - **`consolidate_memory(memory, messages, last_consolidated, provider, archive_all, memory_window, options) -> Result<usize>`** -- 独立函数，LLM 纯文本摘要整合
 - **`should_consolidate(message_count, last_consolidated, memory_window, archive_all) -> Option<usize>`** -- 独立函数，纯检查是否需要整合
 - **`MemoryError`** (enum) -- `Io`, `LlmApi`
@@ -27,4 +32,4 @@
 
 ## 内部依赖
 
-provider
+config, provider
