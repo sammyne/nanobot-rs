@@ -20,6 +20,50 @@ pub enum ReasoningEffort {
     High,
 }
 
+/// Dream 记忆整合配置
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DreamConfig {
+    /// Dream 运行的 cron 表达式
+    #[serde(default = "default_dream_cron")]
+    pub cron: String,
+
+    /// Dream 使用的模型（None 则与主 agent 相同）
+    #[serde(default)]
+    pub model: Option<String>,
+
+    /// 每次 Dream 处理的最大历史条目数
+    #[serde(default = "default_dream_max_batch_size")]
+    pub max_batch_size: usize,
+
+    /// Phase 2 的最大工具调用次数
+    #[serde(default = "default_dream_max_iterations")]
+    pub max_iterations: usize,
+}
+
+impl Default for DreamConfig {
+    fn default() -> Self {
+        Self {
+            cron: default_dream_cron(),
+            model: None,
+            max_batch_size: default_dream_max_batch_size(),
+            max_iterations: default_dream_max_iterations(),
+        }
+    }
+}
+
+fn default_dream_cron() -> String {
+    "0 */2 * * *".to_string()
+}
+
+fn default_dream_max_batch_size() -> usize {
+    20
+}
+
+fn default_dream_max_iterations() -> usize {
+    10
+}
+
 /// Agents 配置段
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
@@ -67,6 +111,10 @@ pub struct AgentDefaults {
     /// 推理力度（low/medium/high），用于启用 o-series 等模型的思维模式
     #[serde(default)]
     pub reasoning_effort: Option<ReasoningEffort>,
+
+    /// Dream 记忆整合配置
+    #[serde(default)]
+    pub dream: Option<DreamConfig>,
 }
 
 fn default_workspace() -> PathBuf {
@@ -122,6 +170,7 @@ impl Default for AgentDefaults {
             max_input_tokens: default_max_input_tokens(),
             max_tool_result_chars: default_max_tool_result_chars(),
             reasoning_effort: None,
+            dream: None,
         }
     }
 }
