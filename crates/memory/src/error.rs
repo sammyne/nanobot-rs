@@ -12,12 +12,4 @@ pub enum MemoryError {
     /// LLM API call failed
     #[error("LLM API call failed: {0}")]
     LlmApi(String),
-
-    /// Tool call parsing error
-    #[error("Failed to parse tool call arguments: {0}")]
-    ToolParse(String),
-
-    /// No tool call returned from LLM
-    #[error("LLM did not call save_memory tool")]
-    NoToolCall,
 }

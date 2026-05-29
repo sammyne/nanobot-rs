@@ -1827,10 +1827,8 @@ dependencies = [
 name = "nanobot-memory"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "chrono",
  "nanobot-provider",
- "nanobot-tools",
  "serde",
  "serde_json",
  "tempfile",

@@ -51,16 +51,16 @@
 - 验收标准: MemoryStore 不再持有 Provider/Options；history 使用 JSONL + cursor；现有测试适配通过
 - 信心评估: 3
 - 步骤:
-  - [ ] 新增 `history.rs`：定义 `HistoryEntry { cursor: u64, timestamp: String, content: String }`，实现 JSONL 读写、append、compaction（>1000 条时截断）
-  - [ ] MemoryStore 移除 `options: Options` 字段，移除 `create_save_memory_tool()`、`SaveMemoryArgs`
-  - [ ] MemoryStore 新增 `cursor: u64` 字段，`append_history` 改为写入 JSONL
-  - [ ] MemoryStore 新增 `read_history_since(cursor) -> Vec<HistoryEntry>` 方法
-  - [ ] 移除 `MemoryError::NoToolCall` 和 `MemoryError::ToolParse` 变体
-  - [ ] 更新 `ContextBuilder::new()` 中 MemoryStore 构造（不再传 options）
-  - [ ] 更新 `build_core_identity()` 中 HISTORY.MD 引用为 history.jsonl
-  - [ ] 更新 `try_consolidate()` 中的 MemoryStore 调用
-  - [ ] 适配现有测试
-  - [ ] `cargo test -p nanobot-memory` 验证
+  - [x] 新增 `history.rs`：定义 `HistoryEntry { cursor: u64, timestamp: String, content: String }`，实现 JSONL 读写、append、compaction（>1000 条时截断）
+  - [x] MemoryStore 移除 `options: Options` 字段，移除 `create_save_memory_tool()`、`SaveMemoryArgs`
+  - [x] MemoryStore 新增 `cursor: u64` 字段，`append_history` 改为写入 JSONL
+  - [x] MemoryStore 新增 `read_history_since(cursor) -> Vec<HistoryEntry>` 方法
+  - [x] 移除 `MemoryError::NoToolCall` 和 `MemoryError::ToolParse` 变体
+  - [x] 更新 `ContextBuilder::new()` 中 MemoryStore 构造（不再传 options）
+  - [x] 更新 `build_core_identity()` 中 HISTORY.MD 引用为 history.jsonl
+  - [x] 更新 `try_consolidate()` 中的 MemoryStore 调用
+  - [x] 适配现有测试
+  - [x] `cargo test -p nanobot-memory` 验证
 
 ### 3. Consolidator 简化
 
