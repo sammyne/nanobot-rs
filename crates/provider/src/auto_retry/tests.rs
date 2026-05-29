@@ -41,7 +41,9 @@ impl Provider for MockProvider {
 async fn transient_error_retries_then_succeeds() {
     tokio::time::pause();
 
-    let mock = MockProvider::new(2, |_| ProviderError::RateLimit("rate limited".to_string()).into());
+    let mock = MockProvider::new(2, |_| {
+        ProviderError::RateLimit { message: "rate limited".to_string(), retry_after: None }.into()
+    });
     let provider = AutoRetryProvider::new(mock.clone());
 
     let result = provider.chat(&[], &Options::default()).await;
@@ -177,4 +179,45 @@ async fn non_image_error_no_image_retry() {
     let result = provider.chat(&messages_with_image(), &Options::default()).await;
     assert!(result.is_err(), "should fail without image retry");
     assert_eq!(mock.calls(), 1, "should call inner only once");
+}
+
+#[tokio::test]
+async fn retry_uses_provider_retry_after_when_available() {
+    tokio::time::pause();
+
+    let mock = MockProvider::new(1, |_| {
+        ProviderError::RateLimit {
+            message: "rate limited".to_string(),
+            retry_after: Some(std::time::Duration::from_secs(20)),
+        }
+        .into()
+    });
+    let provider = AutoRetryProvider::new(mock.clone());
+
+    let start = tokio::time::Instant::now();
+    let result = provider.chat(&[], &Options::default()).await;
+    let elapsed = start.elapsed();
+
+    assert!(result.is_ok());
+    // 第一次重试应等待 20s（来自 retry_after），而非 1s（指数退避）
+    assert!(elapsed >= std::time::Duration::from_secs(20), "should wait at least 20s, got {elapsed:?}");
+}
+
+#[tokio::test]
+async fn retry_falls_back_to_exponential_without_retry_after() {
+    tokio::time::pause();
+
+    let mock = MockProvider::new(1, |_| {
+        ProviderError::RateLimit { message: "rate limited".to_string(), retry_after: None }.into()
+    });
+    let provider = AutoRetryProvider::new(mock.clone());
+
+    let start = tokio::time::Instant::now();
+    let result = provider.chat(&[], &Options::default()).await;
+    let elapsed = start.elapsed();
+
+    assert!(result.is_ok());
+    // 无 retry_after 时，第一次重试等待 1s（2^0）
+    assert!(elapsed >= std::time::Duration::from_secs(1), "should wait at least 1s, got {elapsed:?}");
+    assert!(elapsed < std::time::Duration::from_secs(5), "should not wait too long, got {elapsed:?}");
 }
