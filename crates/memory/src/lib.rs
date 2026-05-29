@@ -13,4 +13,6 @@ mod store;
 
 pub use error::MemoryError;
 pub use history::{History, HistoryEntry};
-pub use store::{MAX_CONSOLIDATION_ROUNDS, MAX_FAILURES_BEFORE_RAW_ARCHIVE, MemoryStore};
+pub use store::{
+    MAX_CONSOLIDATION_ROUNDS, MAX_FAILURES_BEFORE_RAW_ARCHIVE, MemoryStore, consolidate_memory, should_consolidate,
+};

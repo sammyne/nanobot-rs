@@ -94,15 +94,16 @@ async fn handle_new_cmd_logic<P: Provider>(
     info!("Starting memory consolidation for /new command: session_key={}", session_key);
 
     // Perform consolidation with archive_all=true
-    let result = memory
-        .consolidate(
-            &session.messages,
-            session.last_consolidated,
-            provider,
-            true, // archive_all=true
-            0,    // memory_window not used when archive_all=true
-        )
-        .await;
+    let result = nanobot_memory::consolidate_memory(
+        &memory,
+        &session.messages,
+        session.last_consolidated,
+        &provider,
+        true, // archive_all=true
+        0,    // memory_window not used when archive_all=true
+        &nanobot_provider::Options::default(),
+    )
+    .await;
 
     // Clean up consolidation status
     consolidating.lock().await.remove(&session_key_clone);

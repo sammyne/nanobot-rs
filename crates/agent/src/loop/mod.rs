@@ -155,14 +155,7 @@ impl<P: Provider> AgentLoop<P> {
         let sessions = Arc::new(SessionManager::new(config.workspace.clone()));
 
         // Initialize ContextBuilder (which contains MemoryStore)
-        let consolidation_options = nanobot_provider::Options {
-            max_tokens: config.max_tokens as u16,
-            temperature: config.temperature as f32,
-            reasoning_effort: config.reasoning_effort,
-            tool_choice: None,
-        };
-        let context = ContextBuilder::new(config.workspace.clone(), consolidation_options)
-            .expect("Failed to initialize ContextBuilder");
+        let context = ContextBuilder::new(config.workspace.clone()).expect("Failed to initialize ContextBuilder");
 
         Ok(Self {
             provider,
@@ -680,6 +673,12 @@ impl<P: Provider> AgentLoop<P> {
         }
 
         // 在 build_messages 之前启动异步记忆整合任务
+        let consolidation_options = nanobot_provider::Options {
+            max_tokens: self.config.max_tokens as u16,
+            temperature: self.config.temperature as f32,
+            reasoning_effort: self.config.reasoning_effort,
+            tool_choice: None,
+        };
         let consolidation_handle = tokio::spawn(try_consolidate(
             self.context.memory(),
             self.provider.clone(),
@@ -687,6 +686,7 @@ impl<P: Provider> AgentLoop<P> {
             self.config.memory_window,
             self.config.max_input_tokens,
             Arc::clone(&self.consolidating),
+            consolidation_options,
         ));
 
         // 使用 ContextBuilder 构建消息列表
@@ -914,6 +914,7 @@ async fn try_consolidate<P: Provider>(
     memory_window: usize,
     max_input_tokens: usize,
     consolidating: Arc<Mutex<HashSet<String>>>,
+    options: nanobot_provider::Options,
 ) -> Result<nanobot_session::Session, (nanobot_session::Session, anyhow::Error)> {
     let session_key = session.key.clone();
 
@@ -975,9 +976,16 @@ async fn try_consolidate<P: Provider>(
         );
 
         // 调用 LLM 做摘要
-        let result = memory
-            .try_consolidate(&session.messages, session.last_consolidated, provider.clone(), false, memory_window)
-            .await;
+        let result = nanobot_memory::consolidate_memory(
+            &memory,
+            &session.messages,
+            session.last_consolidated,
+            &provider,
+            false,
+            memory_window,
+            &options,
+        )
+        .await;
 
         match result {
             Ok(new_last) => {

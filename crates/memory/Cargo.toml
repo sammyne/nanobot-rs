@@ -4,7 +4,6 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-anyhow.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 serde.workspace = true
@@ -12,7 +11,6 @@ serde_json.workspace = true
 chrono.workspace = true
 tokio.workspace = true
 nanobot-provider.workspace = true
-nanobot-tools.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

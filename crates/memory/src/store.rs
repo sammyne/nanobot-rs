@@ -2,17 +2,11 @@
 
 use std::path::PathBuf;
 
-use anyhow::Result;
-use nanobot_provider::{Message, Provider};
-use nanobot_tools::ToolDefinition;
-use serde::Deserialize;
-use serde_json::json;
+use nanobot_provider::{Message, Options, Provider};
 use tracing::{info, warn};
 
 use crate::MemoryError;
-
-/// Save memory tool name
-const SAVE_MEMORY_TOOL: &str = "save_memory";
+use crate::history::History;
 
 /// 最大整合轮次
 pub const MAX_CONSOLIDATION_ROUNDS: usize = 5;
@@ -20,59 +14,31 @@ pub const MAX_CONSOLIDATION_ROUNDS: usize = 5;
 /// 连续失败多少次后降级为原文转储
 pub const MAX_FAILURES_BEFORE_RAW_ARCHIVE: usize = 3;
 
-/// save_memory 工具调用的参数结构
-#[derive(Debug, Deserialize)]
-struct SaveMemoryArgs {
-    /// 历史摘要条目
-    history_entry: String,
-    /// 更新后的长期记忆内容
-    memory_update: String,
-}
-
-/// Create the save_memory tool definition for LLM function calling.
-fn create_save_memory_tool() -> ToolDefinition {
-    ToolDefinition {
-        name: SAVE_MEMORY_TOOL.to_string(),
-        description: "Save the memory consolidation result to persistent storage.".to_string(),
-        parameters: json!({
-            "type": "object",
-            "properties": {
-                "history_entry": {
-                    "type": "string",
-                    "description": "A paragraph (2-5 sentences) summarizing key events/decisions/topics. Start with [YYYY-MM-DD HH:MM]. Include detail useful for grep search."
-                },
-                "memory_update": {
-                    "type": "string",
-                    "description": "Full updated long-term memory as markdown. Include all existing facts plus new ones. Return unchanged if nothing new."
-                }
-            },
-            "required": ["history_entry", "memory_update"]
-        }),
-    }
-}
-
-/// Two-layer memory store: MEMORY.md (long-term facts) + HISTORY.md (grep-searchable log).
+/// Two-layer memory store: MEMORY.md (long-term facts) + history.jsonl (structured log with cursor).
 pub struct MemoryStore {
     /// Path to MEMORY.md file
     memory_file: PathBuf,
-    /// Path to HISTORY.md file
-    history_file: PathBuf,
-    /// LLM options for consolidation calls
-    options: nanobot_provider::Options,
+    /// Structured history store (history.jsonl)
+    history: History,
 }
 
 impl MemoryStore {
     /// Create a new MemoryStore instance.
     ///
     /// Creates the memory/ directory under the workspace if it doesn't exist.
-    pub fn new(workspace: PathBuf, options: nanobot_provider::Options) -> Result<Self, MemoryError> {
+    pub fn new(workspace: PathBuf) -> Result<Self, MemoryError> {
         let memory_dir = workspace.join("memory");
         std::fs::create_dir_all(&memory_dir)?;
 
         let memory_file = memory_dir.join("MEMORY.md");
-        let history_file = memory_dir.join("HISTORY.md");
+        let history = History::new(&memory_dir);
 
-        Ok(Self { memory_file, history_file, options })
+        Ok(Self { memory_file, history })
+    }
+
+    /// Get a reference to the history store.
+    pub fn history(&self) -> &History {
+        &self.history
     }
 
     /// Read long-term memory content from MEMORY.md.
@@ -88,16 +54,11 @@ impl MemoryStore {
         Ok(())
     }
 
-    /// Append an entry to HISTORY.md file.
+    /// Append an entry to history.jsonl via the History store.
     ///
-    /// Each entry is separated by double newlines.
-    pub fn append_history(&self, entry: &str) -> Result<(), MemoryError> {
-        use std::io::Write;
-
-        let mut file = std::fs::OpenOptions::new().create(true).append(true).open(&self.history_file)?;
-
-        writeln!(file, "{}\n", entry.trim_end())?;
-        Ok(())
+    /// Returns the cursor assigned to this entry.
+    pub fn append_history(&self, entry: &str) -> Result<u64, MemoryError> {
+        self.history.append(entry)
     }
 
     /// Get formatted memory context for LLM input.
@@ -141,7 +102,7 @@ impl MemoryStore {
         last_boundary
     }
 
-    /// 将消息原文转储到 HISTORY.md（降级策略）
+    /// 将消息原文转储到 history.jsonl（降级策略）
     ///
     /// 当 LLM 整合连续失败时，直接将消息原文写入历史日志，避免消息丢失。
     pub fn raw_archive(&self, messages: &[Message]) -> Result<(), MemoryError> {
@@ -162,200 +123,142 @@ impl MemoryStore {
             .collect();
 
         let entry = format!("[RAW] {} messages\n{}", messages.len(), lines.join("\n"));
-        self.append_history(&entry)
+        self.append_history(&entry)?;
+        Ok(())
+    }
+}
+
+/// Check if memory consolidation should be triggered.
+///
+/// # Arguments
+/// * `message_count` - Total number of messages in session
+/// * `last_consolidated` - Index of last consolidated message
+/// * `memory_window` - Total message window size
+/// * `archive_all` - If true, always trigger consolidation
+///
+/// # Returns
+/// * `Some(new_last_consolidated)` - Should consolidate, returns new index
+/// * `None` - No need to consolidate
+pub fn should_consolidate(
+    message_count: usize,
+    last_consolidated: usize,
+    memory_window: usize,
+    archive_all: bool,
+) -> Option<usize> {
+    if archive_all {
+        return Some(0);
     }
 
-    /// Check if memory consolidation should be triggered.
-    ///
-    /// # Arguments
-    /// * `message_count` - Total number of messages in session
-    /// * `last_consolidated` - Index of last consolidated message
-    /// * `memory_window` - Total message window size
-    /// * `archive_all` - If true, always trigger consolidation
-    ///
-    /// # Returns
-    /// * `Some(new_last_consolidated)` - Should consolidate, returns new index
-    /// * `None` - No need to consolidate
-    pub fn should_consolidate(
-        &self,
-        message_count: usize,
-        last_consolidated: usize,
-        memory_window: usize,
-        archive_all: bool,
-    ) -> Option<usize> {
-        if archive_all {
-            return Some(0);
-        }
-
-        let keep_count = memory_window / 2;
-        if message_count <= keep_count {
-            return None;
-        }
-        if message_count - last_consolidated <= keep_count {
-            return None;
-        }
-
-        Some(message_count - keep_count)
+    let keep_count = memory_window / 2;
+    if message_count <= keep_count {
+        return None;
+    }
+    if message_count - last_consolidated <= keep_count {
+        return None;
     }
 
-    /// Try to consolidate memory if needed.
-    ///
-    /// This method combines `should_consolidate` check with `consolidate` execution.
-    /// If consolidation is not needed, returns `Ok(last_consolidated)`.
-    ///
-    /// # Arguments
-    /// * `messages` - All messages in the session
-    /// * `last_consolidated` - Index of last consolidated message
-    /// * `provider` - LLM provider (already configured with model)
-    /// * `archive_all` - If true, process all messages and return 0
-    /// * `memory_window` - Total message window size (keep half in session)
-    ///
-    /// # Returns
-    /// * `Ok(new_last_consolidated)` - New index (may equal last_consolidated if no consolidation)
-    /// * `Err(_)` - On failure
-    pub async fn try_consolidate<P: Provider>(
-        &self,
-        messages: &[Message],
-        last_consolidated: usize,
-        provider: P,
-        archive_all: bool,
-        memory_window: usize,
-    ) -> Result<usize, MemoryError> {
-        // Check if consolidation is needed
-        let new_last_consolidated =
-            match self.should_consolidate(messages.len(), last_consolidated, memory_window, archive_all) {
-                Some(idx) => idx,
-                None => return Ok(last_consolidated),
-            };
+    Some(message_count - keep_count)
+}
 
-        info!("Triggering memory consolidation: {} messages, last_consolidated={}", messages.len(), last_consolidated);
+/// Consolidate conversation messages into a plain-text summary stored in history.jsonl.
+///
+/// Checks if consolidation is needed via [`should_consolidate`], then calls the LLM
+/// for a plain-text summary and appends the result to history.
+///
+/// # Arguments
+/// * `memory` - The memory store
+/// * `messages` - All messages in the session
+/// * `last_consolidated` - Index of last consolidated message
+/// * `provider` - LLM provider for generating summaries
+/// * `archive_all` - If true, process all messages
+/// * `memory_window` - Total message window size (keep half in session)
+/// * `options` - LLM call options (max_tokens, temperature, etc.)
+///
+/// # Returns
+/// * `Ok(new_last_consolidated)` - New index (may equal last_consolidated if no consolidation)
+/// * `Err(_)` - On failure
+pub async fn consolidate_memory<P: Provider>(
+    memory: &MemoryStore,
+    messages: &[Message],
+    last_consolidated: usize,
+    provider: &P,
+    archive_all: bool,
+    memory_window: usize,
+    options: &Options,
+) -> Result<usize, MemoryError> {
+    // Check if consolidation is needed
+    let new_last_consolidated = match should_consolidate(messages.len(), last_consolidated, memory_window, archive_all)
+    {
+        Some(idx) => idx,
+        None => return Ok(last_consolidated),
+    };
 
-        // Execute consolidation
-        self.consolidate_internal(messages, last_consolidated, new_last_consolidated, archive_all, provider).await
-    }
+    info!("Triggering memory consolidation: {} messages, last_consolidated={}", messages.len(), last_consolidated);
 
-    /// Internal consolidation logic (assumes checks already done).
-    async fn consolidate_internal<P: Provider>(
-        &self,
-        messages: &[Message],
-        last_consolidated: usize,
-        new_last_consolidated: usize,
-        archive_all: bool,
-        mut provider: P,
-    ) -> Result<usize, MemoryError> {
-        // Determine which messages to archive
-        let old_messages = if archive_all {
-            info!("Memory consolidation (archive_all): {} messages", messages.len());
-            messages.to_vec()
-        } else {
-            let keep_count = new_last_consolidated - last_consolidated;
-            let old_messages: Vec<_> = messages[last_consolidated..messages.len() - keep_count].to_vec();
-            if old_messages.is_empty() {
-                return Ok(last_consolidated);
+    // Determine which messages to archive
+    let old_messages = if archive_all {
+        info!("Memory consolidation (archive_all): {} messages", messages.len());
+        messages.to_vec()
+    } else {
+        let keep_count = new_last_consolidated - last_consolidated;
+        let old_messages: Vec<_> = messages[last_consolidated..messages.len() - keep_count].to_vec();
+        if old_messages.is_empty() {
+            return Ok(last_consolidated);
+        }
+        info!("Memory consolidation: {} to consolidate", old_messages.len());
+        old_messages
+    };
+
+    // Format messages for LLM
+    let lines: Vec<String> = old_messages
+        .iter()
+        .filter_map(|m| {
+            let content = m.content();
+            if content.is_empty() {
+                return None;
             }
-            info!("Memory consolidation: {} to consolidate", old_messages.len());
-            old_messages
-        };
+            Some(format!("[{}] {}: {}", chrono::Utc::now().format("%Y-%m-%d %H:%M"), m.role().to_uppercase(), content))
+        })
+        .collect();
 
-        // Format messages for LLM
-        let lines: Vec<String> = old_messages
-            .iter()
-            .filter_map(|m| {
-                let content = m.content();
-                if content.is_empty() {
-                    return None;
-                }
-                Some(format!(
-                    "[{}] {}: {}",
-                    chrono::Utc::now().format("%Y-%m-%d %H:%M"),
-                    m.role().to_uppercase(),
-                    content
-                ))
-            })
-            .collect();
-
-        // Build prompt
-        let current_memory = self.read_long_term()?;
-        let prompt = format!(
-            r#"Process this conversation and call the save_memory tool with your consolidation.
+    // Build prompt for plain text summary
+    let current_memory = memory.read_long_term()?;
+    let prompt = format!(
+        r#"Summarize this conversation excerpt. Write a paragraph (2-5 sentences) capturing key events, decisions, topics, and solutions. Start with [YYYY-MM-DD HH:MM]. Include detail useful for grep search.
 
 ## Current Long-term Memory
 {}
 
 ## Conversation to Process
 {}"#,
-            if current_memory.is_empty() { "(empty)" } else { &current_memory },
-            lines.join("\n")
-        );
+        if current_memory.is_empty() { "(empty)" } else { &current_memory },
+        lines.join("\n")
+    );
 
-        // Bind save_memory tool to provider
-        provider.bind_tools(vec![create_save_memory_tool()]);
-
-        // Send LLM request (force tool call via tool_choice=required)
-        let mut options = self.options.clone();
-        options.tool_choice = Some(nanobot_provider::ToolChoice::Required);
-        let response = provider
-            .chat(&[
-                Message::system("You are a memory consolidation agent. Call the save_memory tool with your consolidation of the conversation."),
+    // Call LLM for plain text summary (no tools bound)
+    let response = provider
+        .chat(
+            &[
+                Message::system("You are a memory consolidation agent. Produce a concise plain-text summary."),
                 Message::user(&prompt),
-            ], &options)
-            .await
-            .map_err(|e| MemoryError::LlmApi(e.to_string()))?;
+            ],
+            options,
+        )
+        .await
+        .map_err(|e| MemoryError::LlmApi(e.to_string()))?;
 
-        // Check for tool calls
-        let tool_calls = response.tool_calls();
-        if tool_calls.is_empty() {
-            warn!("Memory consolidation: LLM did not call save_memory");
-            return Err(MemoryError::NoToolCall);
-        }
-
-        // Find save_memory tool call
-        let save_memory_call =
-            tool_calls.iter().find(|tc| tc.name == SAVE_MEMORY_TOOL).ok_or(MemoryError::NoToolCall)?;
-
-        // Parse and validate arguments
-        let args: SaveMemoryArgs =
-            save_memory_call.parse_arguments().map_err(|e| MemoryError::ToolParse(e.to_string()))?;
-
-        let entry = args.history_entry.trim().to_string();
-        if entry.is_empty() {
-            return Err(MemoryError::ToolParse("history_entry is empty after trimming".to_string()));
-        }
-
-        // Write both files only after validation passes
-        self.append_history(&entry)?;
-        if args.memory_update != current_memory {
-            self.write_long_term(&args.memory_update)?;
-        }
-
-        info!("Memory consolidation completed: new last_consolidated={}", new_last_consolidated);
-
-        Ok(new_last_consolidated)
+    let summary = response.content();
+    let summary = summary.trim();
+    if summary.is_empty() {
+        warn!("Memory consolidation: LLM returned empty summary");
+        return Err(MemoryError::LlmApi("LLM returned empty summary".to_string()));
     }
 
-    /// Consolidate old messages into MEMORY.md + HISTORY.md via LLM tool call.
-    ///
-    /// This is an alias for `try_consolidate`, kept for backward compatibility.
-    ///
-    /// # Arguments
-    /// * `messages` - All messages in the session
-    /// * `last_consolidated` - Index of last consolidated message
-    /// * `provider` - LLM provider (already configured with model)
-    /// * `archive_all` - If true, process all messages and return 0
-    /// * `memory_window` - Total message window size (keep half in session)
-    ///
-    /// # Returns
-    /// * `Ok(new_last_consolidated)` - New index for last_consolidated
-    /// * `Err(_)` - On failure
-    pub async fn consolidate<P: Provider>(
-        &self,
-        messages: &[Message],
-        last_consolidated: usize,
-        provider: P,
-        archive_all: bool,
-        memory_window: usize,
-    ) -> Result<usize, MemoryError> {
-        self.try_consolidate(messages, last_consolidated, provider, archive_all, memory_window).await
-    }
+    // Append summary to history.jsonl
+    memory.append_history(summary)?;
+
+    info!("Memory consolidation completed: new last_consolidated={new_last_consolidated}");
+
+    Ok(new_last_consolidated)
 }
 // trigger ci

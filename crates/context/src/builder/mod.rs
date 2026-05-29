@@ -35,9 +35,9 @@ pub struct ContextBuilder {
 }
 
 impl ContextBuilder {
-    pub fn new(workspace: PathBuf, options: nanobot_provider::Options) -> Result<Self, ContextError> {
+    pub fn new(workspace: PathBuf) -> Result<Self, ContextError> {
         let workspace_canonical = workspace.canonicalize()?;
-        let memory = Arc::new(MemoryStore::new(workspace_canonical.clone(), options)?);
+        let memory = Arc::new(MemoryStore::new(workspace_canonical.clone())?);
         let skills = SkillsLoader::new(workspace_canonical.clone());
 
         info!("ContextBuilder initialized for workspace: {}", workspace_canonical.display());
@@ -73,7 +73,7 @@ You are nanobot, a helpful AI assistant.
 ## Workspace
 Your workspace is at: {workspace}
 - Long-term memory: {workspace}/memory/MEMORY.md (automatically managed by consolidation — do not edit directly)
-- History log: {workspace}/memory/HISTORY.md (append-only log, use exec with grep to search). Each entry starts with [YYYY-MM-DD HH:MM].
+- History log: {workspace}/memory/history.jsonl (structured JSONL log with cursor tracking, use exec with grep to search). Each entry is a JSON object with cursor, timestamp, and content fields.
 - Custom skills: {workspace}/skills/{{skill-name}}/SKILL.md
 
 Reply directly with text for conversations. Only use the 'message' tool to send to a specific chat channel.
