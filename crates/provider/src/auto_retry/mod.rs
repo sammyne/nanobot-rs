@@ -44,9 +44,10 @@ impl<P: Provider> Provider for AutoRetryProvider<P> {
                         && let Some(pe) = e.downcast_ref::<ProviderError>()
                         && pe.is_transient()
                     {
-                        let delay = 1u64 << attempt;
-                        warn!("LLM 调用失败（瞬态错误），{delay}s 后重试（第 {} 次）: {pe}", attempt + 1);
-                        tokio::time::sleep(std::time::Duration::from_secs(delay)).await;
+                        // 优先使用 provider 返回的 retry_after，回退到指数退避
+                        let delay = pe.retry_after().unwrap_or(std::time::Duration::from_secs(1u64 << attempt));
+                        warn!("LLM 调用失败（瞬态错误），{}s 后重试（第 {} 次）: {pe}", delay.as_secs(), attempt + 1);
+                        tokio::time::sleep(delay).await;
                         last_err = Some(e);
                         continue;
                     }

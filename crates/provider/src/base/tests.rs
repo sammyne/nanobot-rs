@@ -245,7 +245,7 @@ fn tool_call_preview_dynamic() {
 fn is_transient() {
     let cases = [
         (ProviderError::Timeout, true),
-        (ProviderError::RateLimit("rate limited".to_string()), true),
+        (ProviderError::RateLimit { message: "rate limited".to_string(), retry_after: None }, true),
         (ProviderError::ServerError("HTTP 500".to_string()), true),
         (ProviderError::Api("bad request".to_string()), false),
         (ProviderError::Config("missing key".to_string()), false),
@@ -315,7 +315,7 @@ fn is_image_unsupported_rejects_non_image_errors() {
         ProviderError::Api("401 unauthorized".to_string()),
         ProviderError::Api("invalid request".to_string()),
         ProviderError::Timeout,
-        ProviderError::RateLimit("rate limited".to_string()),
+        ProviderError::RateLimit { message: "rate limited".to_string(), retry_after: None },
         ProviderError::ServerError("HTTP 500".to_string()),
     ];
     for err in cases {

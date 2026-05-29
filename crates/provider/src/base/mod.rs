@@ -20,8 +20,8 @@ pub enum ProviderError {
     #[error("配置错误: {0}")]
     Config(String),
 
-    #[error("请求限流: {0}")]
-    RateLimit(String),
+    #[error("请求限流: {message} (retry_after: {retry_after:?})")]
+    RateLimit { message: String, retry_after: Option<std::time::Duration> },
 
     #[error("服务端错误: {0}")]
     ServerError(String),
@@ -30,7 +30,15 @@ pub enum ProviderError {
 impl ProviderError {
     /// 判断错误是否为瞬态错误（可重试）
     pub fn is_transient(&self) -> bool {
-        matches!(self, Self::Timeout | Self::RateLimit(_) | Self::ServerError(_))
+        matches!(self, Self::Timeout | Self::RateLimit { .. } | Self::ServerError(_))
+    }
+
+    /// 获取 provider 建议的重试等待时间
+    pub fn retry_after(&self) -> Option<std::time::Duration> {
+        match self {
+            Self::RateLimit { retry_after, .. } => *retry_after,
+            _ => None,
+        }
     }
 
     /// 判断错误是否为图片不支持错误

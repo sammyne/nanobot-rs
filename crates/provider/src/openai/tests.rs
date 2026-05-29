@@ -76,6 +76,17 @@ fn provider_error_display() {
             error: ProviderError::Config("Missing key".to_string()),
             expected: "配置错误: Missing key",
         },
+        ProviderErrorCase {
+            error: ProviderError::RateLimit {
+                message: "Too many requests".to_string(),
+                retry_after: Some(std::time::Duration::from_secs(20)),
+            },
+            expected: "请求限流: Too many requests (retry_after: Some(20s))",
+        },
+        ProviderErrorCase {
+            error: ProviderError::RateLimit { message: "Too many requests".to_string(), retry_after: None },
+            expected: "请求限流: Too many requests (retry_after: None)",
+        },
     ];
 
     for case in test_vector {

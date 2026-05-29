@@ -340,12 +340,14 @@ impl Provider for AnthropicLike {
         // 检查 HTTP 状态码
         if !response.status().is_success() {
             let status = response.status();
+            // 在消费 body 前提取 retry-after 头
+            let retry_after = parse_retry_after_header(response.headers());
             let body = response.text().await.unwrap_or_default();
             let error_msg =
                 serde_json::from_str::<AnthropicErrorResponse>(&body).map(|e| e.error.message).unwrap_or(body);
 
             let err = if status.as_u16() == 429 {
-                ProviderError::RateLimit(error_msg)
+                ProviderError::RateLimit { message: error_msg, retry_after }
             } else if status.is_server_error() {
                 ProviderError::ServerError(format!("HTTP {status}: {error_msg}"))
             } else {
@@ -420,6 +422,15 @@ impl Provider for AnthropicLike {
                 .collect(),
         );
     }
+}
+
+/// 从 HTTP 响应头中解析 `retry-after` 值（整数秒格式）
+fn parse_retry_after_header(headers: &reqwest::header::HeaderMap) -> Option<std::time::Duration> {
+    headers
+        .get("retry-after")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.trim().parse::<u64>().ok())
+        .map(std::time::Duration::from_secs)
 }
 
 #[cfg(test)]
