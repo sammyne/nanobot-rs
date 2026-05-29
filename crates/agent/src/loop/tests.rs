@@ -73,6 +73,7 @@ fn mock_config() -> AgentDefaults {
         max_input_tokens: 128_000,
         max_tool_result_chars: 16_000,
         reasoning_effort: None,
+        dream: None,
     }
 }
 
@@ -198,6 +199,7 @@ async fn agent_loop_uses_custom_config_values() {
         memory_window: 100,
         max_input_tokens: 128_000,
         reasoning_effort: None,
+        dream: None,
         max_tool_result_chars: 16_000,
     };
 
@@ -210,6 +212,7 @@ async fn agent_loop_uses_custom_config_values() {
         memory_window: 25,
         max_input_tokens: 128_000,
         reasoning_effort: None,
+        dream: None,
         max_tool_result_chars: 16_000,
     };
 
@@ -408,6 +411,7 @@ async fn consolidation_triggers_when_message_window_reached() {
             memory_window: case.memory_window,
             max_input_tokens: 128_000,
             reasoning_effort: None,
+            dream: None,
             max_tool_result_chars: 16_000,
         };
 
@@ -471,6 +475,7 @@ async fn consolidation_rejected_when_already_in_progress() {
         memory_window: 5, // 设置较小的窗口便于测试
         max_input_tokens: 128_000,
         reasoning_effort: None,
+        dream: None,
         max_tool_result_chars: 16_000,
     };
 
@@ -536,6 +541,7 @@ async fn consolidation_state_properly_managed() {
         memory_window: 5,
         max_input_tokens: 128_000,
         reasoning_effort: None,
+        dream: None,
         max_tool_result_chars: 16_000,
     };
 
@@ -591,6 +597,7 @@ async fn consolidation_state_independent_across_sessions() {
         memory_window: 5,
         max_input_tokens: 128_000,
         reasoning_effort: None,
+        dream: None,
         max_tool_result_chars: 16_000,
     };
 
@@ -666,6 +673,7 @@ async fn consolidation_state_thread_safe() {
         memory_window: 5,
         max_input_tokens: 128_000,
         reasoning_effort: None,
+        dream: None,
         max_tool_result_chars: 16_000,
     };
 
@@ -745,6 +753,7 @@ async fn mutex_prevents_concurrent_consolidation_same_session() {
         memory_window: 5,
         max_input_tokens: 128_000,
         reasoning_effort: None,
+        dream: None,
         max_tool_result_chars: 16_000,
     };
 
