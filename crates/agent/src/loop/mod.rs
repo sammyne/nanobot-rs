@@ -22,7 +22,7 @@ use nanobot_tools::{Tool, ToolContext, ToolRegistry};
 use tokio::sync::{Mutex, mpsc};
 use tracing::{debug, error, info, warn};
 
-use crate::cmd::{Command, HelpCmd, NewCmd, RestartCmd, StatusCmd, StopCmd};
+use crate::cmd::{Command, DreamCmd, DreamLogCmd, DreamRestoreCmd, HelpCmd, NewCmd, RestartCmd, StatusCmd, StopCmd};
 use crate::utils::parse_system_message_target;
 use crate::{InboundMessage, OutboundMessage};
 
@@ -594,6 +594,69 @@ impl<P: Provider> AgentLoop<P> {
                     session_message_count: session.messages.len(),
                 };
                 status_cmd.run(msg, session_key.to_string()).await
+            }
+            "dream" => {
+                let result = match &self.config.dream {
+                    None => "Dream is not configured. Add 'dream' to your agent config.".to_string(),
+                    Some(dream_config) => {
+                        let memory = self.context.memory();
+                        match nanobot_memory::Dream::new(memory, self.config.workspace.clone(), dream_config.clone()) {
+                            Err(e) => format!("Dream init failed: {e}"),
+                            Ok(dream) => match dream.run(&self.provider).await {
+                                Err(e) => format!("Dream failed: {e}"),
+                                Ok(r) if r.entries_processed == 0 => "Dream: no new entries to process.".to_string(),
+                                Ok(r) => {
+                                    let files = if r.files_changed.is_empty() {
+                                        String::new()
+                                    } else {
+                                        format!(" ({})", r.files_changed.join(", "))
+                                    };
+                                    format!(
+                                        "Dream completed: processed {} entries, {} files changed{files}",
+                                        r.entries_processed,
+                                        r.files_changed.len(),
+                                    )
+                                }
+                            },
+                        }
+                    }
+                };
+                DreamCmd { result }.run(msg, session_key.to_string()).await
+            }
+            "dream-log" => {
+                let memory_dir = self.config.workspace.join("memory");
+                let log_output = match nanobot_memory::GitStore::init(memory_dir) {
+                    Err(e) => format!("GitStore init failed: {e}"),
+                    Ok(git) => match git.log(10) {
+                        Err(e) => format!("Failed to read log: {e}"),
+                        Ok(entries) if entries.is_empty() => "No memory commits yet.".to_string(),
+                        Ok(entries) => {
+                            let mut out = format!("Memory change history (last {}):\n", entries.len());
+                            for entry in &entries {
+                                let short_sha = &entry.sha[..entry.sha.len().min(7)];
+                                out.push_str(&format!("\n{short_sha} | {} | {}", entry.timestamp, entry.message));
+                            }
+                            out
+                        }
+                    },
+                };
+                DreamLogCmd { log_output }.run(msg, session_key.to_string()).await
+            }
+            s if s.starts_with("dream-restore") => {
+                let sha = s.strip_prefix("dream-restore").unwrap_or("").trim();
+                let restore_output = if sha.is_empty() {
+                    "Usage: /dream-restore <sha>\nUse /dream-log to see available commits.".to_string()
+                } else {
+                    let memory_dir = self.config.workspace.join("memory");
+                    match nanobot_memory::GitStore::init(memory_dir) {
+                        Err(e) => format!("GitStore init failed: {e}"),
+                        Ok(git) => match git.revert(sha) {
+                            Ok(()) => format!("Memory restored to commit {sha}."),
+                            Err(e) => format!("Restore failed: {e}"),
+                        },
+                    }
+                };
+                DreamRestoreCmd { restore_output }.run(msg, session_key.to_string()).await
             }
             // 不支持的命令返回提示信息
             _ => Err(format!("❌ Unsupported command: /{cmd}\nTry /help for available commands")),

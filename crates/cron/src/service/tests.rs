@@ -63,3 +63,26 @@ async fn remove_job() {
     let jobs = service.list_jobs(true).await;
     assert!(jobs.is_empty());
 }
+
+#[tokio::test]
+async fn register_system_job_idempotent() {
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("cron.json");
+    let service = CronService::new(path).await.unwrap();
+    service.start().await;
+
+    let schedule = CronSchedule::Every { every_ms: 60000 };
+    service.register_system_job("test-system", schedule, "Test system job").await.unwrap();
+
+    let jobs = service.list_jobs(true).await;
+    assert_eq!(jobs.len(), 1);
+    assert_eq!(jobs[0].name, "test-system");
+    assert!(!jobs[0].payload.deliver);
+
+    // Second registration with same name should be idempotent
+    let schedule = CronSchedule::Every { every_ms: 120000 };
+    service.register_system_job("test-system", schedule, "Different message").await.unwrap();
+
+    let jobs = service.list_jobs(true).await;
+    assert_eq!(jobs.len(), 1, "should not create duplicate job");
+}

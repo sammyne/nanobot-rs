@@ -169,6 +169,20 @@ impl CronService {
 
     // ========== Public API ==========
 
+    /// Register an internal system job. Idempotent — if a job with the same name exists, skip.
+    pub async fn register_system_job(&self, name: &str, schedule: CronSchedule, message: &str) -> Result<(), String> {
+        let jobs = self.list_jobs(true).await;
+        if jobs.iter().any(|j| j.name == name) {
+            info!("Cron: system job '{name}' already exists, skipping");
+            return Ok(());
+        }
+
+        self.add_job(name.to_string(), schedule, message.to_string(), false, None, None, false).await?;
+
+        info!("Cron: registered system job '{name}'");
+        Ok(())
+    }
+
     /// List all jobs.
     pub async fn list_jobs(&self, include_disabled: bool) -> Vec<CronJob> {
         self.storage.list_jobs(include_disabled).await

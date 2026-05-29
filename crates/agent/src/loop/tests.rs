@@ -831,35 +831,35 @@ async fn try_handle_cmd_recognizes_and_processes_commands() {
             input: "/help",
             channel: "cli",
             chat_id: "test123",
-            expected_response: "🐈 nanobot commands:\n/new — Start a new conversation\n/stop — Stop current processing and cancel background tasks\n/status — Show bot runtime status\n/restart — Restart the agent process\n/help — Show available commands",
+            expected_response: "🐈 nanobot commands:\n/new — Start a new conversation\n/stop — Stop current processing and cancel background tasks\n/status — Show bot runtime status\n/dream — Trigger Dream memory consolidation\n/dream-log — Show memory change history\n/dream-restore <sha> — Revert memory to a previous state\n/restart — Restart the agent process\n/help — Show available commands",
         },
         CommandCase {
             name: "大小写不敏感 - /HELP",
             input: "/HELP",
             channel: "cli",
             chat_id: "test123",
-            expected_response: "🐈 nanobot commands:\n/new — Start a new conversation\n/stop — Stop current processing and cancel background tasks\n/status — Show bot runtime status\n/restart — Restart the agent process\n/help — Show available commands",
+            expected_response: "🐈 nanobot commands:\n/new — Start a new conversation\n/stop — Stop current processing and cancel background tasks\n/status — Show bot runtime status\n/dream — Trigger Dream memory consolidation\n/dream-log — Show memory change history\n/dream-restore <sha> — Revert memory to a previous state\n/restart — Restart the agent process\n/help — Show available commands",
         },
         CommandCase {
             name: "大小写不敏感 - /Help",
             input: "/Help",
             channel: "cli",
             chat_id: "test123",
-            expected_response: "🐈 nanobot commands:\n/new — Start a new conversation\n/stop — Stop current processing and cancel background tasks\n/status — Show bot runtime status\n/restart — Restart the agent process\n/help — Show available commands",
+            expected_response: "🐈 nanobot commands:\n/new — Start a new conversation\n/stop — Stop current processing and cancel background tasks\n/status — Show bot runtime status\n/dream — Trigger Dream memory consolidation\n/dream-log — Show memory change history\n/dream-restore <sha> — Revert memory to a previous state\n/restart — Restart the agent process\n/help — Show available commands",
         },
         CommandCase {
             name: "忽略前后空格 - /help ",
             input: "/help ",
             channel: "cli",
             chat_id: "test123",
-            expected_response: "🐈 nanobot commands:\n/new — Start a new conversation\n/stop — Stop current processing and cancel background tasks\n/status — Show bot runtime status\n/restart — Restart the agent process\n/help — Show available commands",
+            expected_response: "🐈 nanobot commands:\n/new — Start a new conversation\n/stop — Stop current processing and cancel background tasks\n/status — Show bot runtime status\n/dream — Trigger Dream memory consolidation\n/dream-log — Show memory change history\n/dream-restore <sha> — Revert memory to a previous state\n/restart — Restart the agent process\n/help — Show available commands",
         },
         CommandCase {
             name: "忽略前后空格 - /HELP  ",
             input: "/HELP  ",
             channel: "cli",
             chat_id: "test123",
-            expected_response: "🐈 nanobot commands:\n/new — Start a new conversation\n/stop — Stop current processing and cancel background tasks\n/status — Show bot runtime status\n/restart — Restart the agent process\n/help — Show available commands",
+            expected_response: "🐈 nanobot commands:\n/new — Start a new conversation\n/stop — Stop current processing and cancel background tasks\n/status — Show bot runtime status\n/dream — Trigger Dream memory consolidation\n/dream-log — Show memory change history\n/dream-restore <sha> — Revert memory to a previous state\n/restart — Restart the agent process\n/help — Show available commands",
         },
         CommandCase {
             name: "未知命令返回提示信息",
@@ -964,7 +964,7 @@ async fn process_message_integrates_command_handling() {
 
     assert_eq!(
         outbound_cmd.content,
-        "🐈 nanobot commands:\n/new — Start a new conversation\n/stop — Stop current processing and cancel background tasks\n/status — Show bot runtime status\n/restart — Restart the agent process\n/help — Show available commands",
+        "🐈 nanobot commands:\n/new — Start a new conversation\n/stop — Stop current processing and cancel background tasks\n/status — Show bot runtime status\n/dream — Trigger Dream memory consolidation\n/dream-log — Show memory change history\n/dream-restore <sha> — Revert memory to a previous state\n/restart — Restart the agent process\n/help — Show available commands",
         "command should be processed and return help info"
     );
     assert_eq!(outbound_cmd.channel, "cli", "channel should be preserved");

@@ -17,7 +17,7 @@ use clap::Args;
 use nanobot_agent::{AgentLoop, InboundMessage, OutboundMessage};
 use nanobot_channels::ChannelManager;
 use nanobot_config::{CONFIG_PATH, Config, HeartbeatConfig, resolve_config_path};
-use nanobot_cron::{CronJob, CronService};
+use nanobot_cron::{CronJob, CronSchedule, CronService};
 use nanobot_heartbeat::{HeartbeatService, OnEvaluateCallback, OnExecuteCallback, OnNotifyCallback};
 use nanobot_provider::{AnyProvider, Provider};
 use nanobot_session::SessionInfo;
@@ -457,6 +457,16 @@ impl GatewayCmd {
         // 启动 CronService
         ctx.cron_service.start().await;
         info!("CronService 已启动");
+
+        // Register Dream system job if configured
+        if let Some(ref dream_config) = config.agents.defaults.dream {
+            let schedule = CronSchedule::Cron { expr: dream_config.cron.clone(), tz: None };
+            if let Err(e) =
+                ctx.cron_service.register_system_job("dream", schedule, "Run Dream memory consolidation").await
+            {
+                warn!("Failed to register Dream system job: {e}");
+            }
+        }
 
         // 启动 HeartbeatService using CancellationToken
         let heartbeat_token = if config.gateway.heartbeat.enabled {
