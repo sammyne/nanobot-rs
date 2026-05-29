@@ -99,16 +99,16 @@
 
 - 优先级: P1
 - 依赖项: 2, 3, 4
-- 涉及文件: `crates/memory/src/dream.rs`（新增）
+- 涉及文件: `crates/memory/src/dream/mod.rs`（新增）, `crates/memory/src/dream/tests.rs`（新增）
 - 验收标准: Dream 能读取 history.jsonl 未处理条目，通过两阶段 LLM 调用更新记忆文件，推进 cursor
 - 信心评估: 2
 - 步骤:
-  - [ ] 定义 `Dream` 结构体，持有 MemoryStore、GitStore、Provider、DreamConfig
-  - [ ] Phase 1：构造提示词（history entries vs 记忆文件内容），LLM 返回 `[FILE] fact` 行
-  - [ ] Phase 2：使用 re_act 循环 + read_file/edit_file 工具执行增量编辑
-  - [ ] 执行后推进 cursor，调用 GitStore::commit
-  - [ ] 新增测试
-  - [ ] `cargo test -p nanobot-memory` 验证
+  - [x] 定义 `Dream` 结构体，持有 MemoryStore、GitStore、Provider、DreamConfig
+  - [x] Phase 1：构造提示词（history entries vs 记忆文件内容），LLM 返回 `[FILE] fact` 行
+  - [x] Phase 2：简化版追加编辑（后续可升级为 re_act 循环 + read_file/edit_file）
+  - [x] 执行后推进 cursor，调用 GitStore::commit
+  - [x] 新增测试（dream_cursor_read_write, phase1_prompt_format, phase2_parse_instructions）
+  - [x] `cargo test -p nanobot-memory` 验证
 
 ### 6. CronService.register_system_job + Dream 调度
 
